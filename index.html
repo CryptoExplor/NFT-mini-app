@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mint NFTs on Base</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { primary: '#111827' } } }
+    };
+  </script>
+  <!-- Farcaster Frame Meta (enabled for cast sharing) -->
+  <meta property="fc:frame" content="vNext" />
+  <meta property="fc:frame:image" content="https://yourapp.xyz/banner.png" /> <!-- Swap your banner -->
+  <meta property="fc:frame:button:1" content="Open Mint App" />
+  <meta property="fc:frame:post_url" content="https://yourapp.xyz/" /> <!-- Your deploy URL -->
+  <style>
+    body { background-color: #111827; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .dark { color-scheme: dark; }
+    /* Mobile Enhancements (Bueno widget-friendly) */
+    @media (max-width: 640px) {
+      #mint-modal { padding: 0; }
+      .max-w-2xl { max-width: 95%; }
+      #bueno-widget { height: 500px !important; } /* Adjust for widget */
+    }
+    /* Loading Shimmer */
+    .shimmer { background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    /* Error Toast */
+    .toast { position: fixed; top: 20px; right: 20px; z-index: 100; }
+    /* Spinner */
+    .spinner { border: 2px solid #374151; border-top: 2px solid #3b82f6; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="min-h-screen p-4 flex flex-col">
+  <!-- Loading Shimmer Overlay -->
+  <div id="loading" class="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-40">
+    <div class="shimmer w-64 h-8 rounded"></div>
+    <p class="text-gray-400 mt-2 text-center">Detecting Environment...</p>
+  </div>
+
+  <!-- Header -->
+  <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 relative z-10">
+    <div>
+      <h1 class="text-2xl font-bold">Mint NFTs on Base</h1>
+      <div id="profile" class="text-sm text-gray-400 hidden">User: <span id="user-info"></span></div>
+    </div>
+    <div id="wallet-status" class="flex items-center space-x-2 p-2 bg-gray-800 rounded-lg">
+      <div id="status-dot" class="spinner hidden"></div>
+      <div id="status-dot-final" class="w-2 h-2 rounded-full bg-red-500 hidden"></div>
+      <span id="status-text">Initializing...</span>
+    </div>
+  </header>
+
+  <!-- Error Toast (hidden by default) -->
+  <div id="error-toast" class="toast hidden bg-red-600 text-white px-4 py-2 rounded shadow-lg">
+    <span id="toast-message"></span>
+    <button onclick="this.parentElement.classList.add('hidden')" class="ml-2">&times;</button>
+  </div>
+
+  <!-- Restricted Message -->
+  <div id="restricted-view" class="min-h-screen flex items-center justify-center p-4 hidden relative z-10">
+    <div class="text-center">
+      <h1 class="text-2xl font-bold mb-4">Access Restricted</h1>
+      <p class="text-gray-300 mb-4">
+        Please open this app inside <strong>Farcaster</strong> or <strong>Base app</strong> to mint NFTs securely.
+      </p>
+      <p id="detected-env" class="text-sm text-gray-500">Detected: Unknown</p>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div id="main-view" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 flex-1 hidden relative z-10">
+    <!-- Collections injected here -->
+  </div>
+
+  <!-- Footer -->
+  <footer class="text-center text-gray-500 text-sm mt-auto relative z-10">
+    Powered by Base + Farcaster + Bueno
+  </footer>
+
+  <!-- Mint Modal (Now Bueno Widget Container) -->
+  <div id="mint-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col">
+      <div class="flex justify-between items-center p-4 border-b border-gray-700">
+        <h2 id="modal-title" class="text-xl font-bold">Mint Collection</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+      </div>
+      <div id="bueno-widget-container" class="p-4 flex-1 overflow-auto">
+        <!-- Bueno div injected here -->
+      </div>
+      <div class="p-4 border-t border-gray-700 text-center text-sm text-gray-500">
+        Mints on Base chain (8453). Tx confirmed? Check <a href="https://basescan.org" target="_blank" class="text-blue-400 hover:underline">BaseScan</a>.
+      </div>
+    </div>
+  </div>
+
+  <!-- Module Script for Farcaster SDK + Bueno Loader -->
+  <script type="module">
+    // Globals
+    let sdk = null;
+    let baseProvider = null;
+    let isValidEnv = false;
+    let isConnected = false;
+    let currentEnv = '';
+    let userFid = null;
+    let userAddress = null;
+    let NFT_COLLECTIONS = [];  // Loaded dynamically
+    let buenoScriptLoaded = false;  // Track Bueno v3 load
+
+    // Load Bueno v3 Widget (once, if valid env)
+    async function loadBuenoWidget() {
+      if (buenoScriptLoaded) return;
+      try {
+        // Load CSS
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = 'https://app.bueno.art/widget/v3/styles.css';
+        document.head.appendChild(cssLink);
+
+        // Load JS
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.crossOrigin = '';
+        script.src = 'https://app.bueno.art/widget/v3/index.js';
+        script.onload = () => { buenoScriptLoaded = true; };
+        document.head.appendChild(script);
+      } catch (e) {
+        console.error('Bueno load failed:', e);
+        showToast('Failed to load Bueno widget—check connection.');
+      }
+    }
+
+    // Load Collections (JSON fallback to inline)
+    async function loadCollections() {
+      try {
+        const response = await fetch('/collections.json');
+        if (response.ok) {
+          NFT_COLLECTIONS = await response.json();
+        } else {
+          // Fallback inline (with your real mintId)
+          NFT_COLLECTIONS = [
+            {
+              id: 'collection1',
+              name: 'Cosmic Cats',
+              thumbnail: 'https://via.placeholder.com/200x200/4B5563/FFFFFF?text=Cosmic+Cats',
+              mintId: '2rxrfAyczryfJ-o7mxP1Q',  // Your provided ID
+              description: 'Adorable cats in space—mint on Base!',
+            },
+            {
+              id: 'collection2',
+              name: 'Pixel Punks',
+              thumbnail: 'https://via.placeholder.com/200x200/4B5563/FFFFFF?text=Pixel+Punks',
+              mintId: 'YOUR_SECOND_MINT_ID_HERE',  // Add more from Bueno
+              description: 'Retro pixel art punks.',
+            },
+          ];
+        }
+      } catch (e) {
+        console.error('Collections load failed:', e);
+        // Inline fallback used
+      }
+    }
+
+    // Init
+    async function initApp() {
+      const statusText = document.getElementById('status-text');
+      const spinner = document.getElementById('status-dot');
+      const finalDot = document.getElementById('status-dot-final');
+      const loading = document.getElementById('loading');
+      spinner.classList.remove('hidden');
+      statusText.textContent = 'Loading SDKs...';
+
+      try {
+        await loadCollections();
+
+        // Load Farcaster/MiniKit SDK (enhanced fallback)
+        const farcasterSdk = await import('https://esm.sh/@farcaster/miniapp-sdk@latest');
+        sdk = farcasterSdk.sdk || farcasterSdk.default || farcasterSdk;
+        if (!sdk) throw new Error('SDK not available');
+
+        await sdk.actions.ready();  // Hide splash
+
+        const context = sdk.context;
+        if (!context) {
+          throw new Error('No Mini App context');
+        }
+
+        const BASE_APP_CLIENT_FID = 309857;
+        const clientFid = context.client?.clientFid || 0;
+        const isBaseApp = clientFid === BASE_APP_CLIENT_FID || context.client?.name?.includes('Base');
+        const isFarcaster = !!context.user?.fid && !isBaseApp;
+        isValidEnv = isBaseApp || isFarcaster;
+        currentEnv = isBaseApp ? 'Base Sub-Account' : isFarcaster ? 'Farcaster Wallet' : 'External Browser';
+
+        document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
+
+        if (!isValidEnv) {
+          throw new Error('External environment');
+        }
+
+        // Load Bueno only in valid env
+        await loadBuenoWidget();
+
+        // Show main view
+        document.getElementById('main-view').classList.remove('hidden');
+        document.getElementById('restricted-view').classList.add('hidden');
+
+        // User profile
+        userFid = context.user?.fid;
+        if (userFid) {
+          document.getElementById('user-info').textContent = `FID ${userFid}`;
+          document.getElementById('profile').classList.remove('hidden');
+        }
+
+        // Auto-connect
+        if (isFarcaster) {
+          isConnected = !!context.user;
+          userAddress = context.user?.wallet?.address || 'Embedded';
+        } else if (isBaseApp) {
+          // Base SDK factory + safety
+          const baseSdkFactory = window.BaseAccountSDK || window.createBaseAccountSDK;
+          if (!baseSdkFactory) {
+            showToast('Base SDK not loaded. Please open this in the Base app.');
+            return;
+          }
+
+          const baseSdk = baseSdkFactory({
+            appName: 'Base NFT Minter',
+            appLogoUrl: location.origin + '/icon.png',
+            appChainIds: [8453],
+            subAccounts: { creation: 'on-connect', defaultAccount: 'sub' }
+          });
+          baseProvider = baseSdk.getProvider();
+
+          try {
+            const { accounts } = await baseProvider.request({
+              method: 'wallet_connect',
+              params: [{
+                version: '1',
+                capabilities: {
+                  signInWithEthereum: {
+                    nonce: crypto.randomUUID().replace(/-/g, ''),
+                    chainId: '0x2105'  // 8453 hex
+                  }
+                }
+              }]
+            });
+            userAddress = accounts[0].address;
+            isConnected = true;
+          } catch (e) {
+            console.error('Base connect failed:', e);
+            isConnected = false;
+          }
+        }
+
+        spinner.classList.add('hidden');
+        finalDot.classList.remove('hidden');
+        updateStatus(isConnected, currentEnv);
+        renderCollections();
+      } catch (e) {
+        console.error('Init failed:', e);
+        isValidEnv = false;
+        document.getElementById('restricted-view').classList.remove('hidden');
+        document.getElementById('main-view').classList.add('hidden');
+        currentEnv = 'External Browser';
+        document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
+        statusText.textContent = 'External Browser Detected';
+        updateStatus(false, currentEnv);
+      } finally {
+        loading.classList.add('hidden');  // Always hide overlay
+        spinner.classList.add('hidden');
+        finalDot.classList.remove('hidden');
+      }
+    }
+
+    function updateStatus(connected, env) {
+      const finalDot = document.getElementById('status-dot-final');
+      const text = document.getElementById('status-text');
+      finalDot.className = `w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`;
+      text.textContent = connected ? `Connected (${env})` : `${env} - Not Available`;
+    }
+
+    function renderCollections() {
+      const grid = document.getElementById('main-view');
+      grid.innerHTML = NFT_COLLECTIONS.map(col => `
+        <div class="bg-gray-800 rounded-lg p-4 shadow-lg">
+          <img src="${col.thumbnail}" alt="${col.name}" class="w-full h-48 object-cover rounded mb-4">
+          <h2 class="text-xl font-bold mb-2">${col.name}</h2>
+          <p class="text-gray-400 mb-4">${col.description}</p>
+          <button
+            onclick="openMintModal('${col.id}')"
+            ${!isConnected ? 'disabled' : ''}
+            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 py-2 rounded font-semibold"
+          >
+            ${!isConnected ? 'Connect Wallet' : 'Mint Now'}
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('error-toast');
+      document.getElementById('toast-message').textContent = message;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 5000);
+    }
+
+    window.openMintModal = function(id) {
+      if (!isConnected || !buenoScriptLoaded) {
+        showToast('Widget not ready—try again.');
+        return;
+      }
+      const col = NFT_COLLECTIONS.find(c => c.id === id);
+      if (!col || !col.mintId) return;
+
+      document.getElementById('modal-title').textContent = `Mint ${col.name}`;
+      const container = document.getElementById('bueno-widget-container');
+      container.innerHTML = `<div id="bueno-widget" data-bueno-mint="${col.mintId}"></div>`;
+      document.getElementById('mint-modal').classList.remove('hidden');
+
+      // Pass context to Bueno (if v3 supports postMessage for wallet)
+      setTimeout(() => {
+        window.Bueno?.postMessage?.({
+          env: currentEnv.toLowerCase(),
+          fid: userFid,
+          address: userAddress,
+          chainId: 8453
+        }, '*');
+      }, 500);
+    };
+
+    window.closeModal = function() {
+      document.getElementById('mint-modal').classList.add('hidden');
+      document.getElementById('bueno-widget-container').innerHTML = '';  // Clear widget
+    };
+
+    // Bonus: Mint confirmation + Optional Analytics (Bueno v3 events)
+    window.addEventListener('message', (e) => {
+      if (e.data.txHash && e.origin.includes('bueno.art')) {
+        alert(`Minted! View on BaseScan: https://basescan.org/tx/${e.data.txHash}`);
+        closeModal();
+
+        // Optional: Log to your Vercel API
+        /*
+        fetch('https://yourapp.xyz/api/logMint', {
+          method: 'POST',
+          body: JSON.stringify({ env: currentEnv, fid: userFid, address: userAddress, tx: e.data.txHash }),
+          headers: { 'Content-Type': 'application/json' }
+        }).catch(console.error);
+        */
+      }
+    });
+
+    // Start
+    window.addEventListener('load', initApp);
+  </script>
+</body>
+</html>
