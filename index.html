@@ -209,7 +209,13 @@
         sdk = farcasterSdk.sdk || farcasterSdk.default || farcasterSdk;
         if (!sdk) throw new Error('SDK not available');
 
-        await sdk.actions.ready();  // Hide splash
+        // **FIX: Explicit MiniApp detection first**
+        const isMiniApp = await sdk.isInMiniApp({ timeoutMs: 200 });
+        if (!isMiniApp) {
+          throw new Error('Not in Mini App');
+        }
+
+        await sdk.actions.ready();  // Safe to call now
 
         const context = sdk.context;
         if (!context) {
@@ -226,7 +232,7 @@
         document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
 
         if (!isValidEnv) {
-          throw new Error('External environment');
+          throw new Error('Invalid MiniApp environment');
         }
 
         // Load Bueno only in valid env
