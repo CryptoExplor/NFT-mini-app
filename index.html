@@ -150,6 +150,25 @@
     let NFT_COLLECTIONS = [];  // Loaded dynamically
     let buenoScriptLoaded = false;  // Track Bueno v3 load
 
+    // Development mode detection
+    const isDevelopment = window.location.hostname === 'localhost' || 
+                         window.location.hostname.includes('ngrok') ||
+                         window.location.hostname.includes('vercel.app');
+
+    // Enhanced environment detection
+    function detectEnvironment() {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isInIframe = window.self !== window.top;
+      const isReactNative = /reactnative|farcaster|base/i.test(userAgent);
+      
+      return {
+        isInIframe,
+        isReactNative,
+        isPotentialMiniApp: isInIframe || isReactNative,
+        userAgent
+      };
+    }
+
     // Load Bueno v3 Widget (once, if valid env)
     async function loadBuenoWidget() {
       if (buenoScriptLoaded) return;
@@ -213,30 +232,55 @@
       spinner.classList.remove('hidden');
       statusText.textContent = 'Loading SDKs...';
 
+      // Context loading timeout
+      const contextTimeout = setTimeout(() => {
+        showToast('Context loading timeout - please try refreshing');
+      }, 10000); // 10 second timeout
+
       try {
+        // First check if we're in a mini app environment
+        const isMiniApp = await sdk.isInMiniApp();
+        
+        if (!isMiniApp) {
+          throw new Error('Not in Mini App environment');
+        }
+
+        // Call ready first to initialize the SDK properly
         await sdk.actions.ready({ disableNativeGestures: true });
 
-        // Get context explicitly
-        const context = await sdk.actions.getContext();
+        // Then get context
+        const context = await sdk.context;
+        
+        clearTimeout(contextTimeout);
 
         await loadCollections();
 
-        if (!context) {
-          throw new Error('No Mini App context');
+        if (!context || !context.user) {
+          console.warn('Context available but missing user data');
+          // Still allow the app to work but with limited functionality
         }
 
-        // Base detection
-        const clientName = context.client?.name || '';
-        const isBaseApp = clientName.toLowerCase().includes('base');
-        const isFarcaster = !!context.user?.fid && !isBaseApp;
-
-        isValidEnv = isBaseApp || isFarcaster;
-        currentEnv = isBaseApp ? 'Base Sub-Account' : isFarcaster ? 'Farcaster Wallet' : 'External Browser';
+        // More flexible environment detection
+        const clientName = context?.client?.name?.toLowerCase() || '';
+        const clientFid = context?.client?.clientFid;
+        const userFid = context?.user?.fid;
+        
+        // Consider it valid if we have any valid context indicators
+        isValidEnv = !!(clientFid || userFid || context?.client);
+        currentEnv = clientName.includes('base') ? 'Base App' : 
+                     userFid ? 'Farcaster Client' : 'Mini App Environment';
 
         document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
 
-        if (!isValidEnv) {
+        if (!isValidEnv && !isDevelopment) {
           throw new Error('External environment');
+        }
+
+        // For development, bypass restrictions
+        if (isDevelopment) {
+          console.warn('Development mode: bypassing environment restrictions');
+          isValidEnv = true;
+          currentEnv = 'Development Mode';
         }
 
         // Load Bueno only in valid env
@@ -246,8 +290,8 @@
         document.getElementById('main-view').classList.remove('hidden');
         document.getElementById('restricted-view').classList.add('hidden');
 
-        // User profile
-        userFid = context.user?.fid;
+        // User profile setup
+        userFid = context?.user?.fid;
         if (userFid) {
           document.getElementById('user-info').textContent = `FID ${userFid}`;
           document.getElementById('profile').classList.remove('hidden');
@@ -295,12 +339,24 @@
         renderCollections();
       } catch (e) {
         console.error('Init failed:', e);
-        isValidEnv = false;
-        document.getElementById('restricted-view').classList.remove('hidden');
-        document.getElementById('main-view').classList.add('hidden');
-        currentEnv = 'External Browser';
-        document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
-        statusText.textContent = 'External Browser Detected';
+        clearTimeout(contextTimeout);
+        // Show restricted view only if we're truly in an external browser
+        const envDetection = detectEnvironment();
+        const userAgent = envDetection.userAgent;
+        const isLikelyExternal = !userAgent.includes('farcaster') && 
+                               !userAgent.includes('base') && 
+                               window === window.top; // top-level window, not iframe
+        
+        if (isLikelyExternal) {
+          document.getElementById('restricted-view').classList.remove('hidden');
+          document.getElementById('main-view').classList.add('hidden');
+          currentEnv = 'External Browser';
+          document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
+          statusText.textContent = 'External Browser Detected';
+        } else {
+          // If we might be in a valid environment but context failed, show a different message
+          showToast('Failed to load Mini App context. Please try refreshing.');
+        }
         updateStatus(false, currentEnv);
       } finally {
         loading.classList.add('hidden');  // Always hide overlay
@@ -386,6 +442,14 @@
           headers: { 'Content-Type': 'application/json' }
         }).catch(console.error);
         */
+      }
+    });
+
+    // Enhanced Error Handling
+    window.addEventListener('error', (e) => {
+      console.error('Global error:', e.error);
+      if (e.error.message.includes('context') || e.error.message.includes('SDK')) {
+        showToast('Mini App SDK Error - please try refreshing or open in Farcaster app');
       }
     });
 
