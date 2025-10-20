@@ -7,7 +7,7 @@
     "imageUrl": "https://nft-mini-app-opal.vercel.app/image.png",
     "buttonTitle": "Open Mint App",
     "splashImageUrl": "https://nft-mini-app-opal.vercel.app/splash.png",
-    "splashBackgroundColor": "#111111",
+    "splashBackgroundColor": "#0f0f23",
     "webhookUrl": "https://nft-mini-app-opal.vercel.app/api/webhook",
     "subtitle": "Mint Bueno NFTs on Base",
     "description": "Secure multi-collection minting via Farcaster or Base App.",
