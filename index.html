@@ -216,17 +216,20 @@
       try {
         await sdk.actions.ready({ disableNativeGestures: true });
 
+        // Get context explicitly
+        const context = await sdk.actions.getContext();
+
         await loadCollections();
 
-        const context = sdk.context;
         if (!context) {
           throw new Error('No Mini App context');
         }
 
-        const BASE_APP_CLIENT_FID = 309857;
-        const clientFid = context.client?.clientFid || 0;
-        const isBaseApp = clientFid === BASE_APP_CLIENT_FID || context.client?.name?.includes('Base');
+        // Base detection
+        const clientName = context.client?.name || '';
+        const isBaseApp = clientName.toLowerCase().includes('base');
         const isFarcaster = !!context.user?.fid && !isBaseApp;
+
         isValidEnv = isBaseApp || isFarcaster;
         currentEnv = isBaseApp ? 'Base Sub-Account' : isFarcaster ? 'Farcaster Wallet' : 'External Browser';
 
