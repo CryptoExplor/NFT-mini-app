@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mint NFTs on Base</title>
+  <!-- Preconnect for Quick Auth performance -->
+  <link rel="preconnect" href="https://auth.farcaster.xyz" />
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -12,11 +14,35 @@
       theme: { extend: { colors: { primary: '#111827' } } }
     };
   </script>
+  <!-- Farcaster Mini App Metadata -->
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"https://nft-mini-app-opal.vercel.app/image.png",
+    "button":{
+      "title":"NFT Minter",
+      "action":{
+        "type":"launch_miniapp",
+        "name":"NFT Minter",
+        "url":"https://nft-mini-app-opal.vercel.app/",
+        "splashImageUrl":"https://nft-mini-app-opal.vercel.app/splash.png",
+        "splashBackgroundColor":"#111111"
+      }
+    },
+    "webhookUrl": "https://nft-mini-app-opal.vercel.app/api/webhook"
+  }' />
   <!-- Farcaster Frame Meta (enabled for cast sharing) -->
   <meta property="fc:frame" content="vNext" />
-  <meta property="fc:frame:image" content="https://yourapp.xyz/banner.png" /> <!-- Swap your banner -->
+  <meta property="fc:frame:image" content="https://nft-mini-app-opal.vercel.app/banner.png" /> <!-- Swap your banner -->
   <meta property="fc:frame:button:1" content="Open Mint App" />
-  <meta property="fc:frame:post_url" content="https://yourapp.xyz/" /> <!-- Your deploy URL -->
+  <meta property="fc:frame:post_url" content="https://nft-mini-app-opal.vercel.app/" /> <!-- Your deploy URL -->
+  <!-- Open Graph -->
+  <meta property="og:title" content="NFT Minter • Farcaster MiniApp" />
+  <meta property="og:description" content="Mint Bueno NFTs securely inside Farcaster or Base app." />
+  <meta property="og:image" content="https://nft-mini-app-opal.vercel.app/image.png" />
+  <meta property="og:url" content="https://nft-mini-app-opal.vercel.app/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <!-- Base SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@base-org/account-sdk@latest/dist/index.umd.js"></script>
   <style>
     body { background-color: #111827; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .dark { color-scheme: dark; }
@@ -254,6 +280,7 @@
             isConnected = true;
           } catch (e) {
             console.error('Base connect failed:', e);
+            showToast('Base connection failed — please reopen inside Base app.');
             isConnected = false;
           }
         }
@@ -331,7 +358,9 @@
           address: userAddress,
           chainId: 8453
         }, '*');
-      }, 500);
+        // Explicit Bueno init
+        if (window.Bueno?.init) window.Bueno.init();
+      }, 800);
     };
 
     window.closeModal = function() {
