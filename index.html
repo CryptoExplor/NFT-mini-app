@@ -195,19 +195,6 @@
       animation: glow-pulse 1.5s ease-in-out infinite alternate;
     }
     
-    .legendary-input {
-      background: rgba(15, 15, 35, 0.6);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      backdrop-filter: blur(10px);
-      transition: all 0.3s ease;
-    }
-    
-    .legendary-input:focus {
-      border-color: rgba(99, 102, 241, 0.8);
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
-      background: rgba(15, 15, 35, 0.8);
-    }
-    
     .card-hover {
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -341,22 +328,25 @@
         </div>
       </div>
 
-      <!-- Custom Minting Section -->
-      <div class="text-center mb-8">
-        <h3 class="text-2xl font-bold mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-          🚀 Custom NFT Creator
-        </h3>
+      <!-- Stats Section -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div class="glass-card card-hover rounded-2xl p-6 text-center">
+          <div class="text-3xl mb-2">⚡</div>
+          <div class="text-2xl font-bold text-white mb-1">Fast</div>
+          <div class="text-sm text-blue-300 opacity-80">Lightning Mints</div>
+        </div>
         
-        <button 
-          onclick="openBuenoModal()" 
-          class="legendary-button px-8 py-4 rounded-xl text-lg font-semibold transition-all"
-        >
-          <span class="relative z-10">🎨 Create Your Own NFT</span>
-        </button>
+        <div class="glass-card card-hover rounded-2xl p-6 text-center">
+          <div class="text-3xl mb-2">🛡️</div>
+          <div class="text-2xl font-bold text-white mb-1">Secure</div>
+          <div class="text-sm text-blue-300 opacity-80">Base Network</div>
+        </div>
         
-        <p class="text-sm text-blue-300 opacity-80 mt-3 max-w-md mx-auto">
-          Use our advanced creation tool to mint unique NFTs with custom artwork and metadata
-        </p>
+        <div class="glass-card card-hover rounded-2xl p-6 text-center">
+          <div class="text-3xl mb-2">💎</div>
+          <div class="text-2xl font-bold text-white mb-1">Premium</div>
+          <div class="text-sm text-blue-300 opacity-80">Legendary Quality</div>
+        </div>
       </div>
     </div>
   </main>
@@ -375,29 +365,6 @@
       
       <div id="modal-content">
         <!-- Modal content will be populated by JavaScript -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Bueno Modal -->
-  <div id="bueno-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
-    <div class="legendary-modal rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
-      <div class="flex justify-between items-center mb-6">
-        <h3 class="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-          🎨 Custom NFT Creator
-        </h3>
-        <button onclick="closeBuenoModal()" class="text-blue-300 hover:text-white text-2xl transition-colors">
-          ✕
-        </button>
-      </div>
-      
-      <div class="h-96 overflow-hidden rounded-2xl border border-legendary/30">
-        <iframe 
-          id="bueno-iframe" 
-          src="" 
-          class="w-full h-full border-0"
-          allow="clipboard-write"
-        ></iframe>
       </div>
     </div>
   </div>
@@ -424,7 +391,7 @@
     let buenoLoaded = false;
     let NFT_COLLECTIONS = [];
 
-    // Load Bueno Widget
+    // Load Bueno Widget (kept for potential future use)
     async function loadBueno() {
       if (buenoLoaded) return;
       try {
@@ -679,26 +646,6 @@
       document.body.style.overflow = 'auto';
     }
 
-    // Open Bueno Modal
-    window.openBuenoModal = function() {
-      const modal = document.getElementById('bueno-modal');
-      const iframe = document.getElementById('bueno-iframe');
-      
-      iframe.src = 'https://bueno.art/create?embed=true&theme=dark&collection=base';
-      modal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    // Close Bueno Modal
-    window.closeBuenoModal = function() {
-      const modal = document.getElementById('bueno-modal');
-      const iframe = document.getElementById('bueno-iframe');
-      
-      modal.classList.add('hidden');
-      iframe.src = '';
-      document.body.style.overflow = 'auto';
-    }
-
     // Launch Bueno Widget
     window.launchBuenoWidget = function(mintId) {
       if (!buenoLoaded) {
@@ -728,14 +675,6 @@
         showToast('Failed to launch minting widget.');
       }
     }
-
-    // Listen for messages from Bueno iframe
-    window.addEventListener('message', (e) => {
-      if (e.data.txHash && e.origin.includes('bueno.art')) {
-        showToast(`🎨 Custom NFT created! Tx: ${e.data.txHash.slice(0, 10)}...`);
-        closeBuenoModal();
-      }
-    });
 
     // Global error handler
     window.addEventListener('error', (e) => {
