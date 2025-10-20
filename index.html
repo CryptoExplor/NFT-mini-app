@@ -6,6 +6,10 @@
   <title>Mint NFTs on Base • Legendary Edition</title>
   <link rel="preconnect" href="https://auth.farcaster.xyz" />
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Bueno Widget Styles -->
+  <link rel="stylesheet" href="https://app.bueno.art/widget/v3/styles.css" />
+  
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -226,6 +230,18 @@
       box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
     }
     
+    /* Bueno Widget Customization */
+    .bueno-widget-container {
+      background: rgba(15, 15, 35, 0.6) !important;
+      border-radius: 1rem !important;
+      border: 1px solid rgba(99, 102, 241, 0.3) !important;
+      backdrop-filter: blur(20px) !important;
+      padding: 1.5rem !important;
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 0 20px rgba(99, 102, 241, 0.1) !important;
+    }
+    
     @media (max-width: 640px) {
       .legendary-modal { 
         margin: 1rem;
@@ -344,7 +360,7 @@
     </div>
   </main>
 
-  <!-- NFT Modal -->
+  <!-- NFT Modal with Bueno Widget -->
   <div id="mint-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
     <div class="legendary-modal rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6">
@@ -359,6 +375,11 @@
       <div id="modal-content">
         <!-- Modal content will be populated by JavaScript -->
       </div>
+      
+      <!-- Bueno Widget Container -->
+      <div id="bueno-widget-container" class="bueno-widget-container hidden mt-6">
+        <!-- Bueno widget will be inserted here -->
+      </div>
     </div>
   </div>
 
@@ -369,6 +390,9 @@
       <span id="toast-message"></span>
     </div>
   </div>
+
+  <!-- Bueno Widget Script -->
+  <script type="module" crossorigin src="https://app.bueno.art/widget/v3/index.js"></script>
 
   <script type="module">
     import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk@latest';
@@ -381,30 +405,9 @@
     let currentEnv = '';
     let userFid = null;
     let userAddress = null;
-    let buenoLoaded = false;
     let NFT_COLLECTIONS = [];
 
-    // Load Bueno Widget (kept for potential future use)
-    async function loadBueno() {
-      if (buenoLoaded) return;
-      try {
-        const css = document.createElement('link');
-        css.rel = 'stylesheet';
-        css.href = 'https://app.bueno.art/widget/v3/styles.css';
-        document.head.appendChild(css);
-
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = 'https://app.bueno.art/widget/v3/index.js';
-        script.onload = () => { buenoLoaded = true; };
-        document.head.appendChild(script);
-      } catch (e) {
-        console.error('Bueno load error:', e);
-        showToast('Failed to load widget');
-      }
-    }
-
-    // Load Collections
+    // Load Collections with Proper Bueno Integration
     async function loadCollections() {
       try {
         const res = await fetch('/collections.json');
@@ -414,31 +417,37 @@
           throw new Error('No collections.json');
         }
       } catch {
-        // Fallback collections with legendary styling
+        // Fallback collections with your actual collection
         NFT_COLLECTIONS = [
           {
-            id: 'collection1',
+            id: 'cosmic-cats',
             name: 'Cosmic Cats',
             thumbnail: 'https://via.placeholder.com/200x200/6366F1/FFFFFF?text=🐱✨',
-            mintId: '2rxrfAyczryfJ-o7mxP1Q',
+            mintId: '2rxrfAyczryfJ-o7mxP1Q', // Your actual collection ID
             description: 'Adorable cats exploring the cosmos—mint on Base blockchain!',
-            rarity: 'Legendary'
+            rarity: 'Legendary',
+            price: 'Free',
+            chain: 'Base'
           },
           {
-            id: 'collection2', 
+            id: 'crystal-dragons',
             name: 'Crystal Dragons',
             thumbnail: 'https://via.placeholder.com/200x200/8B5CF6/FFFFFF?text=🐉💎',
             mintId: 'dragon-crystal-base',
             description: 'Majestic crystal dragons with mystical powers and rare traits.',
-            rarity: 'Mythic'
+            rarity: 'Mythic',
+            price: '0.01 ETH',
+            chain: 'Base'
           },
           {
-            id: 'collection3',
+            id: 'cyber-samurai',
             name: 'Cyber Samurai',
             thumbnail: 'https://via.placeholder.com/200x200/0066FF/FFFFFF?text=⚔️🤖',
             mintId: 'cyber-samurai-nft',
             description: 'Futuristic warriors from the digital realm, ready for battle.',
-            rarity: 'Epic'
+            rarity: 'Epic',
+            price: '0.005 ETH',
+            chain: 'Base'
           }
         ];
       }
@@ -459,47 +468,46 @@
         const isMiniApp = await sdk.isInMiniApp();
         
         if (!isMiniApp) {
-          throw new Error('Not in MiniApp');
-        }
+          // Not in MiniApp - skip SDK initialization
+          console.log('Not in MiniApp environment, skipping SDK init');
+          statusText.textContent = '🌟 Loading Collections...';
+          await loadCollections();
+        } else {
+          // Initialize SDK
+          await sdk.actions.ready({});
+          statusText.textContent = '🔗 Connecting to Farcaster...';
 
-        // Initialize SDK
-        await sdk.actions.ready({});
-        statusText.textContent = '🔗 Connecting to Farcaster...';
+          // Setup Wagmi config
+          const config = createConfig({
+            chains: [base],
+            transports: { [base.id]: http() }
+          });
 
-        // Setup Wagmi config
-        const config = createConfig({
-          chains: [base],
-          transports: { [base.id]: http() }
-        });
+          // Connect wallet
+          statusText.textContent = '💰 Connecting Wallet...';
+          const account = await connect(config, { connector: farcasterMiniApp() });
+          isConnected = !!account.addresses?.[0];
+          userAddress = account.addresses?.[0];
 
-        // Connect wallet
-        statusText.textContent = '💰 Connecting Wallet...';
-        const account = await connect(config, { connector: farcasterMiniApp() });
-        isConnected = !!account.addresses?.[0];
-        userAddress = account.addresses?.[0];
+          // Watch account changes
+          watchAccount(config, {
+            onChange(data) {
+              isConnected = !!data.addresses?.[0];
+              userAddress = data.addresses?.[0];
+              updateStatus(isConnected, currentEnv);
+            }
+          });
 
-        // Watch account changes
-        watchAccount(config, {
-          onChange(data) {
-            isConnected = !!data.addresses?.[0];
-            userAddress = data.addresses?.[0];
-            updateStatus(isConnected, currentEnv);
+          // Get context
+          const ctx = await sdk.context;
+          if (ctx?.user?.fid) {
+            userFid = ctx.user.fid;
           }
-        });
+          currentEnv = ctx?.client?.name || 'miniapp';
 
-        // Get context
-        statusText.textContent = '🌟 Loading Collections...';
-        const ctx = await sdk.context;
-        if (ctx?.user?.fid) {
-          userFid = ctx.user.fid;
+          statusText.textContent = '🌟 Loading Collections...';
+          await loadCollections();
         }
-        currentEnv = ctx?.client?.name || 'miniapp';
-
-        // Load collections and Bueno
-        await Promise.all([
-          loadCollections(),
-          loadBueno()
-        ]);
 
         // Success state
         spinner.classList.add('hidden');
@@ -523,12 +531,12 @@
     // Update Status
     function updateStatus(connected, env) {
       const connectionStatus = document.getElementById('connection-status');
-      if (connected) {
-        connectionStatus.textContent = `Connected • ${userAddress?.slice(0, 6)}...${userAddress?.slice(-4)}`;
+      if (connected && userAddress) {
+        connectionStatus.textContent = `Connected • ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
         connectionStatus.className = 'text-green-300';
       } else {
-        connectionStatus.textContent = 'Disconnected';
-        connectionStatus.className = 'text-red-300';
+        connectionStatus.textContent = 'Ready to Connect';
+        connectionStatus.className = 'text-blue-300';
       }
     }
 
@@ -574,7 +582,7 @@
       }, 4000);
     }
 
-    // Open Mint Modal
+    // Open Mint Modal with Proper Bueno Widget
     window.openMintModal = function(id) {
       const col = NFT_COLLECTIONS.find(c => c.id === id);
       if (!col) return;
@@ -582,6 +590,7 @@
       const modal = document.getElementById('mint-modal');
       const title = document.getElementById('modal-title');
       const content = document.getElementById('modal-content');
+      const widgetContainer = document.getElementById('bueno-widget-container');
 
       title.textContent = col.name;
       content.innerHTML = `
@@ -603,30 +612,32 @@
               </div>
               <div class="glass-card rounded-xl p-3">
                 <div class="text-sm text-blue-300">Chain</div>
-                <div class="font-bold text-primary">Base</div>
+                <div class="font-bold text-primary">${col.chain || 'Base'}</div>
               </div>
               <div class="glass-card rounded-xl p-3">
                 <div class="text-sm text-blue-300">Price</div>
-                <div class="font-bold text-green-400">Free</div>
+                <div class="font-bold text-green-400">${col.price || 'Free'}</div>
               </div>
             </div>
-            
-            <button 
-              onclick="launchBuenoWidget('${col.mintId}')" 
-              class="legendary-button w-full py-4 px-6 rounded-xl text-lg font-bold mb-3"
-            >
-              <span class="relative z-10">🚀 Mint ${col.name}</span>
-            </button>
-            
-            <button 
-              onclick="closeMintModal()" 
-              class="w-full py-3 px-6 rounded-xl border border-legendary/30 text-blue-300 hover:bg-legendary/10 transition-all"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       `;
+
+      // Clear previous widget and create new one
+      widgetContainer.innerHTML = '';
+      
+      if (col.mintId) {
+        // Create Bueno widget element
+        const widgetElement = document.createElement('div');
+        widgetElement.setAttribute('data-bueno-mint', col.mintId);
+        widgetContainer.appendChild(widgetElement);
+        widgetContainer.classList.remove('hidden');
+        
+        showToast(`🎨 Loading ${col.name} minting widget...`);
+      } else {
+        widgetContainer.classList.add('hidden');
+        showToast('Minting widget not available for this collection');
+      }
 
       modal.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
@@ -635,38 +646,12 @@
     // Close Mint Modal
     window.closeMintModal = function() {
       const modal = document.getElementById('mint-modal');
+      const widgetContainer = document.getElementById('bueno-widget-container');
+      
       modal.classList.add('hidden');
+      widgetContainer.innerHTML = ''; // Clear widget
+      widgetContainer.classList.add('hidden');
       document.body.style.overflow = 'auto';
-    }
-
-    // Launch Bueno Widget
-    window.launchBuenoWidget = function(mintId) {
-      if (!buenoLoaded) {
-        showToast('Widget still loading, please wait...');
-        return;
-      }
-
-      try {
-        if (window.BuenoWidget) {
-          window.BuenoWidget.launch({
-            mintId: mintId,
-            theme: 'dark',
-            onSuccess: (data) => {
-              showToast(`🎉 Successfully minted! TX: ${data.transactionHash?.slice(0, 10)}...`);
-              closeMintModal();
-            },
-            onError: (error) => {
-              showToast('Minting failed. Please try again.');
-              console.error('Mint error:', error);
-            }
-          });
-        } else {
-          showToast('Widget not available. Please refresh and try again.');
-        }
-      } catch (error) {
-        console.error('Launch error:', error);
-        showToast('Failed to launch minting widget.');
-      }
     }
 
     // Global error handler
@@ -691,6 +676,19 @@
         document.body.appendChild(sparkle);
         
         setTimeout(() => sparkle.remove(), 1000);
+      }
+    });
+
+    // Listen for Bueno widget events
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'BUENO_MINT_SUCCESS') {
+        showToast(`🎉 Successfully minted NFT! TX: ${event.data.transactionHash?.slice(0, 10)}...`);
+        closeMintModal();
+      }
+      
+      if (event.data && event.data.type === 'BUENO_MINT_ERROR') {
+        showToast('❌ Minting failed. Please try again.');
+        console.error('Bueno mint error:', event.data.error);
       }
     });
 
