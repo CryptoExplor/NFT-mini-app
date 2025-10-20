@@ -41,8 +41,7 @@
   <meta property="og:image" content="https://nft-mini-app-opal.vercel.app/image.png" />
   <meta property="og:url" content="https://nft-mini-app-opal.vercel.app/" />
   <meta name="twitter:card" content="summary_large_image" />
-  <!-- Base SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@base-org/account-sdk@latest/dist/index.umd.js"></script>
+  <!-- Remove old Base SDK -->
   <style>
     body { background-color: #111827; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .dark { color-scheme: dark; }
@@ -125,11 +124,24 @@
     </div>
   </div>
 
-  <!-- Module Script for Farcaster SDK + Bueno Loader -->
+  <!-- Updated Main Module Script for Detection + Bueno Loader + Wagmi -->
   <script type="module">
+    // Imports
+    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk@latest';
+    import {
+      createConfig,
+      connect,
+      writeContract,
+      readContract,
+      http,
+      waitForTransactionReceipt,
+      watchAccount
+    } from 'https://esm.sh/@wagmi/core';
+    import { base } from 'https://esm.sh/@wagmi/core/chains';
+    import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector';
+    import { parseEther } from 'https://esm.sh/viem';
+
     // Globals
-    let sdk = null;
-    let baseProvider = null;
     let isValidEnv = false;
     let isConnected = false;
     let currentEnv = '';
@@ -202,20 +214,9 @@
       statusText.textContent = 'Loading SDKs...';
 
       try {
+        await sdk.actions.ready({ disableNativeGestures: true });
+
         await loadCollections();
-
-        // Load Farcaster/MiniKit SDK (enhanced fallback)
-        const farcasterSdk = await import('https://esm.sh/@farcaster/miniapp-sdk@latest');
-        sdk = farcasterSdk.sdk || farcasterSdk.default || farcasterSdk;
-        if (!sdk) throw new Error('SDK not available');
-
-        // **FIX: Explicit MiniApp detection first**
-        const isMiniApp = await sdk.isInMiniApp({ timeoutMs: 200 });
-        if (!isMiniApp) {
-          throw new Error('Not in Mini App');
-        }
-
-        await sdk.actions.ready();  // Safe to call now
 
         const context = sdk.context;
         if (!context) {
@@ -232,7 +233,7 @@
         document.getElementById('detected-env').textContent = `Detected: ${currentEnv}`;
 
         if (!isValidEnv) {
-          throw new Error('Invalid MiniApp environment');
+          throw new Error('External environment');
         }
 
         // Load Bueno only in valid env
@@ -249,47 +250,41 @@
           document.getElementById('profile').classList.remove('hidden');
         }
 
-        // Auto-connect
-        if (isFarcaster) {
-          isConnected = !!context.user;
-          userAddress = context.user?.wallet?.address || 'Embedded';
-        } else if (isBaseApp) {
-          // Base SDK factory + safety
-          const baseSdkFactory = window.BaseAccountSDK || window.createBaseAccountSDK;
-          if (!baseSdkFactory) {
-            showToast('Base SDK not loaded. Please open this in the Base app.');
-            return;
-          }
+        // Wagmi Config for base
+        const config = createConfig({
+          chains: [base],
+          transports: {
+            [base.id]: http(),
+          },
+          connectors: [farcasterMiniApp()],
+        });
 
-          const baseSdk = baseSdkFactory({
-            appName: 'Base NFT Minter',
-            appLogoUrl: location.origin + '/icon.png',
-            appChainIds: [8453],
-            subAccounts: { creation: 'on-connect', defaultAccount: 'sub' }
-          });
-          baseProvider = baseSdk.getProvider();
-
-          try {
-            const { accounts } = await baseProvider.request({
-              method: 'wallet_connect',
-              params: [{
-                version: '1',
-                capabilities: {
-                  signInWithEthereum: {
-                    nonce: crypto.randomUUID().replace(/-/g, ''),
-                    chainId: '0x2105'  // 8453 hex
-                  }
-                }
-              }]
-            });
-            userAddress = accounts[0].address;
-            isConnected = true;
-          } catch (e) {
-            console.error('Base connect failed:', e);
-            showToast('Base connection failed — please reopen inside Base app.');
-            isConnected = false;
-          }
+        // Connect
+        try {
+          const account = await connect({ connector: farcasterMiniApp(), config });
+          isConnected = !!account.address;
+          userAddress = account.address;
+        } catch (e) {
+          console.error('Wagmi connect failed:', e);
+          showToast('Connection failed — please reopen inside Farcaster or Base app.');
+          isConnected = false;
         }
+
+        // Optional: Watch account changes for reactive UI
+        watchAccount({
+          config,
+          onChange(account) {
+            const wasConnected = isConnected;
+            isConnected = !!account.address;
+            userAddress = account.address;
+            if (isConnected !== wasConnected) {
+              updateStatus(isConnected, currentEnv);
+              if (isConnected && document.getElementById('main-view')) {
+                renderCollections();
+              }
+            }
+          },
+        });
 
         spinner.classList.add('hidden');
         finalDot.classList.remove('hidden');
