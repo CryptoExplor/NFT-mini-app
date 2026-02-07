@@ -1,23 +1,23 @@
 {
   "frame": {
-    "name": "Base NFT Minter",
+    "name": "Base Mint App",
     "version": "1",
     "iconUrl": "https://base-mintapp.vercel.app/icon.png",
     "homeUrl": "https://base-mintapp.vercel.app",
     "imageUrl": "https://base-mintapp.vercel.app/image.png",
     "buttonTitle": "Open Mint App",
     "splashImageUrl": "https://base-mintapp.vercel.app/splash.png",
-    "splashBackgroundColor": "#0f0f23",
+    "splashBackgroundColor": "#1A1F3A",
     "webhookUrl": "https://base-mintapp.vercel.app/api/webhook",
     "subtitle": "Mint On-chainNFTs on Base",
-    "description": "Secure multi-collection minting on Farcaster and Base App.",
+    "description": "multi-collection minting on Farcaster and Base App.",
     "primaryCategory": "utility",
     "tags": [
       "base",
       "nft",
-      "mint"
-    ],
-    "ogDescription": "Powered by Farcaster and Base."
+      "mint",
+      "free"
+    ]
   },
   "accountAssociation": {
     "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
