@@ -9,6 +9,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@farcaster/frame-sdk": "^0.3.1",
         "@reown/appkit": "^1.8.14",
         "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@wagmi/core": "^2.16.3",
@@ -16,13 +17,6 @@
         "viem": "^2.22.17"
     },
     "devDependencies": {
-        "autoprefixer": "^10.4.20",
-        "postcss": "^8.5.1",
-        "tailwindcss": "^3.4.17",
         "vite": "^5.4.11"
-    },
-    "overrides": {
-        "chokidar": "^3.6.0",
-        "readdirp": "^3.6.0"
     }
 }
