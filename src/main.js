@@ -4,7 +4,7 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress, safeLocalStorage } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp, isAppInstalled } from './farcaster.js';
 
 // --- DOM Elements ---
 const dom = {
@@ -37,6 +37,13 @@ async function init() {
     if (isInFarcaster()) {
         console.log('Running in Farcaster:', context);
         state.farcaster = { sdk, context };
+        
+        // Clear the prompt flag if app is not installed
+        // This ensures the prompt shows again if user removed the app
+        if (!isAppInstalled()) {
+            console.log('App not installed - clearing prompt flag');
+            safeLocalStorage.removeItem('hasPromptedAddApp');
+        }
     }
 
     // 2. Initialize Wallet
@@ -82,7 +89,7 @@ document.addEventListener(EVENTS.WALLET_UPDATE, async (e) => {
     updateConnectButton(account);
     await refreshMintState();
 
-    // Prompt to add mini app after successful connection (only once)
+    // Prompt to add mini app after successful connection
     if (account.isConnected && isInFarcaster()) {
         await promptAddMiniApp();
     }
@@ -129,9 +136,18 @@ async function refreshMintState() {
 }
 
 /**
- * Prompt user to add the mini app (only once per session/device)
+ * Prompt user to add the mini app (smart detection)
+ * - Shows if app is not installed
+ * - Shows if user has never been prompted before
+ * - Doesn't show if user already added the app
  */
 async function promptAddMiniApp() {
+    // Don't prompt if app is already installed
+    if (isAppInstalled()) {
+        console.log('App already installed - skipping prompt');
+        return;
+    }
+    
     const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
     
     if (!hasPromptedAddApp) {
@@ -140,9 +156,11 @@ async function promptAddMiniApp() {
             const success = await addMiniApp();
             if (success) {
                 safeLocalStorage.setItem('hasPromptedAddApp', 'true');
-                showToast('Add this app to your Farcaster client!', 'success');
+                showToast('Add this app for quick access!', 'success');
             }
         }, 1000);
+    } else {
+        console.log('User already prompted - skipping');
     }
 }
 
