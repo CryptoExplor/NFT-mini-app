@@ -4,7 +4,7 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress, safeLocalStorage } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp, isAppInstalled } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp } from './farcaster.js';
 
 // --- DOM Elements ---
 const dom = {
@@ -28,6 +28,9 @@ const dom = {
     toastMessage: $('#toast-message')
 };
 
+// Track if we've prompted in this session
+let hasPromptedThisSession = false;
+
 // --- Initialization ---
 
 async function init() {
@@ -37,13 +40,6 @@ async function init() {
     if (isInFarcaster()) {
         console.log('Running in Farcaster:', context);
         state.farcaster = { sdk, context };
-        
-        // Clear the prompt flag if app is not installed
-        // This ensures the prompt shows again if user removed the app
-        if (!isAppInstalled()) {
-            console.log('App not installed - clearing prompt flag');
-            safeLocalStorage.removeItem('hasPromptedAddApp');
-        }
     }
 
     // 2. Initialize Wallet
@@ -136,32 +132,52 @@ async function refreshMintState() {
 }
 
 /**
- * Prompt user to add the mini app (smart detection)
- * - Shows if app is not installed
- * - Shows if user has never been prompted before
- * - Doesn't show if user already added the app
+ * Prompt user to add the mini app
+ * Uses session storage and timestamp to control frequency
  */
 async function promptAddMiniApp() {
-    // Don't prompt if app is already installed
-    if (isAppInstalled()) {
-        console.log('App already installed - skipping prompt');
+    // Don't prompt multiple times in same session
+    if (hasPromptedThisSession) {
+        console.log('Already prompted in this session - skipping');
         return;
     }
-    
-    const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
-    
-    if (!hasPromptedAddApp) {
-        // Wait a moment for better UX (user just connected)
-        setTimeout(async () => {
-            const success = await addMiniApp();
-            if (success) {
-                safeLocalStorage.setItem('hasPromptedAddApp', 'true');
-                showToast('Add this app for quick access!', 'success');
-            }
-        }, 1000);
-    } else {
-        console.log('User already prompted - skipping');
+
+    // Check last prompt timestamp (use 24-hour cooldown)
+    const lastPromptTime = safeLocalStorage.getItem('lastAddAppPrompt');
+    const now = Date.now();
+    const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+    if (lastPromptTime) {
+        const timeSinceLastPrompt = now - parseInt(lastPromptTime);
+        if (timeSinceLastPrompt < cooldownPeriod) {
+            console.log('Cooldown period active - skipping prompt');
+            return;
+        }
     }
+
+    // Wait a moment for better UX (user just connected)
+    setTimeout(async () => {
+        console.log('Attempting to show add mini app prompt...');
+        const success = await addMiniApp();
+        
+        if (success) {
+            hasPromptedThisSession = true;
+            safeLocalStorage.setItem('lastAddAppPrompt', now.toString());
+            showToast('Add this app for quick access!', 'success');
+        } else {
+            console.log('Add mini app prompt was not shown or declined');
+        }
+    }, 1500);
+}
+
+// Expose function to window for manual testing
+if (typeof window !== 'undefined') {
+    window.forceAddAppPrompt = async () => {
+        console.log('Forcing add app prompt...');
+        hasPromptedThisSession = false;
+        safeLocalStorage.removeItem('lastAddAppPrompt');
+        await promptAddMiniApp();
+    };
 }
 
 // --- Rendering ---
