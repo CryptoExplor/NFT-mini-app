@@ -1,28 +1,28 @@
 {
-  "miniapp": {
+  "frame": {
     "name": "Base NFT Minter",
     "version": "1",
-    "iconUrl": "https://nft-mini-app-opal.vercel.app/icon.png",
-    "homeUrl": "https://nft-mini-app-opal.vercel.app",
-    "imageUrl": "https://nft-mini-app-opal.vercel.app/image.png",
+    "iconUrl": "https://base-mintapp.vercel.app/icon.png",
+    "homeUrl": "https://base-mintapp.vercel.app",
+    "imageUrl": "https://base-mintapp.vercel.app/image.png",
     "buttonTitle": "Open Mint App",
-    "splashImageUrl": "https://nft-mini-app-opal.vercel.app/splash.png",
+    "splashImageUrl": "https://base-mintapp.vercel.app/splash.png",
     "splashBackgroundColor": "#0f0f23",
-    "webhookUrl": "https://nft-mini-app-opal.vercel.app/api/webhook",
-    "subtitle": "Mint Bueno NFTs on Base",
-    "description": "Secure multi-collection minting via Farcaster or Base App.",
+    "webhookUrl": "https://base-mintapp.vercel.app/api/webhook",
+    "subtitle": "Mint On-chainNFTs on Base",
+    "description": "Secure multi-collection minting on Farcaster and Base App.",
     "primaryCategory": "utility",
     "tags": [
       "base",
       "nft",
       "mint"
     ],
-    "ogDescription": "Powered by Bueno, Farcaster, and Base."
+    "ogDescription": "Powered by Farcaster and Base."
   },
   "accountAssociation": {
     "header": "eyJmaWQiOjYxMjA2NiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDE4MjhjNEJmNzhEQWI2NkI0QjdkZUJmYUEzOEYwQWQxMjVFYzhkMTUifQ",
-    "payload": "eyJkb21haW4iOiJuZnQtbWluaS1hcHAtb3BhbC52ZXJjZWwuYXBwIn0",
-    "signature": "ifOZDspthC/PYyFSkVRtHksr9K1tqAHTxJ7GM2qscltjjdILJwcfLkrmyh9hRf4pGj3KWZNJwIg5daUIJCxW8xs="
+    "payload": "eyJkb21haW4iOiJiYXNlLW1pbnRhcHAudmVyY2VsLmFwcCJ9",
+    "signature": "t1ieh5sSzQ5eQZq1aXt20MT3gQ680kYD96xGtBVHslUgZtCl+ItsdFx8vRnJAiXVEDNL9A0c3JQYTQ9rZ0qVShs="
   },
  "baseBuilder": {
     "allowedAddresses": ["0xA5f2c343813B6fb6fE947C2C4759F2c421a346a7"]
