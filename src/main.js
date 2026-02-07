@@ -4,6 +4,7 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
+import { initFarcasterSDK, isInFarcaster } from './farcaster.js';
 
 // --- DOM Elements ---
 const dom = {
@@ -30,21 +31,24 @@ const dom = {
 // --- Initialization ---
 
 async function init() {
-    // 1. Initialize Wallet
+    // 1. Initialize Farcaster SDK (CRITICAL - must be called first)
+    const { sdk, context } = await initFarcasterSDK();
+    
+    if (isInFarcaster()) {
+        console.log('Running in Farcaster:', context);
+        // Store context in state if needed
+        state.farcaster = { sdk, context };
+    }
+
+    // 2. Initialize Wallet
     initWallet();
 
-    // 2. Load Default Collection
+    // 3. Load Default Collection
     const collection = collections[defaultCollectionId];
     updateState('collection', collection);
 
-    // 3. Render Initial UI
+    // 4. Render Initial UI
     renderCollectionInfo(collection);
-
-    // 4. Check Farcaster
-    if (window.frameContext) {
-        console.log('Farcaster Frame Context detected');
-        // Auto-connect processing if needed
-    }
 
     hideLoading();
 }
