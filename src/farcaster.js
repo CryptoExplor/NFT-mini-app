@@ -6,9 +6,11 @@
 import { sdk } from '@farcaster/miniapp-sdk';
 
 let context = null;
+let isReady = false;
 
 /**
  * Initialize Farcaster SDK
+ * NOTE: Do NOT call ready() here - it should be called after full app init
  */
 export async function initFarcasterSDK() {
     try {
@@ -19,8 +21,7 @@ export async function initFarcasterSDK() {
             
             console.log('Farcaster SDK initialized', context);
             
-            // CRITICAL: Call ready() to tell Farcaster the app is loaded
-            sdk.actions.ready();
+            // DO NOT call ready() yet - let main.js call it after everything loads
             
             return { sdk, context };
         }
@@ -29,6 +30,22 @@ export async function initFarcasterSDK() {
     }
     
     return { sdk: null, context: null };
+}
+
+/**
+ * Call this AFTER your app is fully loaded
+ * This tells Farcaster the frame is ready to display
+ */
+export function notifyReady() {
+    if (sdk && !isReady) {
+        try {
+            sdk.actions.ready();
+            isReady = true;
+            console.log('Farcaster: ready() called');
+        } catch (error) {
+            console.error('Failed to call ready():', error);
+        }
+    }
 }
 
 /**
