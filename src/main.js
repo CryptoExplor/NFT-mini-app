@@ -4,7 +4,7 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js';
 
 // --- DOM Elements ---
 const dom = {
@@ -31,12 +31,11 @@ const dom = {
 // --- Initialization ---
 
 async function init() {
-    // 1. Initialize Farcaster SDK (CRITICAL - must be called first)
+    // 1. Initialize Farcaster SDK FIRST
     const { sdk, context } = await initFarcasterSDK();
     
     if (isInFarcaster()) {
         console.log('Running in Farcaster:', context);
-        // Store context in state if needed
         state.farcaster = { sdk, context };
     }
 
@@ -50,13 +49,26 @@ async function init() {
     // 4. Render Initial UI
     renderCollectionInfo(collection);
 
+    // 5. Hide loading overlay
     hideLoading();
+
+    // 6. CRITICAL: Tell Farcaster the app is ready - MUST BE LAST
+    const farcasterSdk = getFarcasterSDK();
+    if (farcasterSdk) {
+        try {
+            farcasterSdk.actions.ready();
+            console.log('Farcaster SDK: ready() called');
+        } catch (error) {
+            console.warn('Failed to call ready():', error);
+        }
+    }
 }
 
 function hideLoading() {
     if (dom.loadingOverlay) {
-        dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
-        setTimeout(() => dom.loadingOverlay.remove(), 1000); // Remove after fade
+        dom.loadingOverlay.style.opacity = '0';
+        dom.loadingOverlay.style.pointerEvents = 'none';
+        setTimeout(() => dom.loadingOverlay.remove(), 1000);
     }
 }
 
@@ -75,8 +87,6 @@ document.addEventListener(EVENTS.CHAIN_UPDATE, (e) => {
     const { chainId } = e.detail;
     if (chainId !== DEFAULT_CHAIN.id) {
         showToast('Wrong Network. Please switch to Base.', 'error');
-        // Optional: Auto switch
-        // switchToBase();
     }
 });
 
@@ -84,9 +94,7 @@ document.addEventListener(EVENTS.CHAIN_UPDATE, (e) => {
 if (dom.connectBtn) {
     dom.connectBtn.addEventListener('click', async () => {
         if (state.wallet.isConnected) {
-            // confirm disconnect?
-            // await disconnectWallet(); // Usually UI doesn't have explicit disconnect in button if using modal
-            await connectWallet(); // Open modal (which has disconnect)
+            await connectWallet();
         } else {
             await connectWallet();
         }
@@ -108,7 +116,6 @@ async function refreshMintState() {
     updateState('mintPolicyState.mintedCount', mintedCount);
     updateState('mintPolicyState.totalSupply', totalSupply);
 
-    // Resolve Stage
     const stage = resolveStage(collection.mintPolicy, mintedCount);
     updateState('mintPolicyState.activeStage', stage);
 
@@ -121,15 +128,11 @@ async function refreshMintState() {
 function updateConnectButton(account) {
     if (account.isConnected) {
         dom.connectText.textContent = shortenAddress(account.address);
-        dom.connectBtn.classList.remove('bg-indigo-600');
-        dom.connectBtn.classList.add('bg-green-600', 'bg-opacity-20');
         dom.connectionStatus.textContent = 'Connected';
         dom.statusGlow.style.background = '#10B981';
         dom.statusGlow.style.boxShadow = '0 0 10px #10B981';
     } else {
         dom.connectText.textContent = 'Connect Wallet';
-        dom.connectBtn.classList.add('bg-indigo-600');
-        dom.connectBtn.classList.remove('bg-green-600', 'bg-opacity-20');
         dom.connectionStatus.textContent = 'Disconnected';
         dom.statusGlow.style.background = '#EF4444';
         dom.statusGlow.style.boxShadow = '0 0 10px #EF4444';
@@ -140,19 +143,22 @@ function renderMintButton(stage, currentSupply, maxSupply) {
     if (currentSupply >= maxSupply) {
         dom.mintText.textContent = 'Sold Out';
         dom.mintBtn.disabled = true;
-        dom.mintBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        dom.mintBtn.style.opacity = '0.5';
+        dom.mintBtn.style.cursor = 'not-allowed';
         return;
     }
 
     if (!stage) {
         dom.mintText.textContent = 'Limit Reached';
         dom.mintBtn.disabled = true;
-        dom.mintBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        dom.mintBtn.style.opacity = '0.5';
+        dom.mintBtn.style.cursor = 'not-allowed';
         return;
     }
 
     dom.mintBtn.disabled = false;
-    dom.mintBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    dom.mintBtn.style.opacity = '1';
+    dom.mintBtn.style.cursor = 'pointer';
 
     switch (stage.type) {
         case 'FREE':
@@ -207,8 +213,6 @@ async function handleMint() {
         console.log('Tx Hash:', hash);
         showToast('Mint Submitted!', 'success');
 
-        // Optimistic update or wait for receipt?
-        // Let's reset Text but keep refreshing
         setTimeout(refreshMintState, 2000);
 
     } catch (e) {
@@ -216,7 +220,6 @@ async function handleMint() {
         showToast(e.message || 'Mint failed', 'error');
     } finally {
         dom.mintBtn.disabled = false;
-        // Button text will update on refreshMintState
     }
 }
 
@@ -224,17 +227,16 @@ function showToast(msg, type = 'info') {
     if (!dom.toast) return;
 
     dom.toastMessage.textContent = msg;
-    dom.toast.classList.remove('translate-y-20', 'opacity-0');
+    dom.toast.classList.add('show');
 
-    // Style based on type
     if (type === 'error') {
-        dom.toast.classList.add('border-red-500');
+        dom.toast.classList.add('error');
     } else {
-        dom.toast.classList.remove('border-red-500');
+        dom.toast.classList.remove('error');
     }
 
     setTimeout(() => {
-        dom.toast.classList.add('translate-y-20', 'opacity-0');
+        dom.toast.classList.remove('show');
     }, 3000);
 }
 
