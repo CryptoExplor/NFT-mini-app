@@ -2,9 +2,9 @@ import { initWallet, connectWallet, disconnectWallet, switchToBase, wagmiAdapter
 import { state, updateState, EVENTS } from './state.js';
 import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
-import { $, shortenAddress } from './utils/dom.js';
+import { $, shortenAddress, safeLocalStorage } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp } from './farcaster.js';
 
 // --- DOM Elements ---
 const dom = {
@@ -81,6 +81,11 @@ document.addEventListener(EVENTS.WALLET_UPDATE, async (e) => {
 
     updateConnectButton(account);
     await refreshMintState();
+
+    // Prompt to add mini app after successful connection (only once)
+    if (account.isConnected && isInFarcaster()) {
+        await promptAddMiniApp();
+    }
 });
 
 document.addEventListener(EVENTS.CHAIN_UPDATE, (e) => {
@@ -121,6 +126,24 @@ async function refreshMintState() {
 
     renderMintButton(stage, totalSupply, collection.maxSupply);
     renderSupply(totalSupply, collection.maxSupply);
+}
+
+/**
+ * Prompt user to add the mini app (only once per session/device)
+ */
+async function promptAddMiniApp() {
+    const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
+    
+    if (!hasPromptedAddApp) {
+        // Wait a moment for better UX (user just connected)
+        setTimeout(async () => {
+            const success = await addMiniApp();
+            if (success) {
+                safeLocalStorage.setItem('hasPromptedAddApp', 'true');
+                showToast('Add this app to your Farcaster client!', 'success');
+            }
+        }, 1000);
+    }
 }
 
 // --- Rendering ---
