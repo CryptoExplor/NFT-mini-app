@@ -1,99 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mint NFTs on Base • Legendary Edition</title>
-  <link rel="preconnect" href="https://auth.farcaster.xyz" />
+  <title>Mint NFTs on Base • Legendary Example</title>
+
+  <!-- Farcaster Metadata -->
+  <meta property="fc:frame" content="vnext" />
+  <meta property="fc:frame:image" content="https://nft-mini-app-opal.vercel.app/image.png" />
+  <meta property="fc:frame:button:1" content="Mint" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.ico" />
+
+  <!-- Tailwind CDN (Ensures styles load even if Vite is misconfigured) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Bueno Widget Styles -->
-  <link rel="stylesheet" href="https://app.bueno.art/widget/v3/styles.css" />
-  
   <script>
     tailwind.config = {
-      darkMode: 'class',
-      theme: { 
-        extend: { 
-          colors: { 
+      theme: {
+        extend: {
+          colors: {
             primary: '#0066FF',
             legendary: '#6366F1',
             aurora: '#8B5CF6'
-          },
-          animation: {
-            'aurora': 'aurora 20s ease-in-out infinite',
-            'glow-pulse': 'glow-pulse 2s ease-in-out infinite alternate',
-            'float': 'float 6s ease-in-out infinite',
-            'shimmer': 'shimmer 2.5s linear infinite',
-            'scale-glow': 'scale-glow 0.3s ease-out',
-            'loading': 'loading 1.5s infinite'
-          },
-          keyframes: {
-            aurora: {
-              '0%, 100%': { 
-                transform: 'translateX(-50%) translateY(-50%) rotate(0deg) scale(1)',
-                opacity: '0.3'
-              },
-              '33%': { 
-                transform: 'translateX(-30%) translateY(-60%) rotate(120deg) scale(1.1)',
-                opacity: '0.5'
-              },
-              '66%': { 
-                transform: 'translateX(-70%) translateY(-40%) rotate(240deg) scale(0.9)',
-                opacity: '0.4'
-              }
-            },
-            'glow-pulse': {
-              '0%': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.3)' },
-              '100%': { boxShadow: '0 0 40px rgba(99, 102, 241, 0.6), 0 0 80px rgba(99, 102, 241, 0.2)' }
-            },
-            'float': {
-              '0%, 100%': { transform: 'translateY(0px)' },
-              '50%': { transform: 'translateY(-10px)' }
-            },
-            'shimmer': {
-              '0%': { transform: 'translateX(-100%)' },
-              '100%': { transform: 'translateX(100%)' }
-            },
-            'scale-glow': {
-              '0%': { transform: 'scale(1)', boxShadow: '0 0 0 rgba(99, 102, 241, 0)' },
-              '100%': { transform: 'scale(1.05)', boxShadow: '0 0 30px rgba(99, 102, 241, 0.4)' }
-            },
-            'loading': { 
-              '0%': { backgroundPosition: '200% 0' }, 
-              '100%': { backgroundPosition: '-200% 0' } 
-            }
           }
-        } 
-      }
-    };
-  </script>
-  
-  <!-- Farcaster Mini App Metadata -->
-  <meta name="fc:miniapp" content='{
-    "version":"1",
-    "imageUrl":"https://nft-mini-app-opal.vercel.app/image.png",
-    "button":{
-      "title":"NFT Minter • Legendary",
-      "action":{
-        "type":"launch_miniapp",
-        "name":"NFT Minter • Legendary",
-        "url":"https://nft-mini-app-opal.vercel.app/",
-        "splashImageUrl":"https://nft-mini-app-opal.vercel.app/splash.png",
-        "splashBackgroundColor":"#0f0f23"
+        }
       }
     }
-  }' />
-  
-  <!-- Open Graph -->
-  <meta property="og:title" content="NFT Minter • Legendary Edition • Farcaster MiniApp" />
-  <meta property="og:description" content="Premium NFT minting experience on Base blockchain with legendary UI" />
-  <meta property="og:image" content="https://nft-mini-app-opal.vercel.app/image.png" />
-  <meta property="og:url" content="https://nft-mini-app-opal.vercel.app/" />
-  <meta name="twitter:card" content="summary_large_image" />
+  </script>
 
+  <!-- Custom CSS for legendary effects -->
   <style>
-    /* Custom CSS for legendary effects */
     .aurora-bg {
       position: fixed;
       top: 0;
@@ -102,87 +40,75 @@
       height: 100%;
       overflow: hidden;
       z-index: -2;
-      background: linear-gradient(45deg, #0f0f23, #1a1b3e, #2d1b69, #0f0f23);
-      background-size: 400% 400%;
-      animation: aurora 15s ease-in-out infinite;
+      background: radial-gradient(circle at 50% 50%, #0f172a 0%, #000000 100%);
     }
-    
+
     .aurora-glow {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 300px;
-      height: 300px;
-      background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(139, 92, 246, 0.2) 40%, transparent 70%);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.15), transparent 60%);
       animation: aurora 20s ease-in-out infinite;
-      filter: blur(40px);
+      z-index: -1;
+      filter: blur(100px);
     }
-    
+
+    body {
+      overflow: hidden;
+    }
+
     .stars {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: -1;
-      background-image: 
-        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
-        radial-gradient(2px 2px at 40px 70px, rgba(139, 92, 246, 0.4), transparent),
-        radial-gradient(1px 1px at 90px 40px, rgba(99, 102, 241, 0.5), transparent),
-        radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.2), transparent),
+      pointer-events: none;
+      background-image:
+        radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+        radial-gradient(1px 1px at 40px 70px, #fff, transparent),
+        radial-gradient(1px 1px at 50px 160px, #fff, transparent),
+        radial-gradient(2px 2px at 90px 40px, rgba(99, 102, 241, 0.5), transparent),
         radial-gradient(2px 2px at 160px 30px, rgba(139, 92, 246, 0.3), transparent);
       background-repeat: repeat;
       background-size: 200px 100px;
       animation: float 8s ease-in-out infinite;
     }
-    
+
     .glass-card {
       background: rgba(15, 15, 35, 0.4);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(99, 102, 241, 0.2);
-      box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 0 20px rgba(99, 102, 241, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 20px rgba(99, 102, 241, 0.1);
+      transition: all 0.3s ease;
     }
-    
+
+    .glass-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 30px rgba(99, 102, 241, 0.2);
+    }
+
     .glass-header {
-      background: rgba(15, 15, 35, 0.6);
-      backdrop-filter: blur(30px);
-      border-bottom: 1px solid rgba(99, 102, 241, 0.2);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      background: rgba(15, 15, 35, 0.2);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
     }
-    
+
     .legendary-button {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
       position: relative;
       overflow: hidden;
       transition: all 0.3s ease;
+      z-index: 10;
     }
-    
+
     .legendary-button:hover {
-      animation: scale-glow 0.3s ease-out forwards;
-      background: linear-gradient(135deg, rgba(99, 102, 241, 1), rgba(139, 92, 246, 1));
+      transform: translateY(-2px);
+      box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
     }
-    
-    .legendary-button::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-      transition: left 0.5s ease;
-    }
-    
-    .legendary-button:hover::before {
-      left: 100%;
-    }
-    
+
     .status-glow {
       width: 8px;
       height: 8px;
@@ -191,509 +117,140 @@
       box-shadow: 0 0 10px #10B981, 0 0 20px rgba(16, 185, 129, 0.5);
       animation: glow-pulse 1.5s ease-in-out infinite alternate;
     }
-    
-    .card-hover {
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    @keyframes aurora {
+
+      0%,
+      100% {
+        transform: translateX(-50%) translateY(-50%) rotate(0deg) scale(1);
+        opacity: 0.3;
+      }
+
+      33% {
+        transform: translateX(-30%) translateY(-30%) rotate(120deg) scale(1.2);
+        opacity: 0.5;
+      }
+
+      66% {
+        transform: translateX(-70%) translateY(-70%) rotate(240deg) scale(0.8);
+        opacity: 0.3;
+      }
     }
-    
-    .card-hover:hover {
-      transform: translateY(-4px) scale(1.02);
-      box-shadow: 
-        0 20px 40px rgba(0, 0, 0, 0.4),
-        0 0 30px rgba(99, 102, 241, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-10px);
+      }
     }
-    
-    .modal-backdrop {
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(20px);
-    }
-    
-    .legendary-modal {
-      background: rgba(15, 15, 35, 0.95);
-      backdrop-filter: blur(40px);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      box-shadow: 
-        0 25px 50px rgba(0, 0, 0, 0.5),
-        0 0 50px rgba(99, 102, 241, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-    
-    .shimmer { 
-      background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%); 
-      background-size: 200% 100%; 
-      animation: loading 1.5s infinite; 
-    }
-    
-    .collection-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
-    }
-    
-    /* Bueno Widget Customization */
-    .bueno-widget-container {
-      background: rgba(15, 15, 35, 0.6) !important;
-      border-radius: 1rem !important;
-      border: 1px solid rgba(99, 102, 241, 0.3) !important;
-      backdrop-filter: blur(20px) !important;
-      padding: 1.5rem !important;
-      box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 0 20px rgba(99, 102, 241, 0.1) !important;
-    }
-    
-    @media (max-width: 640px) {
-      .legendary-modal { 
-        margin: 1rem;
-        max-width: calc(100% - 2rem);
-        max-height: calc(100vh - 2rem);
+
+    @keyframes glow-pulse {
+      from {
+        opacity: 0.6;
+        box-shadow: 0 0 5px #10B981;
+      }
+
+      to {
+        opacity: 1;
+        box-shadow: 0 0 15px #10B981, 0 0 25px rgba(16, 185, 129, 0.5);
       }
     }
   </style>
 </head>
 
-<body class="min-h-screen text-white relative overflow-x-hidden">
-  <!-- Aurora Background -->
+<body class="h-screen text-white relative overflow-hidden bg-slate-900">
+
+  <!-- Backgrounds handled by CSS -->
   <div class="aurora-bg"></div>
   <div class="aurora-glow"></div>
   <div class="stars"></div>
-  
-  <!-- Loading Screen -->
-  <div id="loading" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center">
-    <div class="legendary-modal rounded-3xl p-8 max-w-md mx-4 text-center">
-      <div class="mb-6">
-        <div class="w-16 h-16 mx-auto bg-gradient-to-br from-legendary to-aurora rounded-2xl flex items-center justify-center mb-4">
-          <span class="text-2xl">💎</span>
-        </div>
-        <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-          Legendary NFT Minter
-        </h2>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-[#0f0f23] transition-opacity duration-500">
+    <div class="text-center">
+      <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4">
       </div>
-      
-      <div class="space-y-4">
-        <div class="flex items-center justify-center space-x-2">
-          <div id="status-dot" class="w-3 h-3 bg-legendary rounded-full animate-pulse"></div>
-          <div id="status-dot-final" class="status-glow hidden"></div>
-          <span id="status-text" class="text-blue-200">Initializing...</span>
-        </div>
-        
-        <div class="w-full bg-gray-700 rounded-full h-2">
-          <div class="bg-gradient-to-r from-legendary to-aurora h-2 rounded-full shimmer"></div>
-        </div>
-      </div>
+      <h2
+        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 animate-pulse">
+        Initializing...
+      </h2>
     </div>
   </div>
-  
+
   <!-- Header -->
   <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
     <div class="max-w-6xl mx-auto flex items-center justify-between">
       <div class="flex items-center space-x-3">
-        <div class="relative">
-          <div class="w-10 h-10 bg-gradient-to-br from-legendary to-aurora rounded-xl flex items-center justify-center shadow-lg">
-            <span class="text-lg font-bold">💎</span>
-          </div>
-          <div class="absolute -top-1 -right-1">
-            <div id="header-status" class="status-glow"></div>
-          </div>
-        </div>
-        <div>
-          <h1 class="text-xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-            Legendary NFT Minter
-          </h1>
-          <p class="text-xs text-blue-300 opacity-80">Base • Farcaster</p>
-        </div>
+        <h1 class="text-xl font-bold tracking-tight">Mint App</h1>
       </div>
-      
-      <div class="flex items-center space-x-3">
-        <div class="hidden sm:flex items-center space-x-2 text-xs">
-          <div class="status-glow"></div>
-          <span id="connection-status" class="text-green-300">Connected</span>
-        </div>
-      </div>
+
+      <!-- Connect Button -->
+      <button id="connect-btn"
+        class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:bg-white/10 transition-colors">
+        <div class="status-glow"></div>
+        <span id="connect-text" class="text-sm font-medium">Connect Wallet</span>
+      </button>
     </div>
   </header>
 
   <!-- Main Content -->
-  <main class="pt-24 pb-8 px-4 relative z-10">
-    <div class="max-w-6xl mx-auto">
-      
-      <!-- Hero Section -->
-      <div class="text-center mb-12 animate-float">
-        <h2 class="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white via-blue-200 to-purple-300 bg-clip-text text-transparent">
-          Mint Legendary NFTs
-        </h2>
-        <p class="text-lg text-blue-200 opacity-90 max-w-2xl mx-auto leading-relaxed">
-          Experience the future of NFT minting with our premium glassmorphic interface on Base blockchain
-        </p>
+  <main class="pt-40 pb-20 px-4 h-full overflow-y-auto flex flex-col items-center justify-start">
+
+    <div class="max-w-md w-full glass-card p-1 rounded-2xl relative group">
+      <!-- Glow effect behind card -->
+      <div
+        class="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200">
       </div>
 
-      <!-- Collections Grid -->
-      <div class="mb-12">
-        <h3 class="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-          🎨 Featured Collections
-        </h3>
-        <div id="collections-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <!-- Collections will be populated by JavaScript -->
-        </div>
-      </div>
+      <div class="relative bg-[#1a1b2e] rounded-xl p-6 overflow-hidden">
 
-      <!-- Stats Section -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div class="glass-card card-hover rounded-2xl p-6 text-center">
-          <div class="text-3xl mb-2">⚡</div>
-          <div class="text-2xl font-bold text-white mb-1">Fast</div>
-          <div class="text-sm text-blue-300 opacity-80">Lightning Mints</div>
+        <!-- Image Placeholder -->
+        <div class="mb-6 rounded-lg overflow-hidden border border-white/10 aspect-square relative">
+          <img id="collection-image" src="image.png" alt="NFT Preview" class="w-full h-full object-cover">
+          <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+            <h2 id="collection-name" class="text-2xl font-bold text-white">Loading...</h2>
+          </div>
         </div>
-        
-        <div class="glass-card card-hover rounded-2xl p-6 text-center">
-          <div class="text-3xl mb-2">🛡️</div>
-          <div class="text-2xl font-bold text-white mb-1">Secure</div>
-          <div class="text-sm text-blue-300 opacity-80">Base Network</div>
+
+        <!-- Supply Status -->
+        <div class="flex justify-between items-center mb-6 text-sm">
+          <span class="text-gray-400">Total Minted</span>
+          <div class="flex items-center space-x-1 font-mono text-indigo-300">
+            <span id="supply-count">0</span>
+            <span>/</span>
+            <span id="max-supply">10000</span>
+          </div>
         </div>
-        
-        <div class="glass-card card-hover rounded-2xl p-6 text-center">
-          <div class="text-3xl mb-2">💎</div>
-          <div class="text-2xl font-bold text-white mb-1">Premium</div>
-          <div class="text-sm text-blue-300 opacity-80">Legendary Quality</div>
+
+        <!-- Mint Button -->
+        <button id="mint-btn"
+          class="w-full legendary-button py-4 rounded-xl font-bold text-lg tracking-wide shadow-lg shadow-indigo-500/30">
+          <span id="mint-text">Loading Details...</span>
+        </button>
+
+        <!-- Connection Status Footer -->
+        <div class="mt-4 text-center text-xs text-gray-500">
+          Status: <span id="connection-status">Checking...</span>
         </div>
+
       </div>
     </div>
   </main>
 
-  <!-- NFT Modal with Bueno Widget -->
-  <div id="mint-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
-    <div class="legendary-modal rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-6">
-        <h3 id="modal-title" class="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-          Collection Details
-        </h3>
-        <button onclick="closeMintModal()" class="text-blue-300 hover:text-white text-2xl transition-colors">
-          ✕
-        </button>
-      </div>
-      
-      <div id="modal-content">
-        <!-- Modal content will be populated by JavaScript -->
-      </div>
-      
-      <!-- Bueno Widget Container -->
-      <div id="bueno-widget-container" class="bueno-widget-container hidden mt-6">
-        <!-- Bueno widget will be inserted here -->
-      </div>
-    </div>
+  <!-- Toast Notification -->
+  <div id="toast"
+    class="fixed bottom-8 left-1/2 transform -translate-x-1/2 glass-card px-6 py-3 rounded-full border border-indigo-500/30 flex items-center space-x-3 transition-all duration-300 translate-y-20 opacity-0 z-50">
+    <span class="text-2xl">🔔</span>
+    <span id="toast-message" class="text-sm font-medium">Notification</span>
   </div>
 
-  <!-- Toast Notifications -->
-  <div id="toast" class="fixed top-20 right-4 glass-card rounded-xl p-4 text-white transform translate-x-full transition-transform duration-300 z-50 border border-legendary/30">
-    <div class="flex items-center space-x-3">
-      <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-      <span id="toast-message"></span>
-    </div>
-  </div>
-
-  <!-- Bueno Widget Script -->
-  <script type="module" crossorigin src="https://app.bueno.art/widget/v3/index.js"></script>
-
-  <script type="module">
-    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk@latest';
-    import { createConfig, connect, http, watchAccount } from 'https://esm.sh/@wagmi/core@2';
-    import { base } from 'https://esm.sh/@wagmi/core@2/chains';
-    import { farcasterMiniApp } from 'https://esm.sh/@farcaster/miniapp-wagmi-connector@latest';
-
-    // Global State
-    let isConnected = false;
-    let currentEnv = '';
-    let userFid = null;
-    let userAddress = null;
-    let NFT_COLLECTIONS = [];
-
-    // Load Collections with Proper Bueno Integration
-    async function loadCollections() {
-      try {
-        const res = await fetch('/collections.json');
-        if (res.ok) {
-          NFT_COLLECTIONS = await res.json();
-        } else {
-          throw new Error('No collections.json');
-        }
-      } catch {
-        // Fallback collections with your actual collection
-        NFT_COLLECTIONS = [
-          {
-            id: 'cosmic-cats',
-            name: 'Cosmic Cats',
-            thumbnail: 'https://via.placeholder.com/200x200/6366F1/FFFFFF?text=🐱✨',
-            mintId: '2rxrfAyczryfJ-o7mxP1Q', // Your actual collection ID
-            description: 'Adorable cats exploring the cosmos—mint on Base blockchain!',
-            rarity: 'Legendary',
-            price: 'Free',
-            chain: 'Base'
-          },
-          {
-            id: 'crystal-dragons',
-            name: 'Crystal Dragons',
-            thumbnail: 'https://via.placeholder.com/200x200/8B5CF6/FFFFFF?text=🐉💎',
-            mintId: 'dragon-crystal-base',
-            description: 'Majestic crystal dragons with mystical powers and rare traits.',
-            rarity: 'Mythic',
-            price: '0.01 ETH',
-            chain: 'Base'
-          },
-          {
-            id: 'cyber-samurai',
-            name: 'Cyber Samurai',
-            thumbnail: 'https://via.placeholder.com/200x200/0066FF/FFFFFF?text=⚔️🤖',
-            mintId: 'cyber-samurai-nft',
-            description: 'Futuristic warriors from the digital realm, ready for battle.',
-            rarity: 'Epic',
-            price: '0.005 ETH',
-            chain: 'Base'
-          }
-        ];
-      }
-    }
-
-    // Initialize App
-    async function initApp() {
-      const statusText = document.getElementById('status-text');
-      const spinner = document.getElementById('status-dot');
-      const finalDot = document.getElementById('status-dot-final');
-      const loading = document.getElementById('loading');
-      
-      spinner.classList.remove('hidden');
-      statusText.textContent = '🚀 Loading Legendary Experience...';
-
-      try {
-        // Check if in MiniApp
-        const isMiniApp = await sdk.isInMiniApp();
-        
-        if (!isMiniApp) {
-          // Not in MiniApp - skip SDK initialization
-          console.log('Not in MiniApp environment, skipping SDK init');
-          statusText.textContent = '🌟 Loading Collections...';
-          await loadCollections();
-        } else {
-          // Initialize SDK
-          await sdk.actions.ready({});
-          statusText.textContent = '🔗 Connecting to Farcaster...';
-
-          // Setup Wagmi config
-          const config = createConfig({
-            chains: [base],
-            transports: { [base.id]: http() }
-          });
-
-          // Connect wallet
-          statusText.textContent = '💰 Connecting Wallet...';
-          const account = await connect(config, { connector: farcasterMiniApp() });
-          isConnected = !!account.addresses?.[0];
-          userAddress = account.addresses?.[0];
-
-          // Watch account changes
-          watchAccount(config, {
-            onChange(data) {
-              isConnected = !!data.addresses?.[0];
-              userAddress = data.addresses?.[0];
-              updateStatus(isConnected, currentEnv);
-            }
-          });
-
-          // Get context
-          const ctx = await sdk.context;
-          if (ctx?.user?.fid) {
-            userFid = ctx.user.fid;
-          }
-          currentEnv = ctx?.client?.name || 'miniapp';
-
-          statusText.textContent = '🌟 Loading Collections...';
-          await loadCollections();
-        }
-
-        // Success state
-        spinner.classList.add('hidden');
-        finalDot.classList.remove('hidden');
-        statusText.textContent = '✨ Ready to Mint!';
-        
-        setTimeout(() => {
-          loading.classList.add('hidden');
-          updateStatus(isConnected, currentEnv);
-          renderCollections();
-          showToast('🎉 Welcome to the Legendary NFT Experience!');
-        }, 1500);
-
-      } catch (error) {
-        console.error('Init error:', error);
-        statusText.textContent = '❌ Connection failed - please refresh';
-        showToast('Failed to initialize. Please refresh and try again.');
-      }
-    }
-
-    // Update Status
-    function updateStatus(connected, env) {
-      const connectionStatus = document.getElementById('connection-status');
-      if (connected && userAddress) {
-        connectionStatus.textContent = `Connected • ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-        connectionStatus.className = 'text-green-300';
-      } else {
-        connectionStatus.textContent = 'Ready to Connect';
-        connectionStatus.className = 'text-blue-300';
-      }
-    }
-
-    // Render Collections
-    function renderCollections() {
-      const grid = document.getElementById('collections-grid');
-      grid.innerHTML = NFT_COLLECTIONS.map(col => `
-        <div class="glass-card card-hover collection-card rounded-2xl overflow-hidden cursor-pointer transition-all"
-             onclick="openMintModal('${col.id}')">
-          <div class="aspect-square bg-gradient-to-br from-legendary/20 to-aurora/20 flex items-center justify-center text-6xl">
-            ${col.thumbnail.includes('placeholder') ? col.thumbnail.split('text=')[1]?.split('&')[0] || '🎨' : `<img src="${col.thumbnail}" alt="${col.name}" class="w-full h-full object-cover" />`}
-          </div>
-          <div class="p-6">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-xl font-bold text-white">${col.name}</h4>
-              <span class="text-xs px-2 py-1 rounded-full bg-legendary/20 text-legendary border border-legendary/30">
-                ${col.rarity || 'Rare'}
-              </span>
-            </div>
-            <p class="text-sm text-blue-200 opacity-90 leading-relaxed">${col.description}</p>
-            <div class="mt-4 pt-4 border-t border-legendary/20">
-              <button class="legendary-button w-full py-2 px-4 rounded-lg text-sm font-semibold">
-                <span class="relative z-10">🚀 Mint Now</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    // Show Toast
-    function showToast(message) {
-      const toast = document.getElementById('toast');
-      const toastMessage = document.getElementById('toast-message');
-      
-      toastMessage.textContent = message;
-      toast.classList.remove('translate-x-full');
-      toast.classList.add('animate-glow-pulse');
-      
-      setTimeout(() => {
-        toast.classList.add('translate-x-full');
-        toast.classList.remove('animate-glow-pulse');
-      }, 4000);
-    }
-
-    // Open Mint Modal with Proper Bueno Widget
-    window.openMintModal = function(id) {
-      const col = NFT_COLLECTIONS.find(c => c.id === id);
-      if (!col) return;
-
-      const modal = document.getElementById('mint-modal');
-      const title = document.getElementById('modal-title');
-      const content = document.getElementById('modal-content');
-      const widgetContainer = document.getElementById('bueno-widget-container');
-
-      title.textContent = col.name;
-      content.innerHTML = `
-        <div class="space-y-6">
-          <div class="aspect-square bg-gradient-to-br from-legendary/20 to-aurora/20 rounded-2xl flex items-center justify-center text-8xl mb-6">
-            ${col.thumbnail.includes('placeholder') ? col.thumbnail.split('text=')[1]?.split('&')[0] || '🎨' : `<img src="${col.thumbnail}" alt="${col.name}" class="w-full h-full object-cover rounded-2xl" />`}
-          </div>
-          
-          <div class="text-center">
-            <h4 class="text-2xl font-bold mb-2 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-              ${col.name}
-            </h4>
-            <p class="text-blue-200 opacity-90 mb-4">${col.description}</p>
-            
-            <div class="flex items-center justify-center space-x-4 mb-6">
-              <div class="glass-card rounded-xl p-3">
-                <div class="text-sm text-blue-300">Rarity</div>
-                <div class="font-bold text-legendary">${col.rarity || 'Rare'}</div>
-              </div>
-              <div class="glass-card rounded-xl p-3">
-                <div class="text-sm text-blue-300">Chain</div>
-                <div class="font-bold text-primary">${col.chain || 'Base'}</div>
-              </div>
-              <div class="glass-card rounded-xl p-3">
-                <div class="text-sm text-blue-300">Price</div>
-                <div class="font-bold text-green-400">${col.price || 'Free'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Clear previous widget and create new one
-      widgetContainer.innerHTML = '';
-      
-      if (col.mintId) {
-        // Create Bueno widget element
-        const widgetElement = document.createElement('div');
-        widgetElement.setAttribute('data-bueno-mint', col.mintId);
-        widgetContainer.appendChild(widgetElement);
-        widgetContainer.classList.remove('hidden');
-        
-        showToast(`🎨 Loading ${col.name} minting widget...`);
-      } else {
-        widgetContainer.classList.add('hidden');
-        showToast('Minting widget not available for this collection');
-      }
-
-      modal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    // Close Mint Modal
-    window.closeMintModal = function() {
-      const modal = document.getElementById('mint-modal');
-      const widgetContainer = document.getElementById('bueno-widget-container');
-      
-      modal.classList.add('hidden');
-      widgetContainer.innerHTML = ''; // Clear widget
-      widgetContainer.classList.add('hidden');
-      document.body.style.overflow = 'auto';
-    }
-
-    // Global error handler
-    window.addEventListener('error', (e) => {
-      if (e.error?.message?.includes('context') || e.error?.message?.includes('SDK')) {
-        showToast('⚠️ SDK Error - please refresh the page');
-      }
-    });
-
-    // Add interactive sparkles on click
-    document.addEventListener('click', (e) => {
-      if (e.target.closest('.legendary-button')) {
-        const sparkle = document.createElement('div');
-        sparkle.innerHTML = '✨';
-        sparkle.style.position = 'absolute';
-        sparkle.style.left = e.clientX + 'px';
-        sparkle.style.top = e.clientY + 'px';
-        sparkle.style.pointerEvents = 'none';
-        sparkle.style.animation = 'float 1s ease-out forwards';
-        sparkle.style.zIndex = '1000';
-        sparkle.style.fontSize = '20px';
-        document.body.appendChild(sparkle);
-        
-        setTimeout(() => sparkle.remove(), 1000);
-      }
-    });
-
-    // Listen for Bueno widget events
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'BUENO_MINT_SUCCESS') {
-        showToast(`🎉 Successfully minted NFT! TX: ${event.data.transactionHash?.slice(0, 10)}...`);
-        closeMintModal();
-      }
-      
-      if (event.data && event.data.type === 'BUENO_MINT_ERROR') {
-        showToast('❌ Minting failed. Please try again.');
-        console.error('Bueno mint error:', event.data.error);
-      }
-    });
-
-    // Start the legendary experience
-    window.addEventListener('load', initApp);
-  </script>
+  <script type="module" src="src/main.js"></script>
 </body>
+
 </html>
