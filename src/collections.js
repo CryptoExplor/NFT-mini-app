@@ -7,7 +7,7 @@ export const collections = {
         name: 'Zorgz Legendary',
         symbol: 'ZRZ',
         description: 'A legendary definition of 8-bit art.',
-        imageUrl: 'image.png', // Placeholder
+        imageUrl: '/image.png', // Placeholder
         chainId: base.id, // Defaults to Base
         contractAddress: '0x1234567890123456789012345678901234567890', // REPLACE ME
         maxSupply: 10000,
@@ -46,7 +46,7 @@ export const collections = {
         name: 'Pixel Legends (16-bit)',
         symbol: 'PXL',
         description: '16-bit masterpieces on Base.',
-        imageUrl: 'image.png',
+        imageUrl: '/image.png',
         chainId: base.id,
         contractAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdef', // REPLACE ME
         maxSupply: 5000,
@@ -66,3 +66,4 @@ export const collections = {
 };
 
 export const defaultCollectionId = 'zorgz';
+
