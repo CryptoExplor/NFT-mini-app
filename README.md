@@ -2,7 +2,7 @@
 
 A premium, high-performance NFT minting application built with Vite, Tailwind CSS, and Reown AppKit. Optimized for the Base network and designed to work seamlessly as a Farcaster Frame.
 
-![Preview](image.png)
+![Preview](public/image.png)
 
 ## ✨ Features
 
@@ -66,3 +66,4 @@ This project is configured for easy deployment on Vercel:
 
 ## 📄 License
 This project is licensed under the MIT License.
+
