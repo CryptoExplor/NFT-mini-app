@@ -49,6 +49,17 @@ export function notifyReady() {
 }
 
 /**
+ * Check if the mini app is currently installed
+ */
+export function isAppInstalled() {
+    if (!context) return false;
+    
+    // Check if the app is in the user's installed apps
+    // The SDK context will have information about installation status
+    return context.client?.added === true;
+}
+
+/**
  * Prompt user to add the mini app to their Farcaster client
  * Should be called after successful wallet connection
  */
