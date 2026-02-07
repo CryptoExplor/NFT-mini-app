@@ -9,7 +9,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "@farcaster/frame-sdk": "^0.3.1",
+        "@farcaster/miniapp-sdk": "0.2.3",
         "@reown/appkit": "^1.8.14",
         "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@wagmi/core": "^2.16.3",

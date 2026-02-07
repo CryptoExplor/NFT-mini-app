@@ -10,6 +10,21 @@
   <meta property="fc:frame" content="vnext" />
   <meta property="fc:frame:image" content="https://base-mintapp.vercel.app/image.png" />
   <meta property="fc:frame:button:1" content="Mint" />
+  <!-- Farcaster Mini App Metadata -->
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"https://base-mintapp.vercel.app/image.png",
+    "button":{
+      "title":"Base NFT",
+      "action":{
+        "type":"launch_miniapp",
+        "name":"MINT",
+        "url":"https://base-mintapp.vercel.app",
+        "splashImageUrl":"https://base-mintapp.vercel.app/splash.png",
+        "splashBackgroundColor":"#0f0f23"
+      }
+    }
+  }' />
 
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="public/favicon.ico" />
@@ -160,6 +175,14 @@
         box-shadow: 0 0 15px #10B981, 0 0 25px rgba(16, 185, 129, 0.5);
       }
     }
+
+    .farcaster-embed iframe {
+      width: 100%;
+      min-height: 420px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 16px;
+      background: rgba(15, 15, 35, 0.6);
+    }
   </style>
 </head>
 
@@ -241,6 +264,15 @@
 
       </div>
     </div>
+
+    <section class="max-w-md w-full mt-8 glass-card p-6 rounded-2xl farcaster-embed">
+      <h2 class="text-lg font-semibold mb-4">Featured Farcaster Cast</h2>
+      <iframe
+        title="Farcaster Embed"
+        src="https://warpcast.com/~/embed?url=https%3A%2F%2Fwarpcast.com%2F~%2Fchannel%2Fbase"
+        allow="clipboard-write; encrypted-media; fullscreen"
+        loading="lazy"></iframe>
+    </section>
   </main>
 
   <!-- Toast Notification -->
