@@ -20,6 +20,11 @@ export async function initFarcasterSDK() {
             context = await sdk.context;
             
             console.log('Farcaster SDK initialized', context);
+            console.log('Context details:', {
+                client: context.client,
+                user: context.user,
+                location: context.location
+            });
             
             // DO NOT call ready() yet - let main.js call it after everything loads
             
@@ -49,32 +54,22 @@ export function notifyReady() {
 }
 
 /**
- * Check if the mini app is currently installed
- */
-export function isAppInstalled() {
-    if (!context) return false;
-    
-    // Check if the app is in the user's installed apps
-    // The SDK context will have information about installation status
-    return context.client?.added === true;
-}
-
-/**
  * Prompt user to add the mini app to their Farcaster client
  * Should be called after successful wallet connection
  */
 export async function addMiniApp() {
     if (sdk && sdk.actions && sdk.actions.addMiniApp) {
         try {
+            console.log('Calling addMiniApp...');
             await sdk.actions.addMiniApp();
-            console.log('Add mini app prompt shown');
+            console.log('Add mini app prompt shown successfully');
             return true;
         } catch (error) {
             console.log('Add mini app prompt declined or failed:', error);
             return false;
         }
     } else {
-        console.warn('addMiniApp not available - not in Farcaster context');
+        console.warn('addMiniApp not available - not in Farcaster context or SDK not loaded');
         return false;
     }
 }
