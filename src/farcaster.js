@@ -49,6 +49,26 @@ export function notifyReady() {
 }
 
 /**
+ * Prompt user to add the mini app to their Farcaster client
+ * Should be called after successful wallet connection
+ */
+export async function addMiniApp() {
+    if (sdk && sdk.actions && sdk.actions.addMiniApp) {
+        try {
+            await sdk.actions.addMiniApp();
+            console.log('Add mini app prompt shown');
+            return true;
+        } catch (error) {
+            console.log('Add mini app prompt declined or failed:', error);
+            return false;
+        }
+    } else {
+        console.warn('addMiniApp not available - not in Farcaster context');
+        return false;
+    }
+}
+
+/**
  * Get current Farcaster context
  */
 export function getFarcasterContext() {
