@@ -1,0 +1,39 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="128" fill="url(#gradient1)"/>
+  
+  <!-- Diamond/Gem Shape -->
+  <path d="M256 128L384 256L256 384L128 256L256 128Z" fill="url(#gradient2)" stroke="#fff" stroke-width="8"/>
+  <path d="M256 128L320 192L256 256L192 192L256 128Z" fill="url(#gradient3)" opacity="0.6"/>
+  <path d="M256 256L320 320L256 384L192 320L256 256Z" fill="url(#gradient4)" opacity="0.4"/>
+  
+  <!-- Sparkles -->
+  <circle cx="144" cy="144" r="8" fill="#FFD700"/>
+  <circle cx="368" cy="144" r="8" fill="#FFD700"/>
+  <circle cx="144" cy="368" r="8" fill="#FFD700"/>
+  <circle cx="368" cy="368" r="8" fill="#FFD700"/>
+  
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="gradient1" x1="0" y1="0" x2="512" y2="512">
+      <stop offset="0%" stop-color="#0f0f23"/>
+      <stop offset="50%" stop-color="#2d1b69"/>
+      <stop offset="100%" stop-color="#0f0f23"/>
+    </linearGradient>
+    
+    <linearGradient id="gradient2" x1="128" y1="128" x2="384" y2="384">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    
+    <linearGradient id="gradient3" x1="192" y1="128" x2="320" y2="256">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.2"/>
+    </linearGradient>
+    
+    <linearGradient id="gradient4" x1="192" y1="256" x2="320" y2="384">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+</svg>
