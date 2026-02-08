@@ -4,7 +4,8 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress, safeLocalStorage } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, addMiniApp } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js';
+import { sdk } from '@farcaster/miniapp-sdk';
 
 // --- DOM Elements ---
 const dom = {
@@ -28,18 +29,15 @@ const dom = {
     toastMessage: $('#toast-message')
 };
 
-// Track if we've prompted in this session
-let hasPromptedThisSession = false;
-
 // --- Initialization ---
 
 async function init() {
-    // 1. Initialize Farcaster SDK FIRST
-    const { sdk, context } = await initFarcasterSDK();
+    // 1. Initialize Farcaster SDK FIRST and WAIT for ready
+    const { sdk: farcasterSdk, context } = await initFarcasterSDK();
     
     if (isInFarcaster()) {
         console.log('Running in Farcaster:', context);
-        state.farcaster = { sdk, context };
+        state.farcaster = { sdk: farcasterSdk, context };
     }
 
     // 2. Initialize Wallet
@@ -55,15 +53,49 @@ async function init() {
     // 5. Hide loading overlay
     hideLoading();
 
-    // 6. CRITICAL: Tell Farcaster the app is ready - MUST BE LAST
-    const farcasterSdk = getFarcasterSDK();
-    if (farcasterSdk) {
+    // 6. CRITICAL: Tell Farcaster the app is ready
+    const farcasterSDKInstance = getFarcasterSDK();
+    if (farcasterSDKInstance) {
         try {
-            farcasterSdk.actions.ready();
+            await farcasterSDKInstance.actions.ready({ disableNativeGestures: true });
             console.log('Farcaster SDK: ready() called');
+            
+            // 7. IMPORTANT: Call addMiniApp AFTER ready() and after a small delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await tryAddMiniApp();
         } catch (error) {
             console.warn('Failed to call ready():', error);
         }
+    }
+}
+
+// Function to try adding mini app
+async function tryAddMiniApp() {
+    if (!isInFarcaster()) {
+        console.log('Not in Farcaster - skipping addMiniApp');
+        return;
+    }
+
+    const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
+    
+    if (!hasPromptedAddApp) {
+        try {
+            console.log('Attempting to show addMiniApp prompt...');
+            const farcasterSDKInstance = getFarcasterSDK();
+            
+            if (farcasterSDKInstance && farcasterSDKInstance.actions && farcasterSDKInstance.actions.addMiniApp) {
+                await farcasterSDKInstance.actions.addMiniApp();
+                console.log('✅ addMiniApp prompt shown successfully');
+                safeLocalStorage.setItem('hasPromptedAddApp', 'true');
+            } else {
+                console.warn('addMiniApp action not available');
+            }
+        } catch (e) {
+            console.log('Add mini app prompt declined or failed:', e);
+            // Don't save the flag if it failed - allow retry on next visit
+        }
+    } else {
+        console.log('User already prompted for addMiniApp - skipping');
     }
 }
 
@@ -84,11 +116,6 @@ document.addEventListener(EVENTS.WALLET_UPDATE, async (e) => {
 
     updateConnectButton(account);
     await refreshMintState();
-
-    // Prompt to add mini app after successful connection
-    if (account.isConnected && isInFarcaster()) {
-        await promptAddMiniApp();
-    }
 });
 
 document.addEventListener(EVENTS.CHAIN_UPDATE, (e) => {
@@ -129,55 +156,6 @@ async function refreshMintState() {
 
     renderMintButton(stage, totalSupply, collection.maxSupply);
     renderSupply(totalSupply, collection.maxSupply);
-}
-
-/**
- * Prompt user to add the mini app
- * Uses session storage and timestamp to control frequency
- */
-async function promptAddMiniApp() {
-    // Don't prompt multiple times in same session
-    if (hasPromptedThisSession) {
-        console.log('Already prompted in this session - skipping');
-        return;
-    }
-
-    // Check last prompt timestamp (use 24-hour cooldown)
-    const lastPromptTime = safeLocalStorage.getItem('lastAddAppPrompt');
-    const now = Date.now();
-    const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-
-    if (lastPromptTime) {
-        const timeSinceLastPrompt = now - parseInt(lastPromptTime);
-        if (timeSinceLastPrompt < cooldownPeriod) {
-            console.log('Cooldown period active - skipping prompt');
-            return;
-        }
-    }
-
-    // Wait a moment for better UX (user just connected)
-    setTimeout(async () => {
-        console.log('Attempting to show add mini app prompt...');
-        const success = await addMiniApp();
-        
-        if (success) {
-            hasPromptedThisSession = true;
-            safeLocalStorage.setItem('lastAddAppPrompt', now.toString());
-            showToast('Add this app for quick access!', 'success');
-        } else {
-            console.log('Add mini app prompt was not shown or declined');
-        }
-    }, 1500);
-}
-
-// Expose function to window for manual testing
-if (typeof window !== 'undefined') {
-    window.forceAddAppPrompt = async () => {
-        console.log('Forcing add app prompt...');
-        hasPromptedThisSession = false;
-        safeLocalStorage.removeItem('lastAddAppPrompt');
-        await promptAddMiniApp();
-    };
 }
 
 // --- Rendering ---
@@ -295,6 +273,15 @@ function showToast(msg, type = 'info') {
     setTimeout(() => {
         dom.toast.classList.remove('show');
     }, 3000);
+}
+
+// Expose function to window for manual testing/debugging
+if (typeof window !== 'undefined') {
+    window.forceAddMiniApp = async () => {
+        console.log('🔧 Forcing addMiniApp prompt (debug)...');
+        safeLocalStorage.removeItem('hasPromptedAddApp');
+        await tryAddMiniApp();
+    };
 }
 
 // Start
