@@ -64,7 +64,7 @@ export async function renderHomePage() {
       <!-- Footer -->
       <footer class="fixed bottom-0 left-0 right-0 glass-header p-4">
         <div class="max-w-6xl mx-auto text-center text-sm opacity-50">
-          Built with ❤️ for Farcaster
+          Built with ❤️ for Farcaster & Base 
         </div>
       </footer>
     </div>

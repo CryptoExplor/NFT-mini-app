@@ -294,6 +294,26 @@ async function initMintInterface(collection) {
     mintText.textContent = getMintButtonText(stage);
     mintBtn.disabled = false;
 
+    // Show Burn Token info
+    if (stage.type === 'BURN_ERC20' && stage.token) {
+      const stageInfo = document.getElementById('stage-info');
+
+      // Check if already added
+      if (!document.getElementById('burn-token-info')) {
+        const tokenDiv = document.createElement('div');
+        tokenDiv.id = 'burn-token-info';
+        tokenDiv.className = 'mt-3 pt-3 border-t border-white/10 text-xs flex justify-between items-center';
+        tokenDiv.innerHTML = `
+                <span class="opacity-60">Token: <span class="font-mono text-indigo-300 ml-1">${stage.token.slice(0, 6)}...${stage.token.slice(-4)}</span></span>
+                <button class="bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors text-[10px]" 
+                        onclick="navigator.clipboard.writeText('${stage.token}'); this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1000);">
+                    Copy
+                </button>
+            `;
+        stageInfo.appendChild(tokenDiv);
+      }
+    }
+
     // Set up mint handler
     mintBtn.onclick = async () => {
       await handleMint(collection, stage);

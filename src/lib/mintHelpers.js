@@ -150,23 +150,35 @@ export async function mint(collection, stage) {
     const config = getContractConfig(collection);
     const wagmiConfig = wagmiAdapter.wagmiConfig;
 
-    // Get the next tokenId based on totalMinted
+    // Get the next tokenId
     let tokenId;
-    try {
-        const totalMinted = await readContract(wagmiConfig, {
-            address: config.address,
-            abi: config.abi,
-            functionName: 'totalMinted',
-            chainId: config.chainId
-        });
-        // The next tokenId is typically totalMinted (0-indexed) or totalMinted + 1 (1-indexed)
-        // Most contracts use the minted count as the next ID
-        tokenId = Number(totalMinted);
-        console.log(`📊 Total minted: ${tokenId}, using as next tokenId`);
-    } catch (e) {
-        // Fallback to random if totalMinted fails
-        tokenId = Math.floor(Math.random() * 1_000_000_000);
-        console.log(`⚠️ Could not get totalMinted, using random tokenId: ${tokenId}`);
+
+    // SCENARIO 1: Random ID within specific range (e.g. for Generative Art like BaseHeads)
+    if (collection.tokenIdRange) {
+        const { start, end } = collection.tokenIdRange;
+        const range = end - start + 1;
+        tokenId = Math.floor(Math.random() * range) + start;
+        console.log(`🎲 Using random tokenId from range [${start}-${end}]: ${tokenId}`);
+    }
+    // SCENARIO 2: Sequential ID based on totalMinted (Standard)
+    else {
+        try {
+            const totalMinted = await readContract(wagmiConfig, {
+                address: config.address,
+                abi: config.abi,
+                functionName: 'totalMinted',
+                chainId: config.chainId
+            });
+            // The next tokenId is typically totalMinted (0-indexed) or totalMinted + 1 (1-indexed)
+            // Most contracts use the minted count as the next ID
+            tokenId = Number(totalMinted);
+            console.log(`📊 Total minted: ${tokenId}, using as next tokenId`);
+        } catch (e) {
+            // Fallback to random within supply limit
+            const max = collection.mintPolicy.maxSupply || 1_000_000_000;
+            tokenId = Math.floor(Math.random() * max);
+            console.log(`⚠️ Could not get totalMinted, using random tokenId: ${tokenId} (max: ${max})`);
+        }
     }
 
     let hash;
@@ -257,12 +269,103 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
  * Burn to mint
  */
 async function mintBurn(config, wagmiConfig, tokenId, stage) {
+    const amountToBurn = BigInt(stage.amount) * 1_000_000_000_000_000_000n; // Assuming 18 decimals
     console.log(`🔥 Executing BURN mint (${stage.amount} tokens)...`);
 
-    // ERC20 approve + burn flow would go here
-    // This is a placeholder for burn-to-mint functionality
+    const tokenAddress = stage.token;
+    const spenderAddress = config.address; // The NFT contract is the spender
+    const userAddress = state.wallet.address;
 
-    throw new Error('BURN_ERC20 not implemented yet. Add ERC20 approval flow.');
+    // Minimum ERC20 ABI for allowance and approve
+    const erc20Abi = [
+        {
+            name: 'allowance',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+            outputs: [{ name: '', type: 'uint256' }]
+        },
+        {
+            name: 'approve',
+            type: 'function',
+            stateMutability: 'nonpayable',
+            inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+            outputs: [{ name: '', type: 'bool' }]
+        },
+        {
+            name: 'balanceOf',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'account', type: 'address' }],
+            outputs: [{ name: '', type: 'uint256' }]
+        }
+    ];
+
+    // 1. Check Balance
+    const balance = await readContract(wagmiConfig, {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'balanceOf',
+        args: [userAddress],
+        chainId: config.chainId
+    });
+
+    if (balance < amountToBurn) {
+        throw new Error(`Insufficient ${stage.tokenName || 'token'} balance. You have ${Number(balance) / 1e18}, need ${stage.amount}.`);
+    }
+
+    // 2. Check Allowance
+    const allowance = await readContract(wagmiConfig, {
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [userAddress, spenderAddress],
+        chainId: config.chainId
+    });
+
+    console.log(`Current allowance: ${allowance}, Needed: ${amountToBurn}`);
+
+    // 3. Approve if needed
+    if (allowance < amountToBurn) {
+        console.log('Requesting approval...');
+        // Update UI to show "Approving..." if possible, but we are inside the function
+        // You might want to pass a callback for status updates in a future refactor
+
+        const approveHash = await writeContract(wagmiConfig, {
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [spenderAddress, amountToBurn], // Approve exact amount or MaxUint256
+            chainId: config.chainId
+        });
+
+        console.log(`Approval tx sent: ${approveHash}`);
+        await waitForTransactionReceipt(wagmiConfig, { hash: approveHash });
+        console.log('Approval confirmed!');
+    }
+
+    // 4. Execute Mint
+    // Try minting function. For burn-to-mint, it's usually just 'mint' or 'burnMint'
+    // The contract handles the transferFrom and burn
+    const functionNames = ['mint', 'burnMint'];
+
+    for (const funcName of functionNames) {
+        try {
+            console.log(`Attempting mint with function: ${funcName}`);
+            const hash = await writeContract(wagmiConfig, {
+                address: config.address,
+                abi: config.abi,
+                functionName: funcName,
+                args: [tokenId], // Some burn mints might assume tokenId, others might just be amount. Assuming tokenId based on previous logic.
+                chainId: config.chainId
+            });
+            return hash;
+        } catch (e) {
+            console.log(`${funcName} failed:`, e);
+        }
+    }
+
+    throw new Error('No valid burn mint function found on contract');
 }
 
 // ============================================

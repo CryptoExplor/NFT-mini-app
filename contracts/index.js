@@ -6,6 +6,7 @@
 import ERC721Standard from './abis/ERC721Standard.js';
 import sigil from './abis/sigil.js';
 import baseInvaders from './abis/base-invaders.js';
+import BASEHEADS_404 from './abis/BASEHEADS_404.js';
 // Import more ABIs as you add different contract types:
 // import FreeMint from './abis/FreeMint.js';
 // import PaidMint from './abis/PaidMint.js';
@@ -15,6 +16,7 @@ const ABIS = {
     'ERC721Standard': ERC721Standard,
     'sigil': sigil,
     'base-invaders': baseInvaders,
+    'BASEHEADS_404': BASEHEADS_404,
     // ADD NEW ABIS HERE:
     // 'FreeMint': FreeMint,
     // 'PaidMint': PaidMint,
