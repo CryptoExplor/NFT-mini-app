@@ -45,7 +45,7 @@ async function init() {
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
-                c => c.id === 'farcasterMiniApp'
+                c => c.id === 'farcasterMiniApp' || c.id === 'farcaster'
             );
 
             if (farcasterConnector) {
