@@ -10,7 +10,8 @@ let isReady = false;
 
 /**
  * Initialize Farcaster SDK
- * NOTE: Do NOT call ready() here - it should be called after full app init
+ * NOTE: Returns sdk and context but does NOT call ready() here
+ * ready() must be called from main.js after full app initialization
  */
 export async function initFarcasterSDK() {
     try {
@@ -26,7 +27,7 @@ export async function initFarcasterSDK() {
                 location: context.location
             });
             
-            // DO NOT call ready() yet - let main.js call it after everything loads
+            // DO NOT call ready() here - main.js will call it after everything loads
             
             return { sdk, context };
         }
@@ -44,33 +45,12 @@ export async function initFarcasterSDK() {
 export function notifyReady() {
     if (sdk && !isReady) {
         try {
-            sdk.actions.ready();
+            sdk.actions.ready({ disableNativeGestures: true });
             isReady = true;
             console.log('Farcaster: ready() called');
         } catch (error) {
             console.error('Failed to call ready():', error);
         }
-    }
-}
-
-/**
- * Prompt user to add the mini app to their Farcaster client
- * Should be called after successful wallet connection
- */
-export async function addMiniApp() {
-    if (sdk && sdk.actions && sdk.actions.addMiniApp) {
-        try {
-            console.log('Calling addMiniApp...');
-            await sdk.actions.addMiniApp();
-            console.log('Add mini app prompt shown successfully');
-            return true;
-        } catch (error) {
-            console.log('Add mini app prompt declined or failed:', error);
-            return false;
-        }
-    } else {
-        console.warn('addMiniApp not available - not in Farcaster context or SDK not loaded');
-        return false;
     }
 }
 
