@@ -34,14 +34,48 @@ const dom = {
 async function init() {
     // 1. Initialize Farcaster SDK FIRST and WAIT for ready
     const { sdk: farcasterSdk, context } = await initFarcasterSDK();
-    
+
     if (isInFarcaster()) {
         console.log('Running in Farcaster:', context);
         state.farcaster = { sdk: farcasterSdk, context };
+
+        // ✅ AUTO-CONNECT WITH FARCASTER CONNECTOR
+        try {
+            // Wait a bit for connectors to initialize
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
+                c => c.id === 'farcasterMiniApp'
+            );
+
+            if (farcasterConnector) {
+                console.log('Farcaster connector found, connecting...');
+                const { connect } = await import('@wagmi/core');
+                const result = await connect(wagmiAdapter.wagmiConfig, {
+                    connector: farcasterConnector
+                });
+
+                if (result.accounts && result.accounts[0]) {
+                    console.log('✅ Connected via Farcaster:', result.accounts[0]);
+                }
+            } else {
+                console.warn('⚠️ Farcaster connector not found in connectors list');
+                console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => c.id));
+            }
+        } catch (error) {
+            console.error('❌ Farcaster auto-connect failed:', error);
+        }
     }
 
     // 2. Initialize Wallet
     initWallet();
+
+    // Debug check for available connectors
+    console.log('🔍 Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+    })));
 
     // 3. Load Default Collection
     const collection = collections[defaultCollectionId];
@@ -59,7 +93,7 @@ async function init() {
         try {
             await farcasterSDKInstance.actions.ready({ disableNativeGestures: true });
             console.log('Farcaster SDK: ready() called');
-            
+
             // 7. IMPORTANT: Call addMiniApp AFTER ready() and after a small delay
             await new Promise(resolve => setTimeout(resolve, 1000));
             await tryAddMiniApp();
@@ -77,12 +111,12 @@ async function tryAddMiniApp() {
     }
 
     const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
-    
+
     if (!hasPromptedAddApp) {
         try {
             console.log('Attempting to show addMiniApp prompt...');
             const farcasterSDKInstance = getFarcasterSDK();
-            
+
             if (farcasterSDKInstance && farcasterSDKInstance.actions && farcasterSDKInstance.actions.addMiniApp) {
                 await farcasterSDKInstance.actions.addMiniApp();
                 console.log('✅ addMiniApp prompt shown successfully');
