@@ -1,4 +1,14 @@
-import { base, baseSepolia } from 'viem/chains';
+import { base as baseChain, baseSepolia } from 'viem/chains';
+
+// Override Base Mainnet RPC
+const base = {
+    ...baseChain,
+    rpcUrls: {
+        ...baseChain.rpcUrls,
+        default: { http: ['https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57'] },
+        public: { http: ['https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57'] }
+    }
+};
 
 export const SUPPORTED_CHAINS = [base, baseSepolia];
 
