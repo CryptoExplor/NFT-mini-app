@@ -2,9 +2,10 @@ import { createAppKit } from '@reown/appkit';
 import { mainnet, base, baseSepolia } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
-import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
+import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect, connect } from '@wagmi/core';
 import { EVENTS } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
+import { isInFarcaster } from './farcaster.js';
 
 // 1. Get Project ID
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
@@ -76,6 +77,23 @@ function handleAccountChange(account) {
 }
 
 export async function connectWallet() {
+    if (isInFarcaster()) {
+        const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
+            c => c.id === 'farcasterMiniApp' || c.id === 'farcaster'
+        );
+
+        if (farcasterConnector) {
+            try {
+                await connect(wagmiAdapter.wagmiConfig, { connector: farcasterConnector });
+                return;
+            } catch (error) {
+                console.warn('Farcaster direct connect failed, falling back to modal:', error);
+            }
+        } else {
+            console.warn('Farcaster connector not found, falling back to modal.');
+        }
+    }
+
     await modal.open();
 }
 
