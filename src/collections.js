@@ -46,7 +46,7 @@ export const collections = {
         name: 'OnchainSigils',
         symbol: 'SIGIL',
         description: 'Occult on-chain sigils.',
-        imageUrl: '/sigil.png',
+        imageUrl: '/sigil.svg',
         chainId: base.id,
         contractAddress: '0xd243379AC0A9B700f4d9E22C7b3bFc3515150973',
         maxSupply: 10000,
@@ -65,6 +65,7 @@ export const collections = {
 };
 
 export const defaultCollectionId = 'OnchainSigils';
+
 
 
 
