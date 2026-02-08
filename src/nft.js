@@ -1,15 +1,14 @@
-import { readContract, writeContract, waitForTransactionReceipt, getAccount } from '@wagmi/core';
-import { parseEther } from 'viem';
+import { readContract, writeContract } from '@wagmi/core';
 import { wagmiAdapter } from './wallet.js';
-import { defaultCollectionId } from './collections.js';
 
 // ABI for Standard Mint
 // Using a generic ABI that covers most Mint Policy needs. 
 // Ideally this would be imported from a JSON artifact, but inline for portability here.
 const MINTER_ABI = [
-    { inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'mint', outputs: [], stateMutability: 'nonpayable', type: 'function' },
-    { inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'mintPaid', outputs: [], stateMutability: 'payable', type: 'function' },
+    { inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'mint', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'mintPaid', outputs: [], stateMutability: 'payable', type: 'function' },
     { inputs: [], name: 'totalSupply', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'totalMinted', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
     { inputs: [{ name: 'owner', type: 'address' }], name: 'balanceOf', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' }
 ];
 
@@ -61,8 +60,12 @@ export async function getCollectionData(collection, walletAddress) {
             readContract(config, {
                 address: collection.contractAddress,
                 abi: MINTER_ABI,
+                functionName: 'totalMinted',
+            }).catch(async () => readContract(config, {
+                address: collection.contractAddress,
+                abi: MINTER_ABI,
                 functionName: 'totalSupply',
-            }).catch(() => 0n), // Default to 0 if fail
+            }).catch(() => 0n)), // Default to 0 if fail
             readContract(config, {
                 address: collection.contractAddress,
                 abi: MINTER_ABI,
@@ -91,13 +94,16 @@ export async function mint(collection, stage, amount = 1) {
 
     if (!stage) throw new Error('No active mint stage');
 
-    switch (stage.type) {
+    const stageType = stage.type?.toUpperCase();
+    const tokenId = stage.tokenId ?? 0;
+
+    switch (stageType) {
         case 'FREE':
             return writeContract(config, {
                 address: contractAddress,
                 abi: MINTER_ABI,
                 functionName: 'mint',
-                args: [await getAccount(config).address, 0n] // Generic mint
+                args: [BigInt(tokenId)]
             });
 
         case 'PAID':
@@ -105,7 +111,7 @@ export async function mint(collection, stage, amount = 1) {
                 address: contractAddress,
                 abi: MINTER_ABI,
                 functionName: 'mintPaid',
-                args: [await getAccount(config).address, 0n], // Generic
+                args: [BigInt(tokenId)],
                 value: BigInt(stage.price)
             });
 

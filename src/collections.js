@@ -55,7 +55,7 @@ export const collections = {
             maxPerWallet: 1,
             stages: [
                 {
-                    type: 'Free',
+                    type: 'FREE',
                     limit: 1,
                     name: 'Public Mint'
                 }

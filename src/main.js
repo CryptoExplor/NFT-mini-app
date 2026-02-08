@@ -244,7 +244,8 @@ async function handleMint() {
         dom.mintBtn.disabled = true;
         dom.mintText.textContent = 'Minting...';
 
-        const hash = await mint(state.collection, stage);
+        const tokenId = state.mintPolicyState.totalSupply ?? 0;
+        const hash = await mint(state.collection, { ...stage, tokenId });
         console.log('Tx Hash:', hash);
         showToast('Mint Submitted!', 'success');
 
