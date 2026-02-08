@@ -10,7 +10,7 @@
     },
     "dependencies": {
         "@farcaster/miniapp-sdk": "^0.2.3",
-        "@farcaster/miniapp-wagmi-connector": "latest",
+        "@farcaster/miniapp-wagmi-connector": "^0.2.3",
         "@reown/appkit": "^1.8.14",
         "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@wagmi/core": "^2.16.3",
@@ -21,5 +21,6 @@
         "vite": "^5.4.11"
     }
 }
+
 
 
