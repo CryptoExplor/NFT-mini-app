@@ -41,23 +41,22 @@ export const collections = {
         }
     },
     // Example 16-bit collection
-    pixel_legends: {
-        id: 'pixel_legends',
-        name: 'Pixel Legends (16-bit)',
-        symbol: 'PXL',
-        description: '16-bit masterpieces on Base.',
+    OnchainSigils: {
+        id: 'OnchainSigils',
+        name: 'OnchainSigils',
+        symbol: 'SIGIL',
+        description: 'Occult on-chain sigils.',
         imageUrl: '/image.png',
         chainId: base.id,
-        contractAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdef', // REPLACE ME
-        maxSupply: 5000,
+        contractAddress: '0xd243379AC0A9B700f4d9E22C7b3bFc3515150973',
+        maxSupply: 10000,
 
         mintPolicy: {
-            maxPerWallet: 5,
+            maxPerWallet: 1,
             stages: [
                 {
-                    type: 'PAID',
-                    limit: 5,
-                    price: 0.005 * 1e18,
+                    type: 'Free',
+                    limit: 1,
                     name: 'Public Mint'
                 }
             ]
@@ -65,5 +64,6 @@ export const collections = {
     }
 };
 
-export const defaultCollectionId = 'zorgz';
+export const defaultCollectionId = 'OnchainSigils';
+
 
