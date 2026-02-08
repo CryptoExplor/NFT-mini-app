@@ -1,6 +1,7 @@
 import { createAppKit } from '@reown/appkit';
 import { mainnet, base, baseSepolia } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
 import { EVENTS } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
@@ -18,7 +19,10 @@ export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 // 3. Create Wagmi Adapter
 export const wagmiAdapter = new WagmiAdapter({
     projectId,
-    networks
+    networks,
+    connectors: [
+        farcasterMiniApp()
+    ]
 });
 
 // 4. Create Modal
