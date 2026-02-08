@@ -1,17 +1,18 @@
-# 💎 NFT Mini App - Legendary Minting Experience
+# 💎 NFT Mini App - Multi-Collection Minting Platform
 
-A premium, high-performance NFT minting application built with Vite, Tailwind CSS, and Reown AppKit. Optimized for the Base network and designed to work seamlessly as a Farcaster Frame.
+A premium, high-performance NFT minting platform built with Vite, Vanilla JS, and Reown AppKit. Designed for the Base network, this application allows you to manage and mint multiple NFT collections from a single, stunning interface, optimized for Farcaster Mini-apps.
 
 ![Preview](public/image.png)
 
 ## ✨ Features
 
-- **Legendary UI**: Stunning "Aurora" background effects, glassmorphism, and smooth animations.
-- **Universal Mint Policy**: Supports multiple stages including Free Mint, Paid Mint, and dynamic supply checks.
-- **Multi-Chain Ready**: Defaulting to **Base**, with support for Base Sepolia testnet.
-- **AppKit Integration**: Powered by Reown (formerly Web3Modal) for a seamless wallet connection experience.
-- **Farcaster Optimized**: Includes metadata and configurations to run as a V2 Frame/Mini-app.
-- **Responsive Design**: Mobile-first layout that looks great on all devices.
+- **Multi-Collection Support**: Easily add and manage multiple NFT collections via configuration files.
+- **SPA Routing**: Seamless client-side navigation between a beautiful home grid and dynamic mint pages.
+- **Dynamic Minting Logic**: Supports various mint types (FREE, PAID) and resolves active stages automatically.
+- **On-Chain Data**: Real-time tracking of supply, user mint counts, and wallet limits.
+- **Legendary UI**: Professional dark-mode design with "Aurora" effects, glassmorphism, and smooth animations.
+- **AppKit Integration**: Powered by Reown for a seamless wallet connection experience.
+- **Farcaster Optimized**: Ready to be deployed as a Farcaster Mini-app with built-in SDK support.
 
 ## 🚀 Quick Start
 
@@ -21,49 +22,49 @@ A premium, high-performance NFT minting application built with Vite, Tailwind CS
 
 ### 2. Installation
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-
-# Navigate to the project
-cd NFT-mini-app
-
 # Install dependencies
 npm install
 ```
 
 ### 3. Configuration
-Create a `.env` file in the root directory and add your Project ID:
+Create a `.env` file in the root directory:
 ```env
 VITE_WALLETCONNECT_PROJECT_ID=your_project_id_here
-VITE_DEFAULT_CHAIN=base
 ```
 
 ### 4. Development
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
 
-## 🏗️ Build & Deployment
+## 🏗️ How to Add a New Collection
 
-### Build for Production
-```bash
-npm run build
-```
-The optimized files will be generated in the `dist/` folder.
+Adding a collection is purely configuration-driven. No need to touch core logic.
 
-### Vercel Deployment
-This project is configured for easy deployment on Vercel:
-1. Connect your GitHub repo to Vercel.
-2. Add your `.env` variables to the Vercel Project Settings.
-3. Deploy!
+1.  **ABI**: Place your contract ABI in `contracts/abis/your-collection.js` as an `export default [...]`.
+2.  **Register ABI**: In `contracts/index.js`, import and add your ABI to the `ABIS` object.
+3.  **Collection Config**: Create a new file in `collections/your-slug.js` (use `collections/_TEMPLATE.js` as a guide).
+4.  **Load Collection**: In `src/lib/loadCollections.js`, import your config and add it to the `COLLECTIONS_MAP`.
+
+The app will automatically:
+- Create a card on the homepage.
+- Generate a dynamic mint page at `/mint/your-slug`.
+- Handle on-chain data and transaction logic.
+
+## 📂 Project Structure
+
+- `collections/`: Individual collection configuration files.
+- `contracts/`: ABIs and centralized contract loader.
+- `src/lib/`: Core logic (routing, collection loading, minting helpers).
+- `src/pages/`: Page components (Home and Mint).
+- `src/utils/`: Shared utility functions.
 
 ## 🛠️ Tech Stack
-- **Framework**: Vite
-- **Styling**: Tailwind CSS (CDN Fallback + Custom CSS)
+- **Framework**: Vite + Vanilla JavaScript
 - **Web3**: Reown AppKit, Wagmi, Viem
-- **Network**: Base / Base Sepolia
+- **Styling**: Tailwind CSS + Custom CSS
+- **Network**: Base (Mainnet & Sepolia)
+- **Farcaster**: @farcaster/miniapp-sdk
 
 ## 📄 License
 This project is licensed under the MIT License.
-
