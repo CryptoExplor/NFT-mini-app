@@ -4,7 +4,8 @@ import { collections, defaultCollectionId } from './collections.js';
 import { getCollectionData, resolveStage, mint } from './nft.js';
 import { $, shortenAddress, safeLocalStorage } from './utils/dom.js';
 import { DEFAULT_CHAIN } from './utils/chain.js';
-import { initFarcasterSDK, isInFarcaster, getFarcasterSDK, notifyReady, promptAddMiniApp } from './farcaster.js';
+import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js';
+import { sdk } from '@farcaster/miniapp-sdk';
 
 // --- DOM Elements ---
 const dom = {
@@ -31,126 +32,105 @@ const dom = {
 // --- Initialization ---
 
 async function init() {
-    console.log('🚀 Initializing app...');
-
-    // 1. Initialize Farcaster SDK FIRST
+    // 1. Initialize Farcaster SDK FIRST and WAIT for ready
     const { sdk: farcasterSdk, context } = await initFarcasterSDK();
 
     if (isInFarcaster()) {
-        console.log('✅ Running in Farcaster:', context);
+        console.log('Running in Farcaster:', context);
         state.farcaster = { sdk: farcasterSdk, context };
-    } else {
-        console.log('ℹ️ Running in standard browser');
+
+        // ✅ AUTO-CONNECT WITH FARCASTER CONNECTOR
+        try {
+            // Wait a bit for connectors to initialize
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
+                c => c.id === 'farcasterMiniApp'
+            );
+
+            if (farcasterConnector) {
+                console.log('Farcaster connector found, connecting...');
+                const { connect } = await import('@wagmi/core');
+                const result = await connect(wagmiAdapter.wagmiConfig, {
+                    connector: farcasterConnector
+                });
+
+                if (result.accounts && result.accounts[0]) {
+                    console.log('✅ Connected via Farcaster:', result.accounts[0]);
+                }
+            } else {
+                console.warn('⚠️ Farcaster connector not found in connectors list');
+                console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => c.id));
+            }
+        } catch (error) {
+            console.error('❌ Farcaster auto-connect failed:', error);
+        }
     }
 
     // 2. Initialize Wallet
     initWallet();
 
-    // 3. Wait for connectors to be ready (improved approach)
-    if (isInFarcaster()) {
-        await autoConnectFarcaster();
-    }
+    // Debug check for available connectors
+    console.log('🔍 Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+    })));
 
-    // 4. Load Default Collection
+    // 3. Load Default Collection
     const collection = collections[defaultCollectionId];
     updateState('collection', collection);
 
-    // 5. Render Initial UI
+    // 4. Render Initial UI
     renderCollectionInfo(collection);
 
-    // 6. Hide loading overlay
+    // 5. Hide loading overlay
     hideLoading();
 
-    // 7. CRITICAL: Tell Farcaster the app is ready
-    if (isInFarcaster()) {
-        const readySuccess = notifyReady();
-        if (readySuccess) {
-            // Wait for UI to be stable before showing add prompt
-            setTimeout(async () => {
-                await tryAddMiniApp();
-            }, 2000); // Give user time to see the app first
+    // 6. CRITICAL: Tell Farcaster the app is ready
+    const farcasterSDKInstance = getFarcasterSDK();
+    if (farcasterSDKInstance) {
+        try {
+            await farcasterSDKInstance.actions.ready({ disableNativeGestures: true });
+            console.log('Farcaster SDK: ready() called');
+
+            // 7. IMPORTANT: Call addMiniApp AFTER ready() and after a small delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await tryAddMiniApp();
+        } catch (error) {
+            console.warn('Failed to call ready():', error);
         }
-    }
-
-    console.log('✅ App initialization complete');
-}
-
-/**
- * Improved auto-connect for Farcaster
- */
-async function autoConnectFarcaster() {
-    try {
-        // Wait for connector to be available (with timeout)
-        const connector = await waitForConnector('farcasterMiniApp', 3000);
-        
-        if (!connector) {
-            console.warn('⚠️ Farcaster connector not found after 3s');
-            console.log('Available connectors:', 
-                wagmiAdapter.wagmiConfig.connectors.map(c => ({ id: c.id, name: c.name }))
-            );
-            return;
-        }
-
-        console.log('✅ Farcaster connector found, connecting...');
-        
-        const { connect } = await import('@wagmi/core');
-        const result = await connect(wagmiAdapter.wagmiConfig, {
-            connector
-        });
-
-        if (result.accounts && result.accounts[0]) {
-            console.log('✅ Connected via Farcaster:', result.accounts[0]);
-        }
-    } catch (error) {
-        console.error('❌ Farcaster auto-connect failed:', error);
-        // Don't block app initialization on connection failure
     }
 }
 
-/**
- * Wait for a specific connector to be available
- */
-async function waitForConnector(connectorId, maxWait = 5000) {
-    const startTime = Date.now();
-    const pollInterval = 100;
-
-    while (Date.now() - startTime < maxWait) {
-        const connector = wagmiAdapter.wagmiConfig.connectors.find(
-            c => c.id === connectorId
-        );
-        
-        if (connector) {
-            console.log(`✅ Connector '${connectorId}' found after ${Date.now() - startTime}ms`);
-            return connector;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    return null;
-}
-
-/**
- * Try to show addMiniApp prompt (with localStorage tracking)
- */
+// Function to try adding mini app
 async function tryAddMiniApp() {
     if (!isInFarcaster()) {
+        console.log('Not in Farcaster - skipping addMiniApp');
         return;
     }
 
-    const hasPrompted = safeLocalStorage.getItem('hasPromptedAddApp');
+    const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
 
-    if (hasPrompted === 'true') {
-        console.log('ℹ️ User already prompted for addMiniApp');
-        return;
-    }
+    if (!hasPromptedAddApp) {
+        try {
+            console.log('Attempting to show addMiniApp prompt...');
+            const farcasterSDKInstance = getFarcasterSDK();
 
-    const success = await promptAddMiniApp();
-    
-    if (success) {
-        safeLocalStorage.setItem('hasPromptedAddApp', 'true');
+            if (farcasterSDKInstance && farcasterSDKInstance.actions && farcasterSDKInstance.actions.addMiniApp) {
+                await farcasterSDKInstance.actions.addMiniApp();
+                console.log('✅ addMiniApp prompt shown successfully');
+                safeLocalStorage.setItem('hasPromptedAddApp', 'true');
+            } else {
+                console.warn('addMiniApp action not available');
+            }
+        } catch (e) {
+            console.log('Add mini app prompt declined or failed:', e);
+            // Don't save the flag if it failed - allow retry on next visit
+        }
+    } else {
+        console.log('User already prompted for addMiniApp - skipping');
     }
-    // If failed/declined, don't save flag - allow retry next time
 }
 
 function hideLoading() {
@@ -182,7 +162,11 @@ document.addEventListener(EVENTS.CHAIN_UPDATE, (e) => {
 // 2. UI Actions
 if (dom.connectBtn) {
     dom.connectBtn.addEventListener('click', async () => {
-        await connectWallet();
+        if (state.wallet.isConnected) {
+            await connectWallet();
+        } else {
+            await connectWallet();
+        }
     });
 }
 
@@ -312,25 +296,23 @@ function showToast(msg, type = 'info') {
     if (!dom.toast) return;
 
     dom.toastMessage.textContent = msg;
-    dom.toast.style.transform = 'translateX(-50%) translateY(0)';
-    dom.toast.style.opacity = '1';
+    dom.toast.classList.add('show');
 
     if (type === 'error') {
-        dom.toast.style.borderColor = '#EF4444';
+        dom.toast.classList.add('error');
     } else {
-        dom.toast.style.borderColor = '#6366F1';
+        dom.toast.classList.remove('error');
     }
 
     setTimeout(() => {
-        dom.toast.style.transform = 'translateX(-50%) translateY(100px)';
-        dom.toast.style.opacity = '0';
+        dom.toast.classList.remove('show');
     }, 3000);
 }
 
-// Debug utility
+// Expose function to window for manual testing/debugging
 if (typeof window !== 'undefined') {
     window.forceAddMiniApp = async () => {
-        console.log('🔧 Forcing addMiniApp prompt...');
+        console.log('🔧 Forcing addMiniApp prompt (debug)...');
         safeLocalStorage.removeItem('hasPromptedAddApp');
         await tryAddMiniApp();
     };
