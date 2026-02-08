@@ -80,7 +80,20 @@ export async function connectWallet() {
 }
 
 export async function disconnectWallet() {
-    await wagmiDisconnect(wagmiAdapter.wagmiConfig);
+    try {
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        console.log('Disconnecting from:', account.connector?.name);
+
+        if (account.connector) {
+            await wagmiDisconnect(wagmiAdapter.wagmiConfig, { connector: account.connector });
+        } else {
+            await wagmiDisconnect(wagmiAdapter.wagmiConfig);
+        }
+    } catch (error) {
+        console.error('Failed to disconnect:', error);
+        // Force reload if disconnect fails state-wise?
+        // window.location.reload(); 
+    }
 }
 
 export function getCurrentAccount() {
