@@ -5,5 +5,11 @@
       "destination": "https://api.farcaster.xyz/miniapps/hosted-manifest/019c38fb-e520-a098-82f6-ce6cf8237fcd",
       "permanent": false
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
