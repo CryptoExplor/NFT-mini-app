@@ -8,7 +8,8 @@ import { getContractConfig } from '../../contracts/index.js';
 import { getCollectionData, resolveStage, mint, getMintButtonText } from '../lib/mintHelpers.js';
 import { state, updateState, EVENTS } from '../state.js';
 import { router } from '../lib/router.js';
-import { connectWallet, switchToBase } from '../wallet.js';
+import { switchChain } from '@wagmi/core';
+import { connectWallet, switchToBase, wagmiAdapter } from '../wallet.js';
 import { shortenAddress } from '../utils/dom.js';
 import { DEFAULT_CHAIN } from '../utils/chain.js';
 
@@ -344,10 +345,10 @@ async function handleMint(collection, stage) {
   // Check chain
   if (state.wallet.chainId !== collection.chainId) {
     try {
-      mintStatus.textContent = 'Switching network...';
-      await switchToBase();
+      mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
+      await switchChain(wagmiAdapter.wagmiConfig, { chainId: collection.chainId });
     } catch (e) {
-      mintStatus.textContent = 'Please switch to the correct network';
+      mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
       return;
     }
   }

@@ -35,7 +35,8 @@ export default {
                 name: "Burn to Mint",
                 token: "0x258E940dd7eF96d7a02f83c01F008Cb4cE5907c5",
                 tokenName: "pratiksharma",
-                amount: "500"
+                amount: "500",
+                decimals: 18
             }
         ]
     },

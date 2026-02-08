@@ -269,7 +269,8 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
  * Burn to mint
  */
 async function mintBurn(config, wagmiConfig, tokenId, stage) {
-    const amountToBurn = BigInt(stage.amount) * 1_000_000_000_000_000_000n; // Assuming 18 decimals
+    const decimals = stage.decimals || 18;
+    const amountToBurn = BigInt(stage.amount) * (10n ** BigInt(decimals)); // Respect decimals
     console.log(`🔥 Executing BURN mint (${stage.amount} tokens)...`);
 
     const tokenAddress = stage.token;
