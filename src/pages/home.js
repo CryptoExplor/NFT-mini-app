@@ -244,9 +244,8 @@ function attachEventHandlers() {
   if (connectBtn) {
     connectBtn.addEventListener('click', async () => {
       if (state.wallet?.isConnected) {
-        if (confirm('Disconnect wallet?')) {
-          await disconnectWallet();
-        }
+        // Disconnect immediately
+        await disconnectWallet();
       } else {
         await connectWallet();
       }
@@ -340,9 +339,8 @@ function setupProfileModal() {
   if (modalConnectBtn) {
     modalConnectBtn.onclick = async () => {
       if (state.wallet?.isConnected) {
-        if (confirm('Disconnect wallet?')) {
-          await disconnectWallet();
-        }
+        // Disconnect immediately
+        await disconnectWallet();
       } else {
         await connectWallet();
       }
