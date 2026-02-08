@@ -3,46 +3,65 @@ import { parseEther } from 'viem';
 import { wagmiAdapter } from './wallet.js';
 import { defaultCollectionId } from './collections.js';
 
-// ABI for Standard Mint
-// Using a generic ABI that covers most Mint Policy needs. 
-// Ideally this would be imported from a JSON artifact, but inline for portability here.
+// CORRECTED ABI - matches your actual contract
 const MINTER_ABI = [
-    { inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'mint', outputs: [], stateMutability: 'nonpayable', type: 'function' },
-    { inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'mintPaid', outputs: [], stateMutability: 'payable', type: 'function' },
-    { inputs: [], name: 'totalSupply', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
-    { inputs: [{ name: 'owner', type: 'address' }], name: 'balanceOf', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' }
+    {
+        "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
+        "name": "mint",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "totalMinted",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"internalType": "uint256", "name": "result", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "MAX_SUPPLY",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+        "name": "mintedBy",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    }
 ];
 
 /**
  * Resolves the current mint stage for a wallet based on the policy.
- * @param {object} policy The mint policy from collections.js
- * @param {number} mintedCount Number of tokens already minted by this wallet
  */
 export function resolveStage(policy, mintedCount) {
     let consumed = 0;
-
-    // If unlimited maxPerWallet, treated as Infinity
     const maxPerWallet = policy.maxPerWallet === null ? Infinity : policy.maxPerWallet;
 
     if (mintedCount >= maxPerWallet) {
-        return null; // Cap reached
+        return null;
     }
 
     for (const stage of policy.stages) {
         const limit = stage.limit === null ? Infinity : stage.limit;
-
-        // Check if this stage has available room for the user's next mint (mintedCount + 1)
-        // Actually, we check if the *current* mintedCount falls within this stage's range.
-        // e.g. Free limit 1. mintedCount 0. consumed 0. 0 < 0 + 1? Yes. Return Free.
-        // e.g. Free limit 1. mintedCount 1. consumed 0 + 1 = 1. 1 < 1? No. Next stage.
-
         if (mintedCount < consumed + limit) {
             return stage;
         }
         consumed += limit;
     }
 
-    return null; // No stages left
+    return null;
 }
 
 /**
@@ -56,24 +75,23 @@ export async function getCollectionData(collection, walletAddress) {
     try {
         const config = wagmiAdapter.wagmiConfig;
 
-        // Multicall would be better here, but doing parallel for now
-        const [supply, balance] = await Promise.all([
+        const [supply, mintedByUser] = await Promise.all([
             readContract(config, {
                 address: collection.contractAddress,
                 abi: MINTER_ABI,
-                functionName: 'totalSupply',
-            }).catch(() => 0n), // Default to 0 if fail
+                functionName: 'totalMinted',
+            }).catch(() => 0n),
             readContract(config, {
                 address: collection.contractAddress,
                 abi: MINTER_ABI,
-                functionName: 'balanceOf',
+                functionName: 'mintedBy',
                 args: [walletAddress]
             }).catch(() => 0n)
         ]);
 
         return {
             totalSupply: Number(supply),
-            mintedCount: Number(balance)
+            mintedCount: Number(mintedByUser)
         };
 
     } catch (e) {
@@ -83,33 +101,57 @@ export async function getCollectionData(collection, walletAddress) {
 }
 
 /**
+ * Generates a random unminted tokenId
+ */
+async function getRandomTokenId(collection) {
+    const config = wagmiAdapter.wagmiConfig;
+    
+    // Get total minted to know how many tokens are available
+    const totalMinted = await readContract(config, {
+        address: collection.contractAddress,
+        abi: MINTER_ABI,
+        functionName: 'totalMinted',
+    });
+
+    if (Number(totalMinted) >= collection.maxSupply) {
+        throw new Error('Collection sold out');
+    }
+
+    // Generate random tokenId between 0 and MAX_SUPPLY-1
+    const randomId = Math.floor(Math.random() * collection.maxSupply);
+    return BigInt(randomId);
+}
+
+/**
  * Executes mint based on stage type.
  */
-export async function mint(collection, stage, amount = 1) {
+export async function mint(collection, stage) {
     const config = wagmiAdapter.wagmiConfig;
     const contractAddress = collection.contractAddress;
 
     if (!stage) throw new Error('No active mint stage');
 
+    // Get a random tokenId
+    const tokenId = await getRandomTokenId(collection);
+
     switch (stage.type) {
         case 'FREE':
+        case 'Free': // Handle both cases from your collections.js
             return writeContract(config, {
                 address: contractAddress,
                 abi: MINTER_ABI,
                 functionName: 'mint',
-                args: [await getAccount(config).address, 0n] // Generic mint
+                args: [tokenId] // FIXED: Only pass tokenId
             });
 
         case 'PAID':
             return writeContract(config, {
                 address: contractAddress,
                 abi: MINTER_ABI,
-                functionName: 'mintPaid',
-                args: [await getAccount(config).address, 0n], // Generic
+                functionName: 'mint',
+                args: [tokenId],
                 value: BigInt(stage.price)
             });
-
-        // BURN logic would go here
 
         default:
             throw new Error(`Unsupported stage type: ${stage.type}`);
