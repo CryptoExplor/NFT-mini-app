@@ -13,7 +13,9 @@ import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js
 import { router } from './lib/router.js';
 import { renderHomePage } from './pages/home.js';
 import { renderMintPage } from './pages/mint.js';
+import { renderAnalyticsPage } from './pages/analytics.js';
 import { $, safeLocalStorage } from './utils/dom.js';
+import { toast } from './utils/toast.js';
 
 // ============================================
 // INITIALIZATION
@@ -22,63 +24,60 @@ import { $, safeLocalStorage } from './utils/dom.js';
 async function init() {
     console.log('🚀 Initializing Multi-Collection NFT Mint App...');
 
-    // 1. Initialize Farcaster SDK FIRST
-    const { sdk: farcasterSdk, context } = await initFarcasterSDK();
+    try {
+        // 0. Initialize Toast
+        toast.init();
 
-    if (isInFarcaster()) {
-        console.log('📱 Running in Farcaster:', context);
-        state.farcaster = { sdk: farcasterSdk, context };
-    }
+        // 1. Initialize Farcaster SDK FIRST (with timeout safety)
+        const initPromise = initFarcasterSDK();
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ sdk: null, context: null }), 2000));
+        const { sdk: farcasterSdk, context } = await Promise.race([initPromise, timeoutPromise]);
 
-    // 2. Initialize Wallet
-    initWallet();
-    console.log('✅ Wallet initialized');
+        if (isInFarcaster()) {
+            console.log('📱 Running in Farcaster:', context);
+            state.farcaster = { sdk: farcasterSdk, context };
 
-    // Auto-connect with Farcaster connector
-    if (isInFarcaster()) {
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Auto-connect with Farcaster connector
+            try {
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-            const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
-                c => c.id === 'farcaster' ||
-                    c.id === 'farcasterMiniApp' ||
-                    c.name?.toLowerCase().includes('farcaster')
-            );
+                const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
+                    c => c.id === 'farcaster' ||
+                        c.id === 'farcasterMiniApp' ||
+                        c.name?.toLowerCase().includes('farcaster')
+                );
 
-            if (farcasterConnector) {
-                const { connect, getAccount } = await import('@wagmi/core');
-                const account = getAccount(wagmiAdapter.wagmiConfig);
-
-                if (!account?.isConnected) {
+                if (farcasterConnector) {
                     console.log('🔗 Farcaster connector found, connecting...');
-                    const result = await connect(wagmiAdapter.wagmiConfig, {
+                    const { connect } = await import('@wagmi/core');
+                    await connect(wagmiAdapter.wagmiConfig, {
                         connector: farcasterConnector
                     });
-
-                    if (result.accounts && result.accounts[0]) {
-                        console.log('✅ Connected via Farcaster:', result.accounts[0]);
-                    }
                 }
-            } else {
-                console.warn('⚠️ Farcaster connector not found');
-                console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => c.id));
+            } catch (error) {
+                console.error('❌ Farcaster auto-connect failed:', error);
             }
-        } catch (error) {
-            console.error('❌ Farcaster auto-connect failed:', error);
         }
+
+        // 2. Initialize Wallet
+        initWallet();
+        console.log('✅ Wallet initialized');
+
+        // 3. Setup Router
+        setupRoutes();
+        console.log('✅ Router configured');
+
+        // 4. Handle initial route
+        await router.handleRoute();
+
+    } catch (error) {
+        console.error('❌ Initialization failed:', error);
+    } finally {
+        // 5. Hide loading overlay ALWAYS
+        hideLoading();
     }
 
-    // 3. Setup Router
-    setupRoutes();
-    console.log('✅ Router configured');
-
-    // 4. Handle initial route
-    await router.handleRoute();
-
-    // 5. Hide loading overlay
-    hideLoading();
-
-    // 6. Tell Farcaster we're ready
+    // 6. Tell Farcaster we're ready (post-load actions)
     const farcasterSDKInstance = getFarcasterSDK();
     if (farcasterSDKInstance) {
         try {
@@ -106,6 +105,10 @@ function setupRoutes() {
 
     // Mint Page - Dynamic by slug
     router.route('/mint/:slug', renderMintPage);
+
+    // Analytics Page
+    router.route('/analytics', renderAnalyticsPage);
+    router.route('/analytics/:slug', renderAnalyticsPage);
 
     // Add more routes as needed:
     // router.route('/about', renderAboutPage);

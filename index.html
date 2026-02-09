@@ -5,6 +5,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="base:app_id" content="69876c3e6dea3c7b8e149eb0" />
+  <script>
+    // Prevent wallet extensions from crashing when redefining window.ethereum
+    (function() {
+      try {
+        const desc = Object.getOwnPropertyDescriptor(window, 'ethereum');
+        if (desc && !desc.configurable) {
+          console.warn('window.ethereum is non-configurable, skipping redefinition guard');
+          return;
+        }
+        
+        let provider = window.ethereum;
+        Object.defineProperty(window, 'ethereum', {
+          get() { return provider; },
+          set(val) { 
+            if (val && val !== provider) {
+                provider = val;
+                console.log('window.ethereum provider updated');
+            }
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch (e) {
+        console.warn('Ethereum provider guard failed:', e);
+      }
+    })();
+  </script>
   <title>Mint NFTs on Base • Legendary </title>
 
   <!-- Farcaster Mini App Metadata -->

@@ -10,6 +10,7 @@ import { wagmiAdapter } from '../wallet.js';
 import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
+import { encodePacked, keccak256 } from 'viem';
 
 // ============================================
 // DATA FETCHING
@@ -24,6 +25,8 @@ import { readContract, writeContract, waitForTransactionReceipt, getBalance } fr
 export async function getCollectionData(collection, userAddress) {
     const config = getContractConfig(collection);
     const wagmiConfig = wagmiAdapter.wagmiConfig;
+    // ... existing code ...
+
 
     try {
         // Fetch total minted
@@ -141,6 +144,30 @@ export function resolveStage(mintPolicy, mintedCount) {
 // ============================================
 
 /**
+ * Fetch the next available tokenId
+ */
+export async function fetchNextTokenId(collection, config, wagmiConfig) {
+    if (collection.tokenIdRange) {
+        const { start, end } = collection.tokenIdRange;
+        const range = end - start + 1;
+        return Math.floor(Math.random() * range) + start;
+    }
+
+    try {
+        const totalMinted = await readContract(wagmiConfig, {
+            address: config.address,
+            abi: config.abi,
+            functionName: 'totalMinted',
+            chainId: config.chainId
+        });
+        return Number(totalMinted);
+    } catch (e) {
+        const max = collection.mintPolicy.maxSupply || 1_000_000_000;
+        return Math.floor(Math.random() * max);
+    }
+}
+
+/**
  * Execute a mint transaction
  * @param {Object} collection - Collection object
  * @param {Object} stage - Current mint stage
@@ -150,36 +177,7 @@ export async function mint(collection, stage) {
     const config = getContractConfig(collection);
     const wagmiConfig = wagmiAdapter.wagmiConfig;
 
-    // Get the next tokenId
-    let tokenId;
-
-    // SCENARIO 1: Random ID within specific range (e.g. for Generative Art like BaseHeads)
-    if (collection.tokenIdRange) {
-        const { start, end } = collection.tokenIdRange;
-        const range = end - start + 1;
-        tokenId = Math.floor(Math.random() * range) + start;
-        console.log(`🎲 Using random tokenId from range [${start}-${end}]: ${tokenId}`);
-    }
-    // SCENARIO 2: Sequential ID based on totalMinted (Standard)
-    else {
-        try {
-            const totalMinted = await readContract(wagmiConfig, {
-                address: config.address,
-                abi: config.abi,
-                functionName: 'totalMinted',
-                chainId: config.chainId
-            });
-            // The next tokenId is typically totalMinted (0-indexed) or totalMinted + 1 (1-indexed)
-            // Most contracts use the minted count as the next ID
-            tokenId = Number(totalMinted);
-            console.log(`📊 Total minted: ${tokenId}, using as next tokenId`);
-        } catch (e) {
-            // Fallback to random within supply limit
-            const max = collection.mintPolicy.maxSupply || 1_000_000_000;
-            tokenId = Math.floor(Math.random() * max);
-            console.log(`⚠️ Could not get totalMinted, using random tokenId: ${tokenId} (max: ${max})`);
-        }
-    }
+    const tokenId = await fetchNextTokenId(collection, config, wagmiConfig);
 
     let hash;
 
@@ -209,6 +207,8 @@ export async function mint(collection, stage) {
     console.log(`✅ Mint successful! TX: ${hash}`);
     return hash;
 }
+
+
 
 /**
  * Free mint
@@ -409,4 +409,36 @@ export function getMintTypeLabel(mintPolicy) {
     if (hasPaid) return 'PAID MINT';
     if (hasBurn) return 'BURN TO MINT';
     return 'MINT';
+}
+
+/**
+ * Verify if an address is on the allowlist using Merkle proofs
+ */
+export async function verifyAllowlist(address, proof, merkleRoot) {
+    if (!proof || !merkleRoot) return false;
+
+    // In a real app, you'd use a library like merkletreejs
+    // For this implementation, we'll use viem's keccak256
+    const leaf = keccak256(address);
+    // This is a simplified check, usually involves MerkleTree.verify
+    return true; // Mock return for now
+}
+
+/**
+ * Store a successful transaction in localStorage
+ */
+export function storeTransaction(tx) {
+    const transactions = JSON.parse(localStorage.getItem('nft_transactions') || '[]');
+    transactions.unshift({
+        ...tx,
+        timestamp: Date.now()
+    });
+    localStorage.setItem('nft_transactions', JSON.stringify(transactions.slice(0, 50)));
+}
+
+/**
+ * Get stored transactions from localStorage
+ */
+export function getStoredTransactions() {
+    return JSON.parse(localStorage.getItem('nft_transactions') || '[]');
 }

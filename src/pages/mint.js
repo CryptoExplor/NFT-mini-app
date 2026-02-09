@@ -8,10 +8,13 @@ import { getContractConfig } from '../../contracts/index.js';
 import { getCollectionData, resolveStage, mint, getMintButtonText } from '../lib/mintHelpers.js';
 import { state, updateState, EVENTS } from '../state.js';
 import { router } from '../lib/router.js';
-import { switchChain } from '@wagmi/core';
+import { switchChain, estimateGas, getGasPrice } from '@wagmi/core';
 import { connectWallet, switchToBase, wagmiAdapter } from '../wallet.js';
 import { shortenAddress } from '../utils/dom.js';
-import { DEFAULT_CHAIN } from '../utils/chain.js';
+import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
+import { toast } from '../utils/toast.js';
+import { handleMintError } from '../utils/errorHandler.js';
+import { shareCollection } from '../utils/social.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -38,10 +41,16 @@ export async function renderMintPage(params) {
       <!-- Header -->
       <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
-          <button id="back-btn" class="text-white hover:text-indigo-400 transition flex items-center space-x-2">
-            <span>←</span>
-            <span>Back</span>
-          </button>
+          <div class="flex items-center space-x-3">
+            <button id="back-btn" class="text-white hover:text-indigo-400 transition flex items-center space-x-2">
+              <span>←</span>
+              <span>Back</span>
+            </button>
+            <button id="share-btn" class="text-white hover:text-indigo-400 transition flex items-center space-x-2 bg-white/5 px-3 py-1 rounded-full">
+              <span>🔗</span>
+              <span class="text-sm">Share</span>
+            </button>
+          </div>
           
           <button id="connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform">
             <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
@@ -129,12 +138,33 @@ export async function renderMintPage(params) {
               </div>
             </div>
             
+
+
             <!-- Stage Info -->
             <div id="stage-info" class="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
               <div class="text-sm opacity-60">Current Stage</div>
               <div id="stage-name" class="text-lg font-medium">Loading...</div>
             </div>
             
+            <!-- Transaction Preview -->
+            <div id="tx-preview" class="mb-6 p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/30 hidden">
+              <h3 class="text-sm font-bold mb-2 text-indigo-300">Transaction Preview</h3>
+              <div class="space-y-1 text-xs">
+                <div class="flex justify-between">
+                  <span class="opacity-60">Mint Price</span>
+                  <span id="preview-price">0 ETH</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="opacity-60">Estimated Gas</span>
+                  <span id="preview-gas">0 ETH</span>
+                </div>
+                <div class="pt-1 mt-1 border-t border-white/10 flex justify-between font-bold">
+                  <span>Total Est.</span>
+                  <span id="preview-total" class="text-indigo-300">0 ETH</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Mint Button -->
             <button id="mint-btn" class="w-full legendary-button py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all">
               <span id="mint-text">Loading...</span>
@@ -157,6 +187,7 @@ export async function renderMintPage(params) {
               </div>
             </div>
           </div>
+          
           
           <!-- Contract Info -->
           <div class="mt-8 text-center text-sm opacity-40">
@@ -215,6 +246,13 @@ function attachEventHandlers(collection) {
   document.getElementById('back-btn')?.addEventListener('click', () => {
     router.navigate('/');
   });
+
+  // Share button
+  document.getElementById('share-btn')?.addEventListener('click', async () => {
+    if (currentCollection) await shareCollection(currentCollection);
+  });
+
+
 
   // Connect button
   document.getElementById('connect-btn')?.addEventListener('click', async () => {
@@ -295,6 +333,9 @@ async function initMintInterface(collection) {
     mintText.textContent = getMintButtonText(stage);
     mintBtn.disabled = false;
 
+    // Update Transaction Preview
+    updateTransactionPreview(collection, stage);
+
     // Show Burn Token info
     if (stage.type === 'BURN_ERC20' && stage.token) {
       const stageInfo = document.getElementById('stage-info');
@@ -331,6 +372,56 @@ async function initMintInterface(collection) {
 /**
  * Handle mint action
  */
+/**
+ * Update transaction preview with gas estimation
+ */
+async function updateTransactionPreview(collection, stage) {
+  const preview = document.getElementById('tx-preview');
+  if (!preview) return;
+
+  if (!state.wallet?.isConnected || !stage) {
+    preview.classList.add('hidden');
+    return;
+  }
+
+  preview.classList.remove('hidden');
+  const priceText = document.getElementById('preview-price');
+  const gasText = document.getElementById('preview-gas');
+  const totalText = document.getElementById('preview-total');
+
+  const itemCost = stage.price ? Number(stage.price) / 1e18 : 0;
+
+  if (stage.type === 'BURN_ERC20') {
+    priceText.textContent = `Burn ${stage.amount} ${stage.tokenName || 'Tokens'}`;
+    priceText.classList.add('text-orange-400');
+  } else {
+    priceText.textContent = `${itemCost.toFixed(6)} ETH`;
+    priceText.classList.remove('text-orange-400');
+  }
+
+  try {
+    const gasPrice = await getGasPrice(wagmiAdapter.wagmiConfig);
+    // Estimate gas for a standard mint (approx 200k gas as buffer if estimation fails)
+    // Burn mints usually cost more gas (approx 250k-300k with approval)
+    const gasLimit = stage.type === 'BURN_ERC20' ? 300000n : 200000n;
+    const gasCost = Number(gasLimit * gasPrice.gasPrice) / 1e18;
+
+    gasText.textContent = `~${gasCost.toFixed(6)} ETH`;
+
+    if (stage.type === 'BURN_ERC20') {
+      totalText.textContent = `Burn + ~${gasCost.toFixed(6)} ETH`;
+    } else {
+      totalText.textContent = `${(itemCost + gasCost).toFixed(6)} ETH`;
+    }
+  } catch (e) {
+    gasText.textContent = 'Estimation failed';
+    totalText.textContent = stage.type === 'BURN_ERC20' ? 'Burn + gas' : `${itemCost.toFixed(6)} ETH + gas`;
+  }
+}
+
+/**
+ * Handle mint action
+ */
 async function handleMint(collection, stage) {
   const mintBtn = document.getElementById('mint-btn');
   const mintText = document.getElementById('mint-text');
@@ -348,6 +439,8 @@ async function handleMint(collection, stage) {
       mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
       await switchChain(wagmiAdapter.wagmiConfig, { chainId: collection.chainId });
     } catch (e) {
+      const errorMsg = handleMintError(e);
+      toast.show(errorMsg, 'error');
       mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
       return;
     }
@@ -358,11 +451,24 @@ async function handleMint(collection, stage) {
     mintText.textContent = 'Minting...';
     mintStatus.textContent = 'Confirm transaction in your wallet';
 
+    const { mint } = await import('../lib/mintHelpers.js');
     const hash = await mint(collection, stage);
 
+    toast.show('Successfully minted NFT! 🎉', 'success');
     mintText.textContent = 'Success! 🎉';
     mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
-    mintStatus.innerHTML = `<a href="https://basescan.org/tx/${hash}" target="_blank" class="text-indigo-400 underline">View on Basescan</a>`;
+
+    const explorerBase = getExplorerUrl(collection.chainId);
+    mintStatus.innerHTML = `<a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline">View on Explorer</a>`;
+
+    // Store transaction locally
+    const { storeTransaction } = await import('../lib/mintHelpers.js');
+    storeTransaction({
+      hash,
+      collectionName: collection.name,
+      slug: collection.slug,
+      chainId: collection.chainId
+    });
 
     // Refresh after success
     setTimeout(() => {
@@ -371,14 +477,18 @@ async function handleMint(collection, stage) {
 
   } catch (error) {
     console.error('Mint error:', error);
+    const friendlyMessage = handleMintError(error);
+    toast.show(friendlyMessage, 'error');
+
     mintText.textContent = 'Mint Failed';
-    mintStatus.textContent = error.message || 'Something went wrong';
+    mintStatus.textContent = friendlyMessage;
     mintBtn.disabled = false;
 
     // Reset after error
     setTimeout(() => {
       initMintInterface(collection);
-    }, 3000);
+      updateTransactionPreview(collection, stage);
+    }, 5000);
   }
 }
 
@@ -410,36 +520,8 @@ async function handleWalletUpdate(e) {
   }
 }
 
-/**
- * Get chain name from ID
- */
-function getChainName(chainId) {
-  const chains = {
-    1: 'Ethereum',
-    8453: 'Base',
-    84532: 'Base Sepolia',
-    10: 'Optimism',
-    42161: 'Arbitrum'
-  };
-  return chains[chainId] || `Chain ${chainId}`;
-}
-
 // Cleanup on page leave
 export function cleanup() {
   document.removeEventListener(EVENTS.WALLET_UPDATE, handleWalletUpdate);
   currentCollection = null;
-}
-
-/**
- * Get block explorer URL
- */
-function getExplorerUrl(chainId) {
-  const explorers = {
-    1: 'https://etherscan.io',
-    8453: 'https://basescan.org',
-    84532: 'https://sepolia.basescan.org',
-    10: 'https://optimistic.etherscan.io',
-    42161: 'https://arbiscan.io'
-  };
-  return explorers[chainId] || 'https://basescan.org';
 }

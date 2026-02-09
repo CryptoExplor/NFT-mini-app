@@ -3,13 +3,18 @@ import { router } from '../lib/router.js';
 import { state, EVENTS } from '../state.js';
 import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
 import { shortenAddress } from '../utils/dom.js';
-import { readContract, getPublicClient } from '@wagmi/core';
+import { readContract, getPublicClient, getBalance } from '@wagmi/core';
 import { getContractConfig } from '../../contracts/index.js';
 import { parseAbiItem, createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
+import { toast } from '../utils/toast.js';
+import { shareCollection } from '../utils/social.js';
+import { getExplorerAddressUrl } from '../utils/chain.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
+let searchInputHandler = null;
+let filterChangeHandler = null;
 
 /**
  * Render the homepage with collection grid
@@ -26,12 +31,21 @@ export async function renderHomePage() {
         <div class="max-w-6xl mx-auto flex items-center justify-between">
           <div class="flex items-center space-x-3">
             <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Base Mint App</h1>
+            
+            <!-- Wallet Balance -->
+            <div id="wallet-balance" class="hidden md:flex flex-col items-end mr-4 animate-fade-in">
+                 <div class="text-xs opacity-60">Balance</div>
+                 <div class="font-mono font-bold text-sm text-indigo-300 balance-value">Loading...</div>
+            </div>
           </div>
           
           <div class="flex items-center space-x-3">
             <!-- Desktop My NFTs Button -->
+            <button id="desktop-analytics-btn" class="hidden sm:flex glass-card px-4 py-2 rounded-full items-center space-x-2 hover:bg-white/10 transition-colors">
+              <span class="text-sm font-medium">Analytics</span>
+            </button>
+
             <button id="desktop-nfts-btn" class="hidden sm:flex glass-card px-4 py-2 rounded-full items-center space-x-2 hover:bg-white/10 transition-colors">
-              <span>🖼️</span>
               <span class="text-sm font-medium">My NFTs</span>
             </button>
 
@@ -87,11 +101,13 @@ export async function renderHomePage() {
                     </button>
                 </div>
                 
-                <div id="my-nfts-grid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-4 pb-10 pr-2 custom-scrollbar">
+                <div id="my-nfts-grid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-4 pb-4 pr-2 custom-scrollbar">
                     <div class="col-span-2 text-center py-20 opacity-30">
                         <div class="text-4xl mb-4">🖼️</div>
                         <p>Connect wallet to view your NFTs</p>
                     </div>
+                </div>
+
                 </div>
               </div>
           </div>
@@ -108,6 +124,33 @@ export async function renderHomePage() {
             <p class="text-xl opacity-70">
               ${collections.length} collection${collections.length !== 1 ? 's' : ''} available to mint
             </p>
+          </div>
+
+          <!-- Search & Filters -->
+          <div class="mb-8 flex flex-col md:flex-row gap-4 justify-between items-center glass-card p-4 rounded-xl">
+             <div class="relative w-full md:w-1/3">
+                <input type="text" 
+                       id="search-input" 
+                       placeholder="Search collections..."
+                       class="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-indigo-500/50 transition-colors pl-10">
+                <span class="absolute left-3 top-2.5 opacity-50">🔍</span>
+             </div>
+             
+             <div class="flex gap-3 w-full md:w-auto">
+                 <select id="status-filter" class="glass-card bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer flex-1 md:flex-none">
+                    <option value="all">All Status</option>
+                    <option value="live">Live</option>
+                    <option value="upcoming">Upcoming</option>
+                    <option value="sold-out">Sold Out</option>
+                 </select>
+                 
+                 <select id="type-filter" class="glass-card bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer flex-1 md:flex-none">
+                    <option value="all">All Types</option>
+                    <option value="free">Free Mint</option>
+                    <option value="paid">Paid Mint</option>
+                    <option value="burn">Burn to Mint</option>
+                 </select>
+             </div>
           </div>
           
           <!-- Collection Grid -->
@@ -152,11 +195,20 @@ function renderCollectionCard(collection) {
       
       <div class="relative bg-[#1a1b2e] rounded-xl overflow-hidden">
         <!-- Image -->
-        <div class="aspect-square overflow-hidden">
+        <div class="aspect-square overflow-hidden relative">
           <img src="${collection.imageUrl}" 
                alt="${collection.name}"
                class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                onerror="this.src='/placeholder.png'">
+          
+          <!-- Share Button Overlay -->
+          <button class="share-btn absolute top-2 right-2 bg-black/60 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20 z-10"
+                  data-slug="${collection.slug}"
+                  onclick="event.stopPropagation();">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0-10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5m0 10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5" />
+              </svg>
+          </button>
         </div>
         
         <!-- Gradient Overlay -->
@@ -219,6 +271,22 @@ function getMintTypeLabel(mintPolicy) {
 }
 
 /**
+ * Collection Card Skeleton
+ */
+function CollectionCardSkeleton() {
+  return `
+    <div class="glass-card p-1 rounded-2xl animate-pulse w-full sm:max-w-[320px] lg:max-w-[350px]">
+      <div class="aspect-square bg-white/5 rounded-xl"></div>
+      <div class="p-4 space-y-3">
+        <div class="h-6 bg-white/10 rounded w-3/4"></div>
+        <div class="h-4 bg-white/10 rounded w-full"></div>
+        <div class="h-4 bg-white/10 rounded w-2/3"></div>
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Attach event handlers
  */
 function attachEventHandlers() {
@@ -233,11 +301,57 @@ function attachEventHandlers() {
     state.wallet = account;
     updateConnectButton(account);
     updateProfileWalletInfo(account);
+    updateWalletBalance(account); // Update balance display
     if (account.isConnected) {
       fetchUserNFTs();
     }
   };
   document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+
+  // Search & Filter Logic
+  const searchInput = document.getElementById('search-input');
+  const statusFilter = document.getElementById('status-filter');
+  const typeFilter = document.getElementById('type-filter');
+
+  const updateFilters = () => {
+    const query = searchInput?.value.toLowerCase() || '';
+    const status = statusFilter?.value || 'all';
+    const type = typeFilter?.value || 'all';
+
+    const collections = loadCollections();
+    const filtered = collections.filter(c => {
+      const matchesQuery = c.name.toLowerCase().includes(query) || c.description.toLowerCase().includes(query);
+      const matchesStatus = status === 'all' || c.status === status;
+
+      let matchesType = true;
+      if (type === 'paid') matchesType = c.mintPolicy.stages.some(s => s.type === 'PAID');
+      if (type === 'free') matchesType = c.mintPolicy.stages.some(s => s.type === 'FREE');
+      if (type === 'burn') matchesType = c.mintPolicy.stages.some(s => s.type === 'BURN_ERC20');
+
+      return matchesQuery && matchesStatus && matchesType;
+    });
+
+    const grid = document.getElementById('collection-grid');
+    if (grid) {
+      if (filtered.length > 0) {
+        grid.innerHTML = filtered.map(collection => renderCollectionCard(collection)).join('');
+        // Re-attach card listeners
+        const cards = document.querySelectorAll('[data-collection]');
+        cards.forEach(card => {
+          card.addEventListener('click', () => {
+            const slug = card.dataset.collection;
+            router.navigate(`/mint/${slug}`);
+          });
+        });
+      } else {
+        grid.innerHTML = '<div class="col-span-full text-center py-10 opacity-50">No collections found matching your filters</div>';
+      }
+    }
+  };
+
+  if (searchInput) searchInput.addEventListener('input', updateFilters);
+  if (statusFilter) statusFilter.addEventListener('change', updateFilters);
+  if (typeFilter) typeFilter.addEventListener('change', updateFilters);
 
   // Connect button logic
   const connectBtn = document.getElementById('connect-btn');
@@ -251,6 +365,25 @@ function attachEventHandlers() {
       }
     });
   }
+
+  // Analytics button logic
+  const analyticsBtn = document.getElementById('desktop-analytics-btn');
+  if (analyticsBtn) {
+    analyticsBtn.addEventListener('click', () => {
+      router.navigate('/analytics');
+    });
+  }
+
+  // Share button logic
+  const shareBtns = document.querySelectorAll('.share-btn');
+  shareBtns.forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const slug = btn.dataset.slug;
+      const collection = loadCollections().find(c => c.slug === slug);
+      if (collection) await shareCollection(collection);
+    });
+  });
 
   // Collection cards interaction
   const cards = document.querySelectorAll('[data-collection]');
@@ -470,26 +603,28 @@ async function fetchUserNFTs() {
 
             if (tokens.length > 0) {
               container.innerHTML = `
-                                <div class="col-span-2 mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
-                                    <div class="flex items-center justify-between mb-3 px-1">
-                                        <div class="flex items-center space-x-2">
-                                            <img src="${collection.imageUrl}" class="w-6 h-6 rounded-md"/>
-                                            <span class="font-bold text-sm">${collection.name}</span>
-                                            <span class="text-xs opacity-50">(${count})</span>
-                                        </div>
-                                        <a href="${explorerUrl}?a=${userAddress}" target="_blank" class="text-[10px] opacity-50 hover:opacity-100">Explorer ↗</a>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-2">
-                                        ${tokens.map(t => `
-                                            <div class="aspect-square bg-black/50 rounded-lg overflow-hidden relative group cursor-pointer border border-white/5 hover:border-indigo-500/50 transition-all"
-                                                 onclick="window.open('${explorerUrl}?a=${t.id}', '_blank')">
-                                                <img src="${t.image}" class="w-full h-full object-cover" onerror="this.src='${collection.imageUrl}'" />
-                                                <div class="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[9px] font-mono backdrop-blur-md">#${t.id}</div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
+                <div class="col-span-2 mb-6">
+                    <div class="flex items-center space-x-2 mb-3 px-1">
+                        <img src="${collection.imageUrl}" class="w-5 h-5 rounded-full object-cover"/>
+                        <span class="font-bold text-xs opacity-70 uppercase tracking-wider">${collection.name}</span>
+                        <span class="text-[10px] opacity-30">${count} items</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        ${tokens.map(t => `
+                            <div class="bg-[#1a1b2e] rounded-xl overflow-hidden border border-white/5 hover:border-indigo-500/50 transition-all group flex flex-col"
+                                 onclick="window.open('${explorerUrl}?a=${t.id}', '_blank')">
+                                <div class="aspect-square overflow-hidden relative">
+                                    <img src="${t.image}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.src='${collection.imageUrl}'" />
+                                    <div class="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-mono border border-white/10">#${t.id}</div>
                                 </div>
-                            `;
+                                <div class="p-2 border-t border-white/5">
+                                    <div class="text-[10px] font-bold truncate opacity-80">${t.name}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+              `;
             } else {
               const statusEl = container.querySelector('.status-text');
               if (statusEl) statusEl.remove();
@@ -532,12 +667,37 @@ async function resolveMetadata(uri) {
   return {};
 }
 
-function getExplorerAddressUrl(chainId, address) {
-  if (chainId === 8453) return `https://basescan.org/token/${address}`;
-  return `https://etherscan.io/token/${address}`;
-}
-
-// Expose router to window for debugging
 if (typeof window !== 'undefined') {
   window.router = router;
+}
+
+/**
+ * Update wallet balance display
+ */
+async function updateWalletBalance(account) {
+  const balanceContainer = document.getElementById('wallet-balance');
+  const balanceValue = document.querySelector('.balance-value');
+
+  if (!balanceContainer || !balanceValue) return;
+
+  if (!account?.isConnected || !account.address) {
+    balanceContainer.classList.add('hidden');
+    return;
+  }
+
+  balanceContainer.classList.remove('hidden');
+  balanceValue.textContent = 'Loading...';
+
+  try {
+    const balance = await getBalance(wagmiAdapter.wagmiConfig, {
+      address: account.address,
+      chainId: account.chainId
+    });
+
+    const eth = Number(balance.value) / 1e18;
+    balanceValue.textContent = `${eth.toFixed(4)} ETH`;
+  } catch (e) {
+    console.error('Failed to fetch balance:', e);
+    balanceValue.textContent = 'Error';
+  }
 }
