@@ -28,8 +28,14 @@ async function init() {
     if (isInFarcaster()) {
         console.log('📱 Running in Farcaster:', context);
         state.farcaster = { sdk: farcasterSdk, context };
+    }
 
-        // Auto-connect with Farcaster connector
+    // 2. Initialize Wallet
+    initWallet();
+    console.log('✅ Wallet initialized');
+
+    // Auto-connect with Farcaster connector
+    if (isInFarcaster()) {
         try {
             await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -40,14 +46,18 @@ async function init() {
             );
 
             if (farcasterConnector) {
-                console.log('🔗 Farcaster connector found, connecting...');
-                const { connect } = await import('@wagmi/core');
-                const result = await connect(wagmiAdapter.wagmiConfig, {
-                    connector: farcasterConnector
-                });
+                const { connect, getAccount } = await import('@wagmi/core');
+                const account = getAccount(wagmiAdapter.wagmiConfig);
 
-                if (result.accounts && result.accounts[0]) {
-                    console.log('✅ Connected via Farcaster:', result.accounts[0]);
+                if (!account?.isConnected) {
+                    console.log('🔗 Farcaster connector found, connecting...');
+                    const result = await connect(wagmiAdapter.wagmiConfig, {
+                        connector: farcasterConnector
+                    });
+
+                    if (result.accounts && result.accounts[0]) {
+                        console.log('✅ Connected via Farcaster:', result.accounts[0]);
+                    }
                 }
             } else {
                 console.warn('⚠️ Farcaster connector not found');
@@ -57,10 +67,6 @@ async function init() {
             console.error('❌ Farcaster auto-connect failed:', error);
         }
     }
-
-    // 2. Initialize Wallet
-    initWallet();
-    console.log('✅ Wallet initialized');
 
     // 3. Setup Router
     setupRoutes();

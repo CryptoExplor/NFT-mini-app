@@ -15,20 +15,21 @@ let isReady = false;
  */
 export async function initFarcasterSDK() {
     try {
-        // Check if we're running in a Farcaster context
-        if (typeof window !== 'undefined' && window.parent !== window) {
-            // Get the context from SDK
+        // Attempt to load context from SDK (works for both desktop and mobile mini-apps)
+        if (typeof window !== 'undefined') {
             context = await sdk.context;
-            
-            console.log('Farcaster SDK initialized', context);
-            console.log('Context details:', {
-                client: context.client,
-                user: context.user,
-                location: context.location
-            });
-            
+
+            if (context) {
+                console.log('Farcaster SDK initialized', context);
+                console.log('Context details:', {
+                    client: context.client,
+                    user: context.user,
+                    location: context.location
+                });
+            }
+
             // DO NOT call ready() here - main.js will call it after everything loads
-            
+
             return { sdk, context };
         }
     } catch (error) {
