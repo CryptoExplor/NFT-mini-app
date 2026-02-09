@@ -58,6 +58,13 @@ export async function renderHomePage() {
               </span>
             </button>
 
+            <!-- Global Share Button -->
+            <button id="global-share-btn" class="glass-card p-2 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-all active:scale-95 group">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 group-hover:text-indigo-400 transition-colors">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0-10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5m0 10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5" />
+                </svg>
+            </button>
+
             <!-- Mobile Profile Button (Person Icon) -->
             <button id="mobile-profile-btn" class="sm:hidden glass-card p-2 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -385,6 +392,34 @@ function attachEventHandlers() {
     });
   });
 
+  // Global share button logic
+  const globalShareBtn = document.getElementById('global-share-btn');
+  if (globalShareBtn) {
+    globalShareBtn.addEventListener('click', async () => {
+      const shareData = {
+        title: 'Base Mint App',
+        text: 'Check out these NFT collections on Base!',
+        url: window.location.origin
+      };
+
+      try {
+        if (state.farcaster?.sdk?.actions?.composeCast) {
+          await state.farcaster.sdk.actions.composeCast({
+            text: shareData.text,
+            embeds: [shareData.url]
+          });
+        } else if (navigator.share) {
+          await navigator.share(shareData);
+        } else {
+          await navigator.clipboard.writeText(shareData.url);
+          toast.show('App link copied!', 'success');
+        }
+      } catch (e) {
+        console.error('Global share failed:', e);
+      }
+    });
+  }
+
   // Collection cards interaction
   const cards = document.querySelectorAll('[data-collection]');
   cards.forEach(card => {
@@ -531,7 +566,7 @@ async function fetchUserNFTs() {
     if (collection.status.toLowerCase() === 'upcoming') {
       return;
     }
-    
+
     try {
       const config = getContractConfig(collection);
 

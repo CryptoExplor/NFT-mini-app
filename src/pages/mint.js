@@ -15,7 +15,7 @@ import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
-import { shareCollection } from '../utils/social.js';
+import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -294,7 +294,7 @@ async function initMintInterface(collection) {
     mintBtn.disabled = true;
     stageName.textContent = 'This collection launches on ' + collection.launched;
     stageInfo.classList.add('border-blue-500/30', 'bg-blue-500/10');
-    
+
     // Show user's mints section but with zero counts
     const yourMintsSection = document.getElementById('your-mints');
     const yourMintCount = document.getElementById('your-mint-count');
@@ -493,7 +493,36 @@ async function handleMint(collection, stage) {
     mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
 
     const explorerBase = getExplorerUrl(collection.chainId);
-    mintStatus.innerHTML = `<a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline">View on Explorer</a>`;
+    mintStatus.innerHTML = `
+      <div class="flex flex-col items-center space-y-4">
+        <a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline text-sm mb-2">View on Explorer</a>
+        
+        <div class="w-full h-px bg-white/10 my-2"></div>
+        
+        <p class="text-indigo-300 font-bold">Share your mint! 🚀</p>
+        
+        <div class="flex space-x-3">
+          <button id="share-farcaster-success" class="bg-[#8a63d2] hover:bg-[#7a53c2] px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
+            <span class="text-lg">🟣</span>
+            <span class="text-xs font-bold">Post to Warpcast</span>
+          </button>
+          
+          <button id="share-twitter-success" class="bg-black hover:bg-slate-900 border border-white/10 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
+             <span class="text-lg">𝕏</span>
+             <span class="text-xs font-bold">Share on X</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Attach success share handlers
+    document.getElementById('share-farcaster-success')?.addEventListener('click', () => {
+      shareToFarcaster(collection, `I just minted ${collection.name} on Base! 🔵🚀`);
+    });
+
+    document.getElementById('share-twitter-success')?.addEventListener('click', () => {
+      shareToTwitter(collection, `I just minted ${collection.name} on Base! 🔵🚀`);
+    });
 
     // Store transaction locally
     const { storeTransaction } = await import('../lib/mintHelpers.js');
