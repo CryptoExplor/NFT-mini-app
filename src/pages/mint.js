@@ -14,6 +14,7 @@ import { shortenAddress } from '../utils/dom.js';
 import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
+import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection } from '../utils/social.js';
 
 // Current collection reference
@@ -188,6 +189,10 @@ export async function renderMintPage(params) {
             </div>
           </div>
           
+          <!-- Recent Transactions -->
+          <div id="tx-history-container">
+            ${renderTransactionHistory()}
+          </div>
           
           <!-- Contract Info -->
           <div class="mt-8 text-center text-sm opacity-40">
