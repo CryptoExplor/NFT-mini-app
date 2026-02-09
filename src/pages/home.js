@@ -321,7 +321,7 @@ function attachEventHandlers() {
     const collections = loadCollections();
     const filtered = collections.filter(c => {
       const matchesQuery = c.name.toLowerCase().includes(query) || c.description.toLowerCase().includes(query);
-      const matchesStatus = status === 'all' || c.status === status;
+      const matchesStatus = status === 'all' || c.status.toLowerCase() === status.toLowerCase();
 
       let matchesType = true;
       if (type === 'paid') matchesType = c.mintPolicy.stages.some(s => s.type === 'PAID');
@@ -520,13 +520,18 @@ async function fetchUserNFTs() {
   const userAddress = state.wallet.address;
   const client = createPublicClient({
     chain: base,
-    transport: http('https://mainnet.base.org')
+    transport: http('https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57')
   });
 
   let hasFoundAny = false;
 
-  // Process collections in parallel
+  // Process collections in parallel (skip upcoming collections)
   await Promise.all(collections.map(async (collection) => {
+    // Skip upcoming collections - users can't own NFTs from unreleased collections
+    if (collection.status.toLowerCase() === 'upcoming') {
+      return;
+    }
+    
     try {
       const config = getContractConfig(collection);
 

@@ -288,6 +288,35 @@ async function initMintInterface(collection) {
     return;
   }
 
+  // Skip contract reading for upcoming collections (case insensitive)
+  if (collection.status.toLowerCase() === 'upcoming') {
+    mintText.textContent = 'Coming Soon';
+    mintBtn.disabled = true;
+    stageName.textContent = 'This collection launches on ' + collection.launched;
+    stageInfo.classList.add('border-blue-500/30', 'bg-blue-500/10');
+    
+    // Show user's mints section but with zero counts
+    const yourMintsSection = document.getElementById('your-mints');
+    const yourMintCount = document.getElementById('your-mint-count');
+    const remainingCount = document.getElementById('remaining-count');
+
+    if (yourMintsSection && yourMintCount) {
+      yourMintsSection.classList.remove('hidden');
+      yourMintCount.textContent = '0';
+
+      if (remainingCount) {
+        const max = collection.mintPolicy.maxPerWallet || 0;
+        remainingCount.textContent = max ? max : '∞';
+      }
+    }
+
+    // Update supply display to show max supply
+    document.getElementById('minted-count').textContent = '0';
+    document.getElementById('supply-minted').textContent = '0';
+    document.getElementById('supply-bar').style.width = '0%';
+    return;
+  }
+
   try {
     // Fetch on-chain data
     const { mintedCount, totalSupply, maxSupply } = await getCollectionData(collection, state.wallet.address);
