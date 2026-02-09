@@ -59,10 +59,17 @@ export async function renderHomePage() {
             </button>
 
             <!-- Global Share Button -->
-            <button id="global-share-btn" class="glass-card p-2 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-all active:scale-95 group">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 group-hover:text-indigo-400 transition-colors">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0-10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5m0 10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5" />
+            <button id="global-share-btn" class="glass-card relative p-2 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group overflow-hidden border border-indigo-500/30 hover:border-indigo-400">
+                <!-- Inner Glow -->
+                <div class="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-indigo-300 group-hover:text-white transition-colors relative z-10 translate-x-[1px]">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m13.5 16.3-5.06-3.04m5.06-4.52-5.06 3.04" />
                 </svg>
+                
+                <!-- Orbiting Glow (subtle) -->
+                <div class="absolute inset-0 rounded-full border border-indigo-500/0 group-hover:border-indigo-500/50 group-hover:animate-pulse transition-all"></div>
             </button>
 
             <!-- Mobile Profile Button (Person Icon) -->
@@ -209,11 +216,12 @@ function renderCollectionCard(collection) {
                onerror="this.src='/placeholder.png'">
           
           <!-- Share Button Overlay -->
-          <button class="share-btn absolute top-2 right-2 bg-black/60 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20 z-10"
+          <button class="share-btn absolute top-2 right-2 bg-indigo-500/20 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 hover:bg-indigo-500/40 border border-white/10 hover:border-indigo-400 z-10 flex items-center justify-center"
                   data-slug="${collection.slug}"
                   onclick="event.stopPropagation();">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0-10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5m0 10.628a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-white translate-x-[0.5px]">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="m13.5 16.3-5.06-3.04m5.06-4.52-5.06 3.04" />
               </svg>
           </button>
         </div>
