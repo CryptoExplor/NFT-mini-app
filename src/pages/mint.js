@@ -16,6 +16,8 @@ import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
+import { cache } from '../utils/cache.js';
+import { analytics } from '../utils/analytics.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -32,6 +34,9 @@ export async function renderMintPage(params) {
     render404(slug);
     return;
   }
+
+  // Track view
+  analytics.trackView(slug);
 
   currentCollection = collection;
 
@@ -75,7 +80,8 @@ export async function renderMintPage(params) {
               <div class="relative">
                 <img src="${collection.imageUrl}" 
                      alt="${collection.name}"
-                     class="w-full aspect-square object-cover rounded-xl shadow-2xl"
+                     loading="lazy"
+                     class="w-full aspect-square object-cover rounded-xl shadow-2xl img-fade-in"
                      onerror="this.src='/placeholder.png'">
                 
                 ${collection.featured ? `
@@ -437,7 +443,14 @@ async function updateTransactionPreview(collection, stage) {
   }
 
   try {
-    const gasPrice = await getGasPrice(wagmiAdapter.wagmiConfig);
+    const cacheKey = `gas_price_${collection.chainId}`;
+    let gasPrice = cache.get(cacheKey);
+
+    if (!gasPrice) {
+      gasPrice = await getGasPrice(wagmiAdapter.wagmiConfig);
+      cache.set(cacheKey, gasPrice, 15000); // 15s cache
+    }
+
     // Estimate gas for a standard mint (approx 200k gas as buffer if estimation fails)
     // Burn mints usually cost more gas (approx 250k-300k with approval)
     const gasLimit = stage.type === 'BURN_ERC20' ? 300000n : 200000n;
@@ -488,8 +501,14 @@ async function handleMint(collection, stage) {
     mintText.textContent = 'Minting...';
     mintStatus.textContent = 'Confirm transaction in your wallet';
 
+    // Track attempt
+    analytics.trackMintAttempt(collection.slug);
+
     const { mint } = await import('../lib/mintHelpers.js');
     const hash = await mint(collection, stage);
+
+    // Track success
+    analytics.trackMintSuccess(collection.slug, hash);
 
     toast.show('Successfully minted NFT! 🎉', 'success');
     mintText.textContent = 'Success! 🎉';
@@ -536,6 +555,9 @@ async function handleMint(collection, stage) {
       chainId: collection.chainId
     });
 
+    // Clear cache for this collection to force refresh
+    cache.delete(`col_data_${collection.slug}_${state.wallet.address}`);
+
     // Refresh after success
     setTimeout(() => {
       initMintInterface(collection);
@@ -543,6 +565,10 @@ async function handleMint(collection, stage) {
 
   } catch (error) {
     console.error('Mint error:', error);
+
+    // Track failure
+    analytics.trackMintFailure(collection.slug, error);
+
     const friendlyMessage = handleMintError(error);
     toast.show(friendlyMessage, 'error');
 

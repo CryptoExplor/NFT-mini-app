@@ -11,6 +11,7 @@ import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
 import { encodePacked, keccak256 } from 'viem';
+import { cache } from '../utils/cache.js';
 
 // ============================================
 // DATA FETCHING
@@ -23,10 +24,12 @@ import { encodePacked, keccak256 } from 'viem';
  * @returns {Object} { mintedCount, totalSupply, balanceOf }
  */
 export async function getCollectionData(collection, userAddress) {
+    const cacheKey = `col_data_${collection.slug}_${userAddress || 'anon'}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
     const config = getContractConfig(collection);
     const wagmiConfig = wagmiAdapter.wagmiConfig;
-    // ... existing code ...
-
 
     try {
         // Fetch total minted
@@ -83,11 +86,16 @@ export async function getCollectionData(collection, userAddress) {
             }
         }
 
-        return {
+        const data = {
             mintedCount,
             totalSupply,
             maxSupply: collection.mintPolicy.maxSupply
         };
+
+        // Cache for 30 seconds
+        cache.set(cacheKey, data, 30000);
+
+        return data;
 
     } catch (error) {
         console.error('Error fetching collection data:', error);

@@ -11,6 +11,8 @@ import { toast } from '../utils/toast.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection } from '../utils/social.js';
 import { getExplorerAddressUrl } from '../utils/chain.js';
+import { cache } from '../utils/cache.js';
+import { analytics } from '../utils/analytics.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -21,6 +23,7 @@ let filterChangeHandler = null;
  * Render the homepage with collection grid
  */
 export async function renderHomePage() {
+  analytics.trackView('home');
   const collections = loadCollections();
 
   const app = document.getElementById('app');
@@ -109,6 +112,17 @@ export async function renderHomePage() {
 
               <!-- My NFTs Content -->
               <div class="flex-1 overflow-hidden flex flex-col">
+                <!-- Analytics Shortcut -->
+                <div class="glass-card mb-6 p-1 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-white/5">
+                    <button id="view-analytics-btn" class="w-full flex items-center justify-between p-3 group transition-all hover:bg-white/5 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xl">📊</span>
+                            <span class="text-sm font-bold bg-gradient-to-r from-indigo-300 to-purple-400 bg-clip-text text-transparent">Analytics Dashboard</span>
+                        </div>
+                        <span class="text-xs opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all">Details →</span>
+                    </button>
+                </div>
+
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-bold">My Collection</h3>
                     <button id="refresh-nfts-btn" class="text-xs opacity-50 hover:opacity-100 flex items-center space-x-1">
@@ -212,7 +226,8 @@ function renderCollectionCard(collection) {
         <div class="aspect-square overflow-hidden relative">
           <img src="${collection.imageUrl}" 
                alt="${collection.name}"
-               class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+               loading="lazy"
+               class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
                onerror="this.src='/placeholder.png'">
           
           <!-- Share Button Overlay -->
@@ -383,8 +398,16 @@ function attachEventHandlers() {
 
   // Analytics button logic
   const analyticsBtn = document.getElementById('desktop-analytics-btn');
+  const profileAnalyticsBtn = document.getElementById('view-analytics-btn');
+
   if (analyticsBtn) {
     analyticsBtn.addEventListener('click', () => {
+      router.navigate('/analytics');
+    });
+  }
+
+  if (profileAnalyticsBtn) {
+    profileAnalyticsBtn.addEventListener('click', () => {
       router.navigate('/analytics');
     });
   }
@@ -598,7 +621,7 @@ async function fetchUserNFTs() {
         const summaryHtml = `
                     <div id="${cardId}" class="col-span-2 bg-white/5 p-4 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors mb-2">
                         <div class="flex items-center space-x-3">
-                            <img src="${collection.imageUrl}" class="w-10 h-10 rounded-lg object-cover" onerror="this.src='/placeholder.png'"/>
+                            <img src="${collection.imageUrl}" class="w-10 h-10 rounded-lg object-cover img-fade-in" loading="lazy" onerror="this.src='/placeholder.png'"/>
                             <div>
                                 <div class="font-bold">${collection.name}</div>
                                 <div class="text-xs opacity-60">You own: <span class="text-indigo-300 font-bold">${count}</span></div>
@@ -654,7 +677,7 @@ async function fetchUserNFTs() {
                                 <div class="col-span-2 mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
                                     <div class="flex items-center justify-between mb-3 px-1">
                                         <div class="flex items-center space-x-2">
-                                            <img src="${collection.imageUrl}" class="w-6 h-6 rounded-md"/>
+                                            <img src="${collection.imageUrl}" class="w-6 h-6 rounded-md img-fade-in" loading="lazy"/>
                                             <span class="font-bold text-sm">${collection.name}</span>
                                             <span class="text-xs opacity-50">(${count})</span>
                                         </div>
@@ -664,7 +687,7 @@ async function fetchUserNFTs() {
                                         ${tokens.map(t => `
                                             <div class="aspect-square bg-black/50 rounded-lg overflow-hidden relative group cursor-pointer border border-white/5 hover:border-indigo-500/50 transition-all"
                                                  onclick="window.open('${explorerUrl}?a=${t.id}', '_blank')">
-                                                <img src="${t.image}" class="w-full h-full object-cover" onerror="this.src='${collection.imageUrl}'" />
+                                                <img src="${t.image}" class="w-full h-full object-cover img-fade-in" loading="lazy" onerror="this.src='${collection.imageUrl}'" />
                                                 <div class="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[9px] font-mono backdrop-blur-md">#${t.id}</div>
                                             </div>
                                         `).join('')}
@@ -696,10 +719,17 @@ async function fetchUserNFTs() {
 
 async function resolveMetadata(uri) {
   if (!uri) return {};
+
+  const cacheKey = `metadata_${uri}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   if (uri.startsWith('data:application/json;base64,')) {
     try {
       const json = atob(uri.replace('data:application/json;base64,', ''));
-      return JSON.parse(json);
+      const data = JSON.parse(json);
+      cache.set(cacheKey, data, 24 * 60 * 60 * 1000, true);
+      return data;
     } catch (e) { return {}; }
   }
   let url = uri;
@@ -707,7 +737,10 @@ async function resolveMetadata(uri) {
   if (url.startsWith('http')) {
     try {
       const res = await fetch(url);
-      return await res.json();
+      const data = await res.json();
+      // Cache metadata persistently for 24 hours
+      cache.set(cacheKey, data, 24 * 60 * 60 * 1000, true);
+      return data;
     } catch (e) { return {}; }
   }
   return {};
