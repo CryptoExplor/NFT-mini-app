@@ -47,9 +47,12 @@ export async function renderMintPage(params) {
               <span>←</span>
               <span>Back</span>
             </button>
-            <button id="share-btn" class="text-white hover:text-indigo-400 transition flex items-center space-x-2 bg-white/5 px-3 py-1 rounded-full">
-              <span>🔗</span>
-              <span class="text-sm">Share</span>
+            <button id="share-btn" class="glass-card px-3 py-1.5 rounded-full flex items-center space-x-2 border border-indigo-500/30 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all group">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-indigo-300 group-hover:text-white transition-colors translate-x-[0.5px]">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="m13.5 16.3-5.06-3.04m5.06-4.52-5.06 3.04" />
+              </svg>
+              <span class="text-xs font-bold text-indigo-100 group-hover:text-white">Share</span>
             </button>
           </div>
           
