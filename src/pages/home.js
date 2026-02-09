@@ -494,24 +494,7 @@ function updateProfileWalletInfo(account) {
   }
 }
 
-// Gallery NFT Card Template
-function renderNFTGalleryCard(nft, collection, explorerUrl) {
-  return `
-        <div class="bg-white/5 rounded-xl overflow-hidden border border-white/5 hover:border-indigo-500/50 transition-all group cursor-pointer animate-fade-in"
-             onclick="window.open('${explorerUrl}?id=${nft.id}', '_blank')">
-            <div class="aspect-square overflow-hidden relative">
-                <img src="${nft.image}" class="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" onerror="this.src='${collection.imageUrl}'" />
-                <div class="absolute top-1.5 right-1.5 bg-black/60 px-1.5 py-0.5 rounded text-[9px] font-bold backdrop-blur-md border border-white/10">#${nft.id}</div>
-            </div>
-            <div class="p-2 bg-gradient-to-b from-transparent to-black/20">
-                <div class="text-[9px] opacity-40 truncate uppercase tracking-wider">${collection.name}</div>
-                <div class="text-[11px] font-bold truncate group-hover:text-indigo-300 transition-colors">${nft.name}</div>
-            </div>
-        </div>
-    `;
-}
-
-// Optimized Gallery Fetch
+// Optimized Incremental Fetch
 async function fetchUserNFTs() {
   const grid = document.getElementById('my-nfts-grid');
   if (!grid) return;
@@ -520,7 +503,7 @@ async function fetchUserNFTs() {
     grid.innerHTML = `
             <div class="col-span-2 text-center py-20 opacity-30">
                 <div class="text-4xl mb-4">👛</div>
-                <p class="text-sm">Connect wallet to view your library</p>
+                <p>Connect wallet to view your NFTs</p>
             </div>
         `;
     return;
@@ -529,15 +512,15 @@ async function fetchUserNFTs() {
   // Clear grid and show loader
   grid.innerHTML = '';
   const loadingEl = document.createElement('div');
-  loadingEl.className = 'col-span-2 text-center py-10 opacity-50 animate-pulse text-[10px] uppercase tracking-widest';
-  loadingEl.innerText = 'Syncing your gallery...';
+  loadingEl.className = 'col-span-2 text-center py-10 opacity-50 animate-pulse text-xs';
+  loadingEl.innerText = 'Scanning collections...';
   grid.appendChild(loadingEl);
 
   const collections = loadCollections();
   const userAddress = state.wallet.address;
   const client = createPublicClient({
     chain: base,
-    transport: http('https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57')
+    transport: http('https://mainnet.base.org')
   });
 
   let hasFoundAny = false;
@@ -560,51 +543,95 @@ async function fetchUserNFTs() {
 
       if (count > 0) {
         hasFoundAny = true;
+        const cardId = `nft-card-${collection.slug}`;
         const explorerUrl = getExplorerAddressUrl(collection.chainId, collection.contractAddress);
 
-        // Fetch Logs to find Token IDs
-        try {
-          const logs = await client.getLogs({
-            address: config.address,
-            event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)'),
-            args: { to: userAddress },
-            fromBlock: 'earliest'
-          });
+        // 2. Render Summary Card IMMEDIATELY
+        const summaryHtml = `
+                    <div id="${cardId}" class="col-span-2 bg-white/5 p-4 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors mb-2">
+                        <div class="flex items-center space-x-3">
+                            <img src="${collection.imageUrl}" class="w-10 h-10 rounded-lg object-cover" onerror="this.src='/placeholder.png'"/>
+                            <div>
+                                <div class="font-bold">${collection.name}</div>
+                                <div class="text-xs opacity-60">You own: <span class="text-indigo-300 font-bold">${count}</span></div>
+                                <div class="text-[10px] opacity-40 animate-pulse mt-1 status-text">Loading previews...</div>
+                            </div>
+                        </div>
+                        <a href="${explorerUrl}?a=${userAddress}" target="_blank" class="glass-card px-3 py-1 rounded-lg text-xs font-medium hover:bg-indigo-500/20 transition-colors">
+                            View
+                        </a>
+                    </div>
+                `;
 
-          const uniqueIds = [...new Set(logs.map(l => l.args.tokenId))];
-          // Limit to avoid excessive RPC calls if user has 1000s of NFTs
-          const subsetIds = uniqueIds.slice(0, 10);
+        const container = document.createElement('div');
+        container.className = 'col-span-2';
+        container.innerHTML = summaryHtml;
 
-          for (const id of subsetIds) {
-            try {
-              // Verify ownership (some might have been transferred away)
-              const owner = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'ownerOf', args: [id] });
+        if (loadingEl.parentNode) loadingEl.remove();
+        grid.appendChild(container);
 
-              if (owner.toLowerCase() === userAddress.toLowerCase()) {
-                if (loadingEl.parentNode) loadingEl.remove();
+        // 3. Background Fetch Images
+        (async () => {
+          try {
+            const logs = await client.getLogs({
+              address: config.address,
+              event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)'),
+              args: { to: userAddress },
+              fromBlock: 'earliest'
+            });
 
-                let image = collection.imageUrl;
-                let name = `${collection.name} #${id}`;
+            const uniqueIds = [...new Set(logs.map(l => l.args.tokenId))];
+            const subsetIds = uniqueIds.slice(0, 12);
 
-                // Try fetching metadata
-                try {
-                  const uri = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'tokenURI', args: [id] });
-                  const meta = await resolveMetadata(uri);
-                  if (meta.image) image = meta.image;
-                  if (meta.name) name = meta.name;
-                } catch (_) { }
+            let tokens = [];
+            for (const id of subsetIds) {
+              try {
+                const owner = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'ownerOf', args: [id] });
+                if (owner.toLowerCase() === userAddress.toLowerCase()) {
+                  let image = collection.imageUrl;
+                  let name = `${collection.name} #${id}`;
+                  try {
+                    const uri = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'tokenURI', args: [id] });
+                    const meta = await resolveMetadata(uri);
+                    if (meta.image) image = meta.image;
+                    if (meta.name) name = meta.name;
+                  } catch (_) { }
+                  tokens.push({ id: id.toString(), image, name });
+                }
+              } catch (_) { }
+            }
 
-                // Append card to grid
-                const cardHtml = renderNFTGalleryCard({ id: id.toString(), image, name }, collection, explorerUrl);
-                const temp = document.createElement('div');
-                temp.innerHTML = cardHtml;
-                grid.appendChild(temp.firstElementChild);
-              }
-            } catch (_) { }
+            if (tokens.length > 0) {
+              container.innerHTML = `
+                                <div class="col-span-2 mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
+                                    <div class="flex items-center justify-between mb-3 px-1">
+                                        <div class="flex items-center space-x-2">
+                                            <img src="${collection.imageUrl}" class="w-6 h-6 rounded-md"/>
+                                            <span class="font-bold text-sm">${collection.name}</span>
+                                            <span class="text-xs opacity-50">(${count})</span>
+                                        </div>
+                                        <a href="${explorerUrl}?a=${userAddress}" target="_blank" class="text-[10px] opacity-50 hover:opacity-100">Explorer ↗</a>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        ${tokens.map(t => `
+                                            <div class="aspect-square bg-black/50 rounded-lg overflow-hidden relative group cursor-pointer border border-white/5 hover:border-indigo-500/50 transition-all"
+                                                 onclick="window.open('${explorerUrl}?a=${t.id}', '_blank')">
+                                                <img src="${t.image}" class="w-full h-full object-cover" onerror="this.src='${collection.imageUrl}'" />
+                                                <div class="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[9px] font-mono backdrop-blur-md">#${t.id}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+            } else {
+              const statusEl = container.querySelector('.status-text');
+              if (statusEl) statusEl.remove();
+            }
+          } catch (e) {
+            const statusEl = container.querySelector('.status-text');
+            if (statusEl) statusEl.textContent = 'Preview unavailable';
           }
-        } catch (e) {
-          console.warn(`Could not fetch logs for ${collection.name}`, e);
-        }
+        })();
       }
     } catch (e) {
       console.warn(`Error processing ${collection.name}`, e);
@@ -614,7 +641,7 @@ async function fetchUserNFTs() {
   if (loadingEl.parentNode) {
     loadingEl.remove();
     if (!hasFoundAny) {
-      grid.innerHTML = '<div class="col-span-2 text-center py-20 opacity-30"><div class="text-4xl mb-4">📉</div><p class="text-sm">No NFTs found in your wallet.</p></div>';
+      grid.innerHTML = '<div class="col-span-2 text-center py-20 opacity-30"><div class="text-4xl mb-4">📉</div><p>No NFTs found.</p></div>';
     }
   }
 }
