@@ -67,28 +67,34 @@ async function init() {
     initWallet();
     console.log('✅ Wallet initialized');
 
-    // 3. Setup Router
-    setupRoutes();
-    console.log('✅ Router configured');
-
-    // 4. Handle initial route
-    await router.handleRoute();
-
-    // 5. Hide loading overlay
-    hideLoading();
-
-    // 6. Tell Farcaster we're ready
+    // 3. Tell Farcaster we're ready (EARLY - before route handling)
     const farcasterSDKInstance = getFarcasterSDK();
     if (farcasterSDKInstance) {
         try {
             await farcasterSDKInstance.actions.ready({ disableNativeGestures: true });
             console.log('✅ Farcaster ready() called');
+        } catch (error) {
+            console.warn('⚠️ Failed to call ready():', error);
+        }
+    }
 
-            // Try addMiniApp after ready
+    // 4. Setup Router
+    setupRoutes();
+    console.log('✅ Router configured');
+
+    // 5. Handle initial route
+    await router.handleRoute();
+
+    // 6. Hide loading overlay
+    hideLoading();
+
+    // 7. Try addMiniApp after everything is loaded
+    if (farcasterSDKInstance) {
+        try {
             await new Promise(resolve => setTimeout(resolve, 1000));
             await tryAddMiniApp();
         } catch (error) {
-            console.warn('Failed to call ready():', error);
+            console.warn('addMiniApp prompt failed:', error);
         }
     }
 
