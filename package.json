@@ -1,12 +1,13 @@
 {
-  "name": "nft-mini-app",
+  "name": "nft-mini-app-optimized",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "analyze": "vite-bundle-visualizer"
   },
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.2.3",
@@ -14,7 +15,6 @@
     "@reown/appkit": "^1.8.17",
     "@reown/appkit-adapter-wagmi": "^1.8.17",
     "@wagmi/core": "^2.16.3",
-    "@vercel/kv": "^3.0.0",
     "buffer": "^6.0.3",
     "canvas-confetti": "^1.9.3",
     "process": "^0.11.10",
@@ -24,6 +24,12 @@
     "viem": "^2.22.17"
   },
   "devDependencies": {
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.35",
+    "autoprefixer": "^10.4.17",
+    "vite-plugin-image-optimizer": "^1.1.7",
+    "terser": "^5.27.0",
+    "vite-bundle-visualizer": "^1.0.1"
   }
 }
