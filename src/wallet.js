@@ -2,7 +2,6 @@ import { createAppKit } from '@reown/appkit';
 import { mainnet, base, baseSepolia } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
-import { injected } from '@wagmi/connectors';
 import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
 import { EVENTS } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
@@ -23,12 +22,9 @@ export const wagmiAdapter = new WagmiAdapter({
     networks,
     connectors: [
         // Farcaster Mini App connector (for embedded frames)
-        farcasterMiniApp(),
-        // Injected connector (detects browser extensions like Farcaster Wallet)
-        injected({
-            shimDisconnect: true,
-            unstable_shimAsyncInject: true
-        })
+        farcasterMiniApp()
+        // The injected connector is automatically included in wagmi v2
+        // No need to explicitly import it
     ]
 });
 
@@ -39,12 +35,19 @@ export const modal = createAppKit({
     projectId,
     themeMode: 'dark',
     features: {
-        analytics: true
+        analytics: true,
+       InjectedWallet: true, // Enable injected wallet detection
+        Email: false, // Disable email wallet if not needed
+        Socials: [] // Disable social logins if not needed
     },
     themeVariables: {
         '--w3m-accent': '#6366F1',
         '--w3m-border-radius-master': '1px'
-    }
+    },
+    // Enable injected wallets explicitly
+    enableInjected: true,
+    enableEIP6963: true, // Enable EIP-6963 standard for wallet detection
+    enableCoinbase: true
 });
 
 let currentUnwatch = null;

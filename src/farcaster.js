@@ -19,22 +19,22 @@ export async function initFarcasterSDK() {
         if (typeof window !== 'undefined' && window.parent !== window) {
             // Get the context from SDK
             context = await sdk.context;
-            
+
             console.log('Farcaster SDK initialized', context);
             console.log('Context details:', {
                 client: context.client,
                 user: context.user,
                 location: context.location
             });
-            
+
             // DO NOT call ready() here - main.js will call it after everything loads
-            
+
             return { sdk, context };
         }
     } catch (error) {
         console.warn('Not in Farcaster context or SDK failed to load:', error);
     }
-    
+
     return { sdk: null, context: null };
 }
 
