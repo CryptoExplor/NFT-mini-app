@@ -69,11 +69,15 @@ async function init() {
         // In regular browser, the injected connector will detect Farcaster wallet extension
     }
 
-    // 2. Initialize Wallet
-    initWallet();
-    console.log('✅ Wallet initialized');
+    // 2. Initialize Wallet (NOW ASYNC AND AWAITED)
+    await initWallet();
+    console.log('✅ Wallet initialized with state:', {
+        address: state.wallet?.address,
+        isConnected: state.wallet?.isConnected,
+        chainId: state.wallet?.chainId
+    });
 
-    // 3. Tell Farcaster we're ready ✅ EARLY!
+    // 3. Tell Farcaster we're ready
     const farcasterSDKInstance = getFarcasterSDK();
     if (farcasterSDKInstance) {
         try {
@@ -81,11 +85,15 @@ async function init() {
             console.log('✅ Farcaster ready() called');
             
             // Add miniapp to user's app list
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            await farcasterSDKInstance.actions.addMiniApp();
-            console.log('✅ addMiniApp called successfully');
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await farcasterSDKInstance.actions.addMiniApp();
+                console.log('✅ addMiniApp called successfully');
+            } catch (e) {
+                console.warn('⚠️ addMiniApp failed (this is normal):', e);
+            }
         } catch (error) {
-            console.warn('⚠️ Failed to call ready() or addMiniApp:', error);
+            console.warn('⚠️ Failed to call ready():', error);
         }
     }
 
@@ -93,13 +101,11 @@ async function init() {
     setupRoutes();
     console.log('✅ Router configured');
 
-    // 5. Handle initial route
+    // 5. Handle initial route (this will render the page)
     await router.handleRoute();
 
     // 6. Hide loading overlay
     hideLoading();
-
-    // 7. App initialization complete
 
     console.log('🎉 App initialized successfully!');
 }
@@ -147,8 +153,6 @@ if (typeof window !== 'undefined') {
     // Expose router for debugging
     window.router = router;
 
-
-
     // Navigate helper (for testing)
     window.navigate = (path) => {
         router.navigate(path);
@@ -158,6 +162,5 @@ if (typeof window !== 'undefined') {
 // ============================================
 // START APP
 // ============================================
-
 
 init();
