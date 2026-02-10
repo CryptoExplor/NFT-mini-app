@@ -67,7 +67,7 @@ async function init() {
     initWallet();
     console.log('✅ Wallet initialized');
 
-    // 3. Tell Farcaster we're ready (EARLY - before route handling)
+    // 3. Tell Farcaster we're ready ✅ EARLY!
     const farcasterSDKInstance = getFarcasterSDK();
     if (farcasterSDKInstance) {
         try {
@@ -88,14 +88,10 @@ async function init() {
     // 6. Hide loading overlay
     hideLoading();
 
-    // 7. Try addMiniApp after everything is loaded
+    // 7. Try addMiniApp (after everything else)
     if (farcasterSDKInstance) {
-        try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            await tryAddMiniApp();
-        } catch (error) {
-            console.warn('addMiniApp prompt failed:', error);
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await tryAddMiniApp();
     }
 
     console.log('🎉 App initialized successfully!');
