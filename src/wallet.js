@@ -2,6 +2,7 @@ import { createAppKit } from '@reown/appkit';
 import { mainnet, base, baseSepolia } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
+import { injected } from '@wagmi/connectors';
 import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
 import { EVENTS } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
@@ -16,14 +17,53 @@ if (!projectId || projectId === 'REPLACE_ME') {
 // 2. Configure Networks
 export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 
-// 3. Create Wagmi Adapter with multiple connectors
-const wagmiAdapter = new WagmiAdapter({
-  networks,
-  projectId,
-  ssr: true
-})
+// 3. Create custom injected connector that detects Farcaster wallet
+const farcasterInjectedConnector = injected({
+    target() {
+        return {
+            id: 'farcaster',
+            name: 'Farcaster Wallet',
+            provider(window) {
+                // Check for Farcaster wallet in window.ethereum providers
+                if (window.ethereum?.providers) {
+                    const provider = window.ethereum.providers.find(
+                        (p) => p.isFarcaster || p.isFarcasterWallet
+                    );
+                    if (provider) return provider;
+                }
+                
+                // Check if single provider is Farcaster
+                if (window.ethereum?.isFarcaster || window.ethereum?.isFarcasterWallet) {
+                    return window.ethereum;
+                }
+                
+                // Fallback to window.farcaster if it exists
+                if (window.farcaster) {
+                    return window.farcaster;
+                }
+                
+                return undefined;
+            },
+        };
+    },
+});
 
-// 4. Create Modal
+// 4. Create Wagmi Adapter with multiple connectors
+export const wagmiAdapter = new WagmiAdapter({
+    projectId,
+    networks,
+    connectors: [
+        // Farcaster Mini App connector (for embedded frames)
+        farcasterMiniApp(),
+        // Custom Farcaster injected wallet connector
+        farcasterInjectedConnector,
+        // Standard injected connector for other wallets (MetaMask, etc.)
+        injected({ target: 'metaMask' }),
+        injected({ target: 'coinbaseWallet' })
+    ]
+});
+
+// 5. Create Modal
 export const modal = createAppKit({
     adapters: [wagmiAdapter],
     networks: [base],
@@ -31,18 +71,31 @@ export const modal = createAppKit({
     themeMode: 'dark',
     features: {
         analytics: true,
-       InjectedWallet: true, // Enable injected wallet detection
-        Email: false, // Disable email wallet if not needed
-        Socials: [] // Disable social logins if not needed
+        injected: true, // Enable injected wallet detection
+        email: false, // Disable email wallet
+        socials: [] // Disable social logins
     },
     themeVariables: {
         '--w3m-accent': '#6366F1',
         '--w3m-border-radius-master': '1px'
     },
-    // Enable injected wallets explicitly
+    // Metadata for better wallet detection
+    metadata: {
+        name: 'Base Mint App',
+        description: 'Mint NFTs on Base',
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
+        icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
+    },
+    // Enable all wallet detection methods
     enableInjected: true,
-    enableEIP6963: true, // Enable EIP-6963 standard for wallet detection
-    enableCoinbase: true
+    enableEIP6963: true,
+    enableCoinbase: true,
+    // Featured wallet IDs (helps with prioritization and detection)
+    featuredWalletIds: [
+        'farcaster', // Custom Farcaster wallet
+        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+        'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa' // Coinbase
+    ]
 });
 
 let currentUnwatch = null;
@@ -57,6 +110,13 @@ export function initWallet() {
 
     // Reconnect if possible
     reconnect(wagmiAdapter.wagmiConfig);
+    
+    // Log available connectors for debugging
+    console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+    })));
 }
 
 function handleAccountChange(account) {
@@ -66,17 +126,6 @@ function handleAccountChange(account) {
     // Check Chain
     if (account.isConnected && account.chainId) {
         document.dispatchEvent(new CustomEvent(EVENTS.CHAIN_UPDATE, { detail: { chainId: account.chainId } }));
-
-        // Auto-switch if wrong chain (optional, but requested as guard)
-        // We only enforce if we are definitely on a supported network list but wrong one?
-        // Or strictly enforce DEFAULT_CHAIN? 
-        // Let's strictly enforce if we are connected but on wrong chain.
-        /*
-        if (account.chainId !== DEFAULT_CHAIN.id) {
-           // Ideally show UI toast/notification instead of forcing immediately to avoid annoyance loops
-           console.warn('Wrong chain detected');
-        }
-        */
     }
 }
 
@@ -96,8 +145,6 @@ export async function disconnectWallet() {
         }
     } catch (error) {
         console.error('Failed to disconnect:', error);
-        // Force reload if disconnect fails state-wise?
-        // window.location.reload(); 
     }
 }
 
@@ -108,4 +155,3 @@ export function getCurrentAccount() {
 export async function switchToBase() {
     await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
 }
-
