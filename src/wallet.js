@@ -20,7 +20,7 @@ export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 export const wagmiAdapter = new WagmiAdapter({
     projectId,
     networks,
-    ssr: true
+    ssr: false
 });
 
 // 4. Create Modal with improved configuration
@@ -106,5 +106,6 @@ export function getCurrentAccount() {
 export async function switchToBase() {
     await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
 }
+
 
 
