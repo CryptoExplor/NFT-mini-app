@@ -17,16 +17,11 @@ if (!projectId || projectId === 'REPLACE_ME') {
 export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 
 // 3. Create Wagmi Adapter with multiple connectors
-export const wagmiAdapter = new WagmiAdapter({
-    projectId,
-    networks,
-    connectors: [
-        // Farcaster Mini App connector (for embedded frames)
-        farcasterMiniApp()
-        // The injected connector is automatically included in wagmi v2
-        // No need to explicitly import it
-    ]
-});
+const wagmiAdapter = new WagmiAdapter({
+  networks,
+  projectId,
+  ssr: true
+})
 
 // 4. Create Modal
 export const modal = createAppKit({
@@ -113,3 +108,4 @@ export function getCurrentAccount() {
 export async function switchToBase() {
     await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
 }
+
