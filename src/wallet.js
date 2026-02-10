@@ -1,8 +1,7 @@
 import { createAppKit } from '@reown/appkit';
-import { mainnet, base, baseSepolia } from '@reown/appkit/networks';
+import { base, baseSepolia } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
-import { injected } from '@wagmi/connectors';
 import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
 import { EVENTS } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
@@ -17,53 +16,17 @@ if (!projectId || projectId === 'REPLACE_ME') {
 // 2. Configure Networks
 export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 
-// 3. Create custom injected connector that detects Farcaster wallet
-const farcasterInjectedConnector = injected({
-    target() {
-        return {
-            id: 'farcaster',
-            name: 'Farcaster Wallet',
-            provider(window) {
-                // Check for Farcaster wallet in window.ethereum providers
-                if (window.ethereum?.providers) {
-                    const provider = window.ethereum.providers.find(
-                        (p) => p.isFarcaster || p.isFarcasterWallet
-                    );
-                    if (provider) return provider;
-                }
-                
-                // Check if single provider is Farcaster
-                if (window.ethereum?.isFarcaster || window.ethereum?.isFarcasterWallet) {
-                    return window.ethereum;
-                }
-                
-                // Fallback to window.farcaster if it exists
-                if (window.farcaster) {
-                    return window.farcaster;
-                }
-                
-                return undefined;
-            },
-        };
-    },
-});
-
-// 4. Create Wagmi Adapter with multiple connectors
+// 3. Create Wagmi Adapter with Farcaster support
 export const wagmiAdapter = new WagmiAdapter({
     projectId,
     networks,
     connectors: [
         // Farcaster Mini App connector (for embedded frames)
-        farcasterMiniApp(),
-        // Custom Farcaster injected wallet connector
-        farcasterInjectedConnector,
-        // Standard injected connector for other wallets (MetaMask, etc.)
-        injected({ target: 'metaMask' }),
-        injected({ target: 'coinbaseWallet' })
+        farcasterMiniApp()
     ]
 });
 
-// 5. Create Modal
+// 4. Create Modal with improved configuration
 export const modal = createAppKit({
     adapters: [wagmiAdapter],
     networks: [base],
@@ -72,30 +35,35 @@ export const modal = createAppKit({
     features: {
         analytics: true,
         injected: true, // Enable injected wallet detection
-        email: false, // Disable email wallet
-        socials: [] // Disable social logins
+        email: false,
+        socials: []
     },
     themeVariables: {
         '--w3m-accent': '#6366F1',
         '--w3m-border-radius-master': '1px'
     },
-    // Metadata for better wallet detection
+    // Enhanced metadata for better detection
     metadata: {
         name: 'Base Mint App',
         description: 'Mint NFTs on Base',
         url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
         icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
     },
-    // Enable all wallet detection methods
+    // ⭐ KEY FIX: Enable all wallet detection methods
     enableInjected: true,
     enableEIP6963: true,
     enableCoinbase: true,
-    // Featured wallet IDs (helps with prioritization and detection)
+    // Featured wallet IDs for better detection
     featuredWalletIds: [
-        'farcaster', // Custom Farcaster wallet
         'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-        'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa' // Coinbase
-    ]
+        'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase
+        '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369'  // Rainbow
+    ],
+    // ⭐ CRITICAL: Ensure Farcaster wallet is recognized
+    includeWalletIds: [
+        'farcaster' // Force include Farcaster
+    ],
+    allWallets: 'SHOW' // Show all available wallets
 });
 
 let currentUnwatch = null;
