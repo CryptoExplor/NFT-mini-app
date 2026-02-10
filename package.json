@@ -13,6 +13,7 @@
         "@farcaster/miniapp-wagmi-connector": "latest",
         "@reown/appkit": "^1.8.17",
         "@reown/appkit-adapter-wagmi": "^1.8.17",
+        "@wagmi/connectors": "latest",
         "@wagmi/core": "^2.16.3",
         "object-hash": "^3.0.0",
         "viem": "^2.22.17"
@@ -21,4 +22,5 @@
         "vite": "^5.4.11"
     }
 }
+
 
