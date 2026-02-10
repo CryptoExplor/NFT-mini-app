@@ -6,7 +6,10 @@
  * - /           → Homepage (collection grid)
  * - /mint/:slug → Mint page for specific collection
  */
+// Import polyfills FIRST
+import './polyfills.js';
 
+// Then your other imports
 import { initWallet, connectWallet, wagmiAdapter } from './wallet.js';
 import { state, updateState, EVENTS } from './state.js';
 import { initFarcasterSDK, isInFarcaster, getFarcasterSDK } from './farcaster.js';
@@ -185,5 +188,6 @@ if (typeof window !== 'undefined') {
 // ============================================
 // START APP
 // ============================================
+
 
 init();
