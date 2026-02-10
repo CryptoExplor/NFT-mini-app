@@ -46,20 +46,6 @@ export const modal = createAppKit({
         url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
         icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
     },
-    // ⭐ KEY FIX: Enable all wallet detection methods
-    enableInjected: true,
-    enableEIP6963: true,
-    enableCoinbase: true,
-    // Featured wallet IDs for better detection
-    featuredWalletIds: [
-        'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-        'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase
-        '1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369'  // Rainbow
-    ],
-    // ⭐ CRITICAL: Ensure Farcaster wallet is recognized
-    includeWalletIds: [
-        'farcaster' // Force include Farcaster
-    ],
     allWallets: 'SHOW' // Show all available wallets
 });
 
@@ -120,4 +106,5 @@ export function getCurrentAccount() {
 export async function switchToBase() {
     await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
 }
+
 
