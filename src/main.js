@@ -61,6 +61,9 @@ async function init() {
         } catch (error) {
             console.error('❌ Farcaster auto-connect failed:', error);
         }
+    } else {
+        console.log('🌐 Running in regular browser - Farcaster wallet extension detection enabled');
+        // In regular browser, the injected connector will detect Farcaster wallet extension
     }
 
     // 2. Initialize Wallet
