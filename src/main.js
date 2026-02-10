@@ -79,8 +79,13 @@ async function init() {
         try {
             await farcasterSDKInstance.actions.ready({ disableNativeGestures: true });
             console.log('✅ Farcaster ready() called');
+            
+            // Add miniapp to user's app list
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await farcasterSDKInstance.actions.addMiniApp();
+            console.log('✅ addMiniApp called successfully');
         } catch (error) {
-            console.warn('⚠️ Failed to call ready():', error);
+            console.warn('⚠️ Failed to call ready() or addMiniApp:', error);
         }
     }
 
@@ -94,11 +99,7 @@ async function init() {
     // 6. Hide loading overlay
     hideLoading();
 
-    // 7. Try addMiniApp (after everything else)
-    if (farcasterSDKInstance) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await tryAddMiniApp();
-    }
+    // 7. App initialization complete
 
     console.log('🎉 App initialized successfully!');
 }
@@ -136,40 +137,7 @@ function hideLoading() {
     }
 }
 
-async function tryAddMiniApp(force = false) {
-    if (!isInFarcaster()) {
-        console.log('Not in Farcaster - skipping addMiniApp');
-        return;
-    }
 
-    const hasPromptedAddApp = safeLocalStorage.getItem('hasPromptedAddApp');
-    
-    // Check if enough time has passed since last prompt (7 days)
-    const lastPromptTime = safeLocalStorage.getItem('lastAddMiniAppPrompt');
-    const sevenDays = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-    const shouldReprompt = !lastPromptTime || (Date.now() - parseInt(lastPromptTime)) > sevenDays;
-
-    if (force || (!hasPromptedAddApp && shouldReprompt)) {
-        try {
-            console.log('📲 Attempting to show addMiniApp prompt...');
-            const farcasterSDKInstance = getFarcasterSDK();
-
-            if (farcasterSDKInstance?.actions?.addMiniApp) {
-                await farcasterSDKInstance.actions.addMiniApp();
-                console.log('✅ addMiniApp prompt shown successfully');
-                safeLocalStorage.setItem('hasPromptedAddApp', 'true');
-                safeLocalStorage.setItem('lastAddMiniAppPrompt', Date.now().toString());
-            } else {
-                console.warn('addMiniApp action not available');
-            }
-        } catch (e) {
-            console.log('Add mini app prompt declined or failed:', e);
-        }
-    } else {
-        console.log('User already prompted for addMiniApp recently - skipping');
-        console.log(`Last prompt: ${lastPromptTime ? new Date(parseInt(lastPromptTime)).toLocaleString() : 'Never'}`);
-    }
-}
 
 // ============================================
 // DEBUG UTILITIES
@@ -179,21 +147,7 @@ if (typeof window !== 'undefined') {
     // Expose router for debugging
     window.router = router;
 
-    // Force addMiniApp (for testing)
-    window.forceAddMiniApp = async () => {
-        console.log('🔧 Forcing addMiniApp prompt (debug)...');
-        safeLocalStorage.removeItem('hasPromptedAddApp');
-        safeLocalStorage.removeItem('lastAddMiniAppPrompt');
-        await tryAddMiniApp(true);
-    };
-    
-    // Reset addMiniApp prompt (for users who removed and reinstalled)
-    window.resetAddMiniAppPrompt = () => {
-        console.log('🔄 Resetting addMiniApp prompt flag...');
-        safeLocalStorage.removeItem('hasPromptedAddApp');
-        safeLocalStorage.removeItem('lastAddMiniAppPrompt');
-        console.log('✅ Reset complete. Refresh the page to see the prompt.');
-    };
+
 
     // Navigate helper (for testing)
     window.navigate = (path) => {
