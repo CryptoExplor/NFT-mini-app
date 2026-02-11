@@ -4,11 +4,11 @@
  */
 
 // Import CSS first
-
+import './index.css';
 
 // Import polyfills
 import './polyfills.js';
-import './index.css';
+
 // Core imports
 import { initWallet, wagmiAdapter } from './wallet.js';
 import { state, EVENTS } from './state.js';
@@ -39,6 +39,17 @@ async function init() {
         console.log('📱 Running in Farcaster');
         state.farcaster = farcasterResult;
 
+        // Call ready() IMMEDIATELY so splash screen dismisses
+        // This MUST happen before any potentially slow async work
+        if (farcasterResult.sdk) {
+            try {
+                await farcasterResult.sdk.actions.ready({ disableNativeGestures: true });
+                console.log('✅ Farcaster ready() called early');
+            } catch (e) {
+                console.warn('Farcaster ready() failed:', e);
+            }
+        }
+
         // Try auto-connect (non-blocking)
         autoConnectFarcaster().catch(e => console.warn('Auto-connect failed:', e));
     } else {
@@ -48,22 +59,20 @@ async function init() {
     // Step 2: Setup routes (synchronous, no waiting)
     setupRoutes();
 
-    // Step 3: Render page immediately (Critical for perceptional performance)
-    await router.handleRoute();
+    // Step 3: Initialize wallet + render page IN PARALLEL
+    // This shows the page immediately while wallet connects in background
+    await Promise.all([
+        initWallet(),
+        router.handleRoute() // User sees content immediately!
+    ]);
 
-    // Step 4: Notify Farcaster we're ready (CRITICAL: Do this BEFORE wallet init to prevent hanging)
+    // Step 4: Add to mini app (non-blocking, ready() already called above)
     if (farcasterResult.sdk) {
-        console.log('🔔 Sending ready command to Farcaster...');
-        notifyFarcasterReady(farcasterResult.sdk);
+        farcasterResult.sdk.actions.addMiniApp().catch(e => console.warn('addMiniApp:', e));
     }
 
-    // Step 5: Hide loading overlay immediately
+    // Step 5: Hide loading overlay
     hideLoading();
-
-    // Step 6: Initialize wallet in background
-    // We don't await this because we want user to see the app ASAP.
-    // Wallet auto-connect will trigger UI updates via events.
-    initWallet().catch(e => console.error('Wallet init failed:', e));
 
     // Performance logging
     const loadTime = performance.now() - startTime;
@@ -98,14 +107,7 @@ async function autoConnectFarcaster() {
     }
 }
 
-function notifyFarcasterReady(sdk) {
-    // Run in background, don't block
-    Promise.all([
-        sdk.actions.ready({ disableNativeGestures: true }),
-        new Promise(resolve => setTimeout(resolve, 1000))
-            .then(() => sdk.actions.addMiniApp())
-    ]).catch(e => console.warn('Farcaster notification:', e));
-}
+// notifyFarcasterReady removed — ready() is now called immediately after SDK init
 
 function setupRoutes() {
     // Lazy-load page modules for code splitting
