@@ -1,31 +1,101 @@
-
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
- * Track a successful mint
- * @param {string} wallet - Wallet address
- * @param {string} collection - Collection slug
- * @param {string} txHash - Transaction hash
+ * Track a structured event to backend analytics
+ * @param {string} type - Event type (page_view, mint_success, etc.)
+ * @param {Object} data - Event metadata
  */
-export async function trackMint(wallet, collection, txHash) {
+export async function trackEvent(type, data = {}) {
     try {
-        await fetch(`${API_BASE}/api/track`, {
+        // Enrich with client-side metadata
+        const enriched = {
+            type,
+            ...data,
+            device: getDeviceType(),
+            referrer: getReferrer(),
+            campaign: getCampaign()
+        };
+
+        // Fire and forget (don't block UI)
+        fetch(`${API_BASE}/api/track`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet, collection, txHash })
-        });
+            body: JSON.stringify(enriched)
+        }).catch(err => console.warn('Track failed:', err));
+
     } catch (error) {
-        console.error('Failed to track mint:', error);
+        console.warn('trackEvent error:', error);
     }
 }
 
 /**
- * Get global leaderboard and stats
- * @returns {Promise<Object>} Leaderboard data
+ * Track a successful mint (convenience wrapper)
  */
-export async function getLeaderboard() {
+export function trackMint(wallet, collection, txHash, price = 0, gas = 0) {
+    trackEvent('mint_success', { wallet, collection, txHash, price, gas });
+}
+
+/**
+ * Track a page view
+ */
+export function trackPageView(page, wallet = null) {
+    trackEvent('page_view', { page, wallet });
+}
+
+/**
+ * Track collection view
+ */
+export function trackCollectionView(collection, wallet = null) {
+    trackEvent('collection_view', { collection, wallet });
+}
+
+/**
+ * Track wallet connection
+ */
+export function trackWalletConnect(wallet) {
+    trackEvent('wallet_connect', { wallet });
+}
+
+/**
+ * Track mint funnel step
+ */
+export function trackMintClick(wallet, collection) {
+    trackEvent('mint_click', { wallet, collection });
+}
+
+/**
+ * Track mint attempt (tx sent)
+ */
+export function trackMintAttempt(wallet, collection) {
+    trackEvent('mint_attempt', { wallet, collection });
+}
+
+/**
+ * Track tx sent
+ */
+export function trackTxSent(wallet, collection, txHash) {
+    trackEvent('tx_sent', { wallet, collection, txHash });
+}
+
+/**
+ * Track mint failure
+ */
+export function trackMintFailure(wallet, collection, reason = '') {
+    trackEvent('mint_failure', { wallet, collection, metadata: { reason } });
+}
+
+/**
+ * Get global leaderboard and analytics
+ * @param {Object} options - Query params (type, period, limit)
+ */
+export async function getLeaderboard(options = {}) {
     try {
-        const response = await fetch(`${API_BASE}/api/leaderboard`);
+        const params = new URLSearchParams({
+            type: options.type || 'mints',
+            period: options.period || 'all_time',
+            limit: options.limit || 10
+        });
+        const response = await fetch(`${API_BASE}/api/leaderboard?${params}`);
         if (!response.ok) throw new Error('Failed to fetch leaderboard');
         return await response.json();
     } catch (error) {
@@ -35,9 +105,8 @@ export async function getLeaderboard() {
 }
 
 /**
- * Get user stats
+ * Get user stats (private - own wallet only)
  * @param {string} wallet - Wallet address
- * @returns {Promise<Object>} User data
  */
 export async function getUserStats(wallet) {
     if (!wallet) return null;
@@ -49,4 +118,32 @@ export async function getUserStats(wallet) {
         console.error('Failed to fetch user stats:', error);
         return null;
     }
+}
+
+// ============================================
+// CLIENT-SIDE HELPERS
+// ============================================
+
+function getDeviceType() {
+    if (typeof window === 'undefined') return 'unknown';
+    const ua = navigator.userAgent;
+    if (/Mobi|Android/i.test(ua)) return 'mobile';
+    if (/Tablet|iPad/i.test(ua)) return 'tablet';
+    return 'desktop';
+}
+
+function getReferrer() {
+    if (typeof document === 'undefined') return 'direct';
+    const ref = document.referrer;
+    if (!ref) return 'direct';
+    if (ref.includes('warpcast.com') || ref.includes('farcaster')) return 'farcaster';
+    if (ref.includes('twitter.com') || ref.includes('x.com')) return 'twitter';
+    if (ref.includes('t.me') || ref.includes('telegram')) return 'telegram';
+    return 'other';
+}
+
+function getCampaign() {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('utm_campaign') || params.get('ref') || null;
 }

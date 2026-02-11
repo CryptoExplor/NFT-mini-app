@@ -12,6 +12,7 @@ import { shortenAddress } from '../utils/dom.js';
 import { getBalance } from '@wagmi/core';
 import { toast } from '../utils/toast.js';
 import { analytics } from '../utils/analytics.js';
+import { trackEvent } from '../lib/api.js';
 
 // HTML escape to prevent XSS from NFT metadata
 function esc(str) {
@@ -37,6 +38,7 @@ let delegatedClickHandler = null;
  */
 export async function renderGalleryPage() {
     analytics.trackView('gallery');
+    trackEvent('gallery_view', { wallet: state.wallet?.address || null });
 
     const app = document.getElementById('app');
     app.innerHTML = buildGalleryHTML();

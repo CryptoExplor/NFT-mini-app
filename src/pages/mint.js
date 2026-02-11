@@ -14,7 +14,7 @@ import { shortenAddress } from '../utils/dom.js';
 import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
-import { trackMint } from '../lib/api.js';
+import { trackMint, trackMintClick, trackMintAttempt, trackTxSent, trackMintFailure, trackCollectionView } from '../lib/api.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
@@ -30,6 +30,9 @@ let currentCollection = null;
 export async function renderMintPage(params) {
   const { slug } = params;
   const collection = getCollectionBySlug(slug);
+
+  // Track collection view for funnel analytics
+  trackCollectionView(slug, state.wallet?.address || null);
 
   if (!collection) {
     render404(slug);
@@ -504,6 +507,7 @@ async function handleMint(collection, stage) {
 
     // Track attempt
     analytics.trackMintAttempt(collection.slug);
+    trackMintAttempt(state.wallet.address, collection.slug);
 
     const { mint } = await import('../lib/mintHelpers.js');
     const hash = await mint(collection, stage);
@@ -513,7 +517,8 @@ async function handleMint(collection, stage) {
 
     toast.show('Successfully minted NFT! 🎉', 'success');
 
-    // Track on server
+    // Track on server (full funnel: tx_sent + mint_success)
+    trackTxSent(state.wallet.address, collection.slug, hash);
     trackMint(state.wallet.address, collection.slug, hash);
 
     mintText.textContent = 'Success! 🎉';
@@ -530,7 +535,7 @@ async function handleMint(collection, stage) {
         
         <div class="flex space-x-3">
           <button id="share-farcaster-success" class="bg-[#8a63d2] hover:bg-[#7a53c2] px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
-            <span class="text-lg">🟣</span>
+            <img src="/farcaster.png" alt="Farcaster" class="w-5 h-5" />
             <span class="text-xs font-bold">Post to Warpcast</span>
           </button>
           
@@ -573,6 +578,7 @@ async function handleMint(collection, stage) {
 
     // Track failure
     analytics.trackMintFailure(collection.slug, error);
+    trackMintFailure(state.wallet.address, collection.slug, error?.message || 'unknown');
 
     const friendlyMessage = handleMintError(error);
     toast.show(friendlyMessage, 'error');

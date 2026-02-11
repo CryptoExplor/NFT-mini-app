@@ -13,6 +13,7 @@ import { shareCollection } from '../utils/social.js';
 import { getExplorerAddressUrl } from '../utils/chain.js';
 import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
+import { trackPageView } from '../lib/api.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -24,6 +25,7 @@ let filterChangeHandler = null;
  */
 export async function renderHomePage() {
   analytics.trackView('home');
+  trackPageView('home', state.wallet?.address || null);
   let collections = loadCollections();
 
   // Randomly promote one LIVE collection to the top
