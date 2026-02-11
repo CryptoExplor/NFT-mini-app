@@ -53,7 +53,7 @@ let currentUnwatch = null;
 
 export async function initWallet() {
     console.log('🔌 Initializing wallet connection...');
-    
+
     // 1. Get initial account state FIRST (synchronously)
     const initialAccount = getAccount(wagmiAdapter.wagmiConfig);
     console.log('Initial account state:', {
@@ -62,10 +62,10 @@ export async function initWallet() {
         chainId: initialAccount.chainId,
         connector: initialAccount.connector?.name
     });
-    
+
     // 2. Update global state immediately with initial state
     handleAccountChange(initialAccount);
-    
+
     // 3. Watch for future account changes
     currentUnwatch = watchAccount(wagmiAdapter.wagmiConfig, {
         onChange(account) {
@@ -83,10 +83,10 @@ export async function initWallet() {
     try {
         const reconnectResult = await reconnect(wagmiAdapter.wagmiConfig);
         console.log('✅ Reconnected:', reconnectResult);
-        
+
         // After reconnect, get the latest account state
         const updatedAccount = getAccount(wagmiAdapter.wagmiConfig);
-        if (updatedAccount.address !== initialAccount.address || 
+        if (updatedAccount.address !== initialAccount.address ||
             updatedAccount.isConnected !== initialAccount.isConnected) {
             console.log('🔄 Account state updated after reconnect');
             handleAccountChange(updatedAccount);
@@ -94,7 +94,7 @@ export async function initWallet() {
     } catch (error) {
         console.warn('⚠️ Reconnect failed (this is normal if no previous session):', error);
     }
-    
+
     // Log available connectors for debugging
     console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => ({
         id: c.id,
@@ -111,7 +111,7 @@ function handleAccountChange(account) {
         isConnected: account.isConnected,
         connector: account.connector
     };
-    
+
     // Dispatch generic update event
     document.dispatchEvent(new CustomEvent(EVENTS.WALLET_UPDATE, { detail: account }));
 

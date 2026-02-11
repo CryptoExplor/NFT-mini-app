@@ -17,19 +17,19 @@
     "@wagmi/core": "^2.16.3",
     "buffer": "^6.0.3",
     "canvas-confetti": "^1.9.3",
+    "object-hash": "^3.0.0",
     "process": "^0.11.10",
     "stream-browserify": "^3.0.0",
     "util": "^0.12.5",
-    "object-hash": "^3.0.0",
     "viem": "^2.22.17"
   },
   "devDependencies": {
-    "vite": "^5.4.11",
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8.4.35",
     "autoprefixer": "^10.4.17",
-    "vite-plugin-image-optimizer": "^1.1.7",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
     "terser": "^5.27.0",
-    "vite-bundle-visualizer": "^1.0.1"
+    "vite": "^5.4.11",
+    "vite-bundle-visualizer": "^1.0.1",
+    "vite-plugin-image-optimizer": "^1.1.9"
   }
 }

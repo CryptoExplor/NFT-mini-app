@@ -16,7 +16,9 @@ export default {
                 'float': 'float 6s ease-in-out infinite',
                 'shimmer': 'shimmer 2.5s linear infinite',
                 'scale-glow': 'scale-glow 0.3s ease-out',
-                'loading': 'loading 1.5s infinite'
+                'loading': 'loading 1.5s infinite',
+                'fade-in': 'fadeIn 0.5s ease-in-out',
+                'glow-pulse': 'glow-pulse 1.5s ease-in-out infinite alternate',
             },
             keyframes: {
                 aurora: {
@@ -42,15 +44,59 @@ export default {
                     '100%': { backgroundPosition: '-200% 0' }
                 },
                 'scale-glow': {
-                    '0%': { transform: 'scale(0.95)', boxShadow: '0 0 0 rgba(79, 70, 229, 0)' },
-                    '100%': { transform: 'scale(1)', boxShadow: '0 0 20px rgba(79, 70, 229, 0.5)' }
+                    '0%': { 
+                        transform: 'scale(0.95)', 
+                        boxShadow: '0 0 0 rgba(79, 70, 229, 0)' 
+                    },
+                    '100%': { 
+                        transform: 'scale(1)', 
+                        boxShadow: '0 0 20px rgba(79, 70, 229, 0.5)' 
+                    }
                 },
-                'loading': {
+                loading: {
                     '0%': { backgroundPosition: '200% 0' },
                     '100%': { backgroundPosition: '-200% 0' }
+                },
+                fadeIn: {
+                    'from': { opacity: '0' },
+                    'to': { opacity: '1' }
+                },
+                'glow-pulse': {
+                    'from': { 
+                        opacity: '0.6',
+                        boxShadow: '0 0 5px #10B981'
+                    },
+                    'to': { 
+                        opacity: '1',
+                        boxShadow: '0 0 15px #10B981, 0 0 25px rgba(16, 185, 129, 0.5)'
+                    }
                 }
+            },
+            backdropBlur: {
+                xs: '2px',
             }
         },
     },
     plugins: [],
+    
+    // Production optimizations
+    future: {
+        hoverOnlyWhenSupported: true,
+    },
+    
+    // Safelist important dynamic classes
+    safelist: [
+        'bg-green-500/20',
+        'bg-blue-500/20',
+        'bg-red-500/20',
+        'bg-yellow-500/20',
+        'text-green-400',
+        'text-blue-400',
+        'text-red-400',
+        'text-yellow-400',
+        'border-green-500/30',
+        'border-blue-500/30',
+        'border-red-500/30',
+        'border-yellow-500/30',
+    ]
 }

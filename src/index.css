@@ -1,0 +1,276 @@
+/* Import Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================ */
+/* CUSTOM STYLES - Migrated from index.html */
+/* ============================================ */
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure body and html still allow scrolling */
+html,
+body {
+  overflow: auto;
+}
+
+/* ============================================ */
+/* AURORA BACKGROUND EFFECTS */
+/* ============================================ */
+
+.aurora-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: -2;
+  background: radial-gradient(circle at 50% 50%, #0f172a 0%, #000000 100%);
+}
+
+.aurora-glow {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.15), transparent 60%);
+  animation: aurora 20s ease-in-out infinite;
+  z-index: -1;
+  filter: blur(100px);
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.stars {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+    radial-gradient(1px 1px at 40px 70px, #fff, transparent),
+    radial-gradient(1px 1px at 50px 160px, #fff, transparent),
+    radial-gradient(2px 2px at 90px 40px, rgba(99, 102, 241, 0.5), transparent),
+    radial-gradient(2px 2px at 160px 30px, rgba(139, 92, 246, 0.3), transparent);
+  background-repeat: repeat;
+  background-size: 200px 100px;
+  animation: float 8s ease-in-out infinite;
+}
+
+/* ============================================ */
+/* GLASS MORPHISM */
+/* ============================================ */
+
+.glass-card {
+  background: rgba(15, 15, 35, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 20px rgba(99, 102, 241, 0.1);
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 30px rgba(99, 102, 241, 0.2);
+}
+
+.glass-header {
+  background: rgba(15, 15, 35, 0.2);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+/* ============================================ */
+/* BUTTONS */
+/* ============================================ */
+
+.legendary-button {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.legendary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
+}
+
+/* ============================================ */
+/* STATUS INDICATORS */
+/* ============================================ */
+
+.status-glow {
+  width: 8px;
+  height: 8px;
+  background: #10B981;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #10B981, 0 0 20px rgba(16, 185, 129, 0.5);
+  animation: glow-pulse 1.5s ease-in-out infinite alternate;
+}
+
+/* ============================================ */
+/* ANIMATIONS */
+/* ============================================ */
+
+@keyframes aurora {
+  0%, 100% {
+    transform: translateX(-50%) translateY(-50%) rotate(0deg) scale(1);
+    opacity: 0.3;
+  }
+  33% {
+    transform: translateX(-30%) translateY(-30%) rotate(120deg) scale(1.2);
+    opacity: 0.5;
+  }
+  66% {
+    transform: translateX(-70%) translateY(-70%) rotate(240deg) scale(0.8);
+    opacity: 0.3;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow-pulse {
+  from {
+    opacity: 0.6;
+    box-shadow: 0 0 5px #10B981;
+  }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 15px #10B981, 0 0 25px rgba(16, 185, 129, 0.5);
+  }
+}
+
+.img-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ============================================ */
+/* CUSTOM SCROLLBAR (for specific elements) */
+/* ============================================ */
+
+.custom-scrollbar::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.5);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.7);
+}
+
+/* ============================================ */
+/* UTILITY CLASSES */
+/* ============================================ */
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ============================================ */
+/* LOADING STATES */
+/* ============================================ */
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* ============================================ */
+/* RESPONSIVE OPTIMIZATIONS */
+/* ============================================ */
+
+@media (max-width: 640px) {
+  .glass-card {
+    backdrop-filter: blur(15px);
+  }
+  
+  .aurora-glow {
+    filter: blur(80px);
+  }
+}
+
+/* ============================================ */
+/* PRINT STYLES */
+/* ============================================ */
+
+@media print {
+  .aurora-bg,
+  .aurora-glow,
+  .stars {
+    display: none;
+  }
+  
+  .glass-card {
+    background: white;
+    color: black;
+  }
+}

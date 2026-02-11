@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="base:app_id" content="69876c3e6dea3c7b8e149eb0" />
-  <title>Mint NFTs on Base • Legendary </title>
+  <title>Mint NFTs on Base • Legendary</title>
 
   <!-- Farcaster Mini App Metadata -->
   <meta name="fc:miniapp" content='{
@@ -23,224 +23,68 @@
     }
   }' />
 
-
   <!-- Favicon -->
-  <link rel="icon" type="image/svg+xml" href="public/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
 
-  <!-- Tailwind CDN (Ensures styles load even if Vite is misconfigured) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#0066FF',
-            legendary: '#6366F1',
-            aurora: '#8B5CF6'
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Preconnect to critical origins -->
+  <link rel="preconnect" href="https://base-mainnet.infura.io" crossorigin>
+  <link rel="dns-prefetch" href="https://base-mainnet.infura.io">
 
-  <!-- Custom CSS for legendary effects -->
-  <style>
-    /* Hide scrollbar for Chrome, Safari and Opera */
-    *::-webkit-scrollbar {
-      display: none;
-    }
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#0f172a">
 
-    /* Hide scrollbar for IE, Edge and Firefox */
-    * {
-      -ms-overflow-style: none;
-      /* IE and Edge */
-      scrollbar-width: none;
-      /* Firefox */
-    }
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
 
-    /* Ensure body and html still allow scrolling */
-    html,
-    body {
-      overflow: auto;
-    }
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="/icon.png">
 
-    .aurora-bg {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      z-index: -2;
-      background: radial-gradient(circle at 50% 50%, #0f172a 0%, #000000 100%);
-    }
-
-    .aurora-glow {
-      position: fixed;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.15), transparent 60%);
-      animation: aurora 20s ease-in-out infinite;
-      z-index: -1;
-      filter: blur(100px);
-    }
-
-    body {
-      overflow-x: hidden;
-      overflow-y: auto;
-    }
-
-    .stars {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      background-image:
-        radial-gradient(1px 1px at 20px 30px, #fff, transparent),
-        radial-gradient(1px 1px at 40px 70px, #fff, transparent),
-        radial-gradient(1px 1px at 50px 160px, #fff, transparent),
-        radial-gradient(2px 2px at 90px 40px, rgba(99, 102, 241, 0.5), transparent),
-        radial-gradient(2px 2px at 160px 30px, rgba(139, 92, 246, 0.3), transparent);
-      background-repeat: repeat;
-      background-size: 200px 100px;
-      animation: float 8s ease-in-out infinite;
-    }
-
-    .glass-card {
-      background: rgba(15, 15, 35, 0.4);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(99, 102, 241, 0.2);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 20px rgba(99, 102, 241, 0.1);
-      transition: all 0.3s ease;
-    }
-
-    .glass-card:hover {
-      border-color: rgba(99, 102, 241, 0.4);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 30px rgba(99, 102, 241, 0.2);
-    }
-
-    .glass-header {
-      background: rgba(15, 15, 35, 0.2);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
-    }
-
-    .legendary-button {
-      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-      position: relative;
-      overflow: hidden;
-      transition: all 0.3s ease;
-      z-index: 10;
-    }
-
-    .legendary-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
-    }
-
-    .status-glow {
-      width: 8px;
-      height: 8px;
-      background: #10B981;
-      border-radius: 50%;
-      box-shadow: 0 0 10px #10B981, 0 0 20px rgba(16, 185, 129, 0.5);
-      animation: glow-pulse 1.5s ease-in-out infinite alternate;
-    }
-
-    @keyframes aurora {
-
-      0%,
-      100% {
-        transform: translateX(-50%) translateY(-50%) rotate(0deg) scale(1);
-        opacity: 0.3;
-      }
-
-      33% {
-        transform: translateX(-30%) translateY(-30%) rotate(120deg) scale(1.2);
-        opacity: 0.5;
-      }
-
-      66% {
-        transform: translateX(-70%) translateY(-70%) rotate(240deg) scale(0.8);
-        opacity: 0.3;
-      }
-    }
-
-    @keyframes float {
-
-      0%,
-      100% {
-        transform: translateY(0);
-      }
-
-      50% {
-        transform: translateY(-10px);
-      }
-    }
-
-    @keyframes glow-pulse {
-      from {
-        opacity: 0.6;
-        box-shadow: 0 0 5px #10B981;
-      }
-
-      to {
-        opacity: 1;
-        box-shadow: 0 0 15px #10B981, 0 0 25px rgba(16, 185, 129, 0.5);
-      }
-    }
-
-    .img-fade-in {
-      animation: fadeIn 0.5s ease-in-out;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-  </style>
+  <!-- CSS will be injected by Vite -->
 </head>
 
 <body class="min-h-screen text-white relative bg-slate-900">
 
-  <!-- Backgrounds handled by CSS -->
+  <!-- Backgrounds -->
   <div class="aurora-bg"></div>
   <div class="aurora-glow"></div>
   <div class="stars"></div>
 
   <!-- Loading Overlay -->
   <div id="loading-overlay"
+    style="position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:#0f0f23;transition:opacity 0.5s;"
     class="fixed inset-0 z-50 flex items-center justify-center bg-[#0f0f23] transition-opacity duration-500">
-    <div class="text-center">
-      <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4">
+    <div class="text-center" style="text-align:center;">
+      <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+        style="width:4rem;height:4rem;border:4px solid #6366f1;border-top-color:transparent;border-radius:50%;margin:0 auto 1rem;animation:spin 1s linear infinite;">
       </div>
       <h2
-        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 animate-pulse">
+        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 animate-pulse"
+        style="font-size:1.25rem;font-weight:700;background:linear-gradient(to right,#818cf8,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:pulse 2s cubic-bezier(0.4,0,0.6,1) infinite;">
         Initializing...
       </h2>
     </div>
   </div>
+  <style>
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: .5;
+      }
+    }
+  </style>
 
   <!-- App Container - Pages render here dynamically -->
   <div id="app"></div>
 
-  <!-- Toast Notification -->
-  <div id="toast"
-    class="fixed bottom-8 left-1/2 transform -translate-x-1/2 glass-card px-6 py-3 rounded-full border border-indigo-500/30 flex items-center space-x-3 transition-all duration-300 translate-y-20 opacity-0 z-50">
-    <span class="text-2xl">🔔</span>
-    <span id="toast-message" class="text-sm font-medium">Notification</span>
-  </div>
+  <!-- Toast notifications are created dynamically by ToastManager -->
 
-  <script type="module" src="src/main.js"></script>
+  <!-- Main JS entry point -->
+  <script type="module" src="/src/main.js"></script>
 </body>
 
 </html>

@@ -202,6 +202,11 @@ export async function renderHomePage() {
 
   // Attach event handlers
   attachEventHandlers();
+
+  // Fetch balance on initial load if wallet is already connected
+  if (state.wallet?.isConnected && state.wallet?.address) {
+    updateWalletBalance(state.wallet);
+  }
 }
 
 /**
@@ -328,12 +333,17 @@ function attachEventHandlers() {
   // Add wallet update listener
   walletUpdateHandler = (e) => {
     const account = e.detail;
-    state.wallet = account;
     updateConnectButton(account);
     updateProfileWalletInfo(account);
-    updateWalletBalance(account); // Update balance display
-    if (account.isConnected) {
+
+    if (account?.isConnected && account?.address) {
+      // Connected — fetch balance and NFTs
+      updateWalletBalance(account);
       fetchUserNFTs();
+    } else {
+      // Disconnected — clear balance display and NFT grid
+      clearWalletBalance();
+      clearNFTGrid();
     }
   };
   document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
@@ -759,24 +769,64 @@ async function updateWalletBalance(account) {
 
   if (!balanceContainer || !balanceValue) return;
 
-  if (!account?.isConnected || !account.address) {
-    balanceContainer.classList.add('hidden');
+  if (!account?.isConnected || !account?.address) {
+    clearWalletBalance();
     return;
   }
 
   balanceContainer.classList.remove('hidden');
+  balanceContainer.classList.add('md:flex');
   balanceValue.textContent = 'Loading...';
 
   try {
+    // Use chainId from account, or default to base (8453)
+    const chainId = account.chainId || 8453;
     const balance = await getBalance(wagmiAdapter.wagmiConfig, {
       address: account.address,
-      chainId: account.chainId
+      chainId: chainId
     });
+
+    // Check if wallet is still connected (may have disconnected during async fetch)
+    if (!state.wallet?.isConnected) {
+      clearWalletBalance();
+      return;
+    }
 
     const eth = Number(balance.value) / 1e18;
     balanceValue.textContent = `${eth.toFixed(4)} ETH`;
   } catch (e) {
     console.error('Failed to fetch balance:', e);
     balanceValue.textContent = 'Error';
+  }
+}
+
+/**
+ * Clear wallet balance display on disconnect
+ */
+function clearWalletBalance() {
+  const balanceContainer = document.getElementById('wallet-balance');
+  const balanceValue = document.querySelector('.balance-value');
+
+  if (balanceContainer) {
+    balanceContainer.classList.add('hidden');
+    balanceContainer.classList.remove('md:flex');
+  }
+  if (balanceValue) {
+    balanceValue.textContent = 'Loading...';
+  }
+}
+
+/**
+ * Clear NFT grid on disconnect
+ */
+function clearNFTGrid() {
+  const grid = document.getElementById('my-nfts-grid');
+  if (grid) {
+    grid.innerHTML = `
+      <div class="col-span-2 text-center py-20 opacity-30">
+        <div class="text-4xl mb-4">🖼️</div>
+        <p class="text-sm">Connect wallet to view your NFT gallery</p>
+      </div>
+    `;
   }
 }
