@@ -16,6 +16,7 @@ import { initFarcasterSDK, isInFarcaster } from './farcaster.js';
 import { router } from './lib/router.js';
 import { toast } from './utils/toast.js';
 import { $ } from './utils/dom.js';
+import { sdk as farcasterSdk } from '@farcaster/miniapp-sdk';
 
 // ============================================
 // OPTIMIZED INITIALIZATION
@@ -25,6 +26,17 @@ async function init() {
     console.log('🚀 Initializing NFT Mint App (Optimized)...');
 
     const startTime = performance.now();
+
+    // ⚡ STEP 0: Call ready() IMMEDIATELY — before ANY async work
+    // This dismisses the Farcaster mobile splash screen ASAP.
+    // If this doesn't fire, the app is stuck on splash forever.
+    try {
+        await farcasterSdk.actions.ready({ disableNativeGestures: true });
+        console.log('✅ Farcaster ready() fired');
+    } catch (e) {
+        // Not in Farcaster or SDK not available — totally fine
+        console.log('ℹ️ Farcaster ready() skipped (not in frame)');
+    }
 
     // Step 1: Start all independent tasks in PARALLEL
     const [farcasterResult, toastReady] = await Promise.all([
@@ -38,17 +50,6 @@ async function init() {
     if (isInFarcaster() && farcasterResult.context) {
         console.log('📱 Running in Farcaster');
         state.farcaster = farcasterResult;
-
-        // Call ready() IMMEDIATELY so splash screen dismisses
-        // This MUST happen before any potentially slow async work
-        if (farcasterResult.sdk) {
-            try {
-                await farcasterResult.sdk.actions.ready({ disableNativeGestures: true });
-                console.log('✅ Farcaster ready() called early');
-            } catch (e) {
-                console.warn('Farcaster ready() failed:', e);
-            }
-        }
 
         // Try auto-connect (non-blocking)
         autoConnectFarcaster().catch(e => console.warn('Auto-connect failed:', e));

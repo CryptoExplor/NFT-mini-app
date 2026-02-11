@@ -14,6 +14,7 @@ import { shortenAddress } from '../utils/dom.js';
 import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
+import { trackMint } from '../lib/api.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
@@ -511,6 +512,10 @@ async function handleMint(collection, stage) {
     analytics.trackMintSuccess(collection.slug, hash);
 
     toast.show('Successfully minted NFT! 🎉', 'success');
+
+    // Track on server
+    trackMint(state.wallet.address, collection.slug, hash);
+
     mintText.textContent = 'Success! 🎉';
     mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
 

@@ -17,24 +17,18 @@ export async function initFarcasterSDK() {
     try {
         // Check if we're running in a Farcaster context
         if (typeof window !== 'undefined' && window.parent !== window) {
-            // Get the context from SDK with timeout
-            const contextPromise = sdk.context;
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Context fetch timeout')), 2000)
-            );
-
-            try {
-                context = await Promise.race([contextPromise, timeoutPromise]);
-            } catch (e) {
-                console.warn('Farcaster context fetch failed or timed out:', e);
-                // Fallback: we might still be in a frame, so return sdk anyway
-                // to allow calling ready()
-            }
+            // Get the context from SDK
+            context = await sdk.context;
 
             console.log('Farcaster SDK initialized', context);
+            console.log('Context details:', {
+                client: context.client,
+                user: context.user,
+                location: context.location
+            });
 
-            // If context is null, we proceed cautiously but still return sdk
-            // so we can signal ready()
+            // DO NOT call ready() here - main.js will call it after everything loads
+
             return { sdk, context };
         }
     } catch (error) {
