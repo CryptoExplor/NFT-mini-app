@@ -4,11 +4,11 @@
  */
 
 // Import CSS first
-import './index.css';
+
 
 // Import polyfills
 import './polyfills.js';
-
+import './index.css';
 // Core imports
 import { initWallet, wagmiAdapter } from './wallet.js';
 import { state, EVENTS } from './state.js';
