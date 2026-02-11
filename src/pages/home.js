@@ -24,7 +24,17 @@ let filterChangeHandler = null;
  */
 export async function renderHomePage() {
   analytics.trackView('home');
-  const collections = loadCollections();
+  let collections = loadCollections();
+
+  // Randomly promote one LIVE collection to the top
+  const liveCollections = collections.filter(c => c.status.toLowerCase() === 'live');
+  if (liveCollections.length > 0) {
+    const randomLive = liveCollections[Math.floor(Math.random() * liveCollections.length)];
+    // Remove it from current position
+    collections = collections.filter(c => c.slug !== randomLive.slug);
+    // Add to front
+    collections.unshift(randomLive);
+  }
 
   const app = document.getElementById('app');
 
