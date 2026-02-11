@@ -113,7 +113,11 @@ export default async function handler(req, res) {
         }
 
         if (type === 'wallet_connect' && wallet) {
-            pipe.hincrby('stats:global', 'total_connects', 1);
+            // Only count unique wallet connects (SADD returns 1 if new, 0 if exists)
+            const isNew = await kv.sadd('wallets:connected', wallet.toLowerCase());
+            if (isNew) {
+                pipe.hincrby('stats:global', 'total_connects', 1);
+            }
         }
 
         if (type === 'mint_success' && wallet && collection) {

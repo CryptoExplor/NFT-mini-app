@@ -114,11 +114,16 @@ function handleAccountChange(account) {
         connector: account.connector
     };
 
-    // Track wallet connect event (only on fresh connection)
+    // Track wallet connect event (only on genuinely new user-initiated connection)
+    // Skip auto-reconnects on page refresh by checking sessionStorage
     if (account.isConnected && !wasConnected && account.address) {
-        import('./lib/api.js').then(({ trackWalletConnect }) => {
-            trackWalletConnect(account.address);
-        }).catch(() => { });
+        const trackedKey = `wallet_tracked_${account.address.toLowerCase()}`;
+        if (!sessionStorage.getItem(trackedKey)) {
+            sessionStorage.setItem(trackedKey, '1');
+            import('./lib/api.js').then(({ trackWalletConnect }) => {
+                trackWalletConnect(account.address);
+            }).catch(() => { });
+        }
     }
 
     // Dispatch generic update event
