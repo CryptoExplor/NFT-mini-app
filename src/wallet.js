@@ -104,6 +104,8 @@ export async function initWallet() {
 }
 
 function handleAccountChange(account) {
+    const wasConnected = globalState.wallet.isConnected;
+
     // Update global state
     globalState.wallet = {
         address: account.address,
@@ -111,6 +113,13 @@ function handleAccountChange(account) {
         isConnected: account.isConnected,
         connector: account.connector
     };
+
+    // Track wallet connect event (only on fresh connection)
+    if (account.isConnected && !wasConnected && account.address) {
+        import('./lib/api.js').then(({ trackWalletConnect }) => {
+            trackWalletConnect(account.address);
+        }).catch(() => { });
+    }
 
     // Dispatch generic update event
     document.dispatchEvent(new CustomEvent(EVENTS.WALLET_UPDATE, { detail: account }));

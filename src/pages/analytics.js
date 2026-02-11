@@ -1,13 +1,22 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
 import { getLeaderboard, getUserStats } from '../lib/api.js';
-import { state } from '../state.js';
+import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
+
+// Track listener for cleanup
+let walletUpdateHandler = null;
 
 export async function renderAnalyticsPage(params) {
     const { slug } = params || {};
     const collections = loadCollections();
     const app = document.getElementById('app');
+
+    // Clean up previous wallet listener
+    if (walletUpdateHandler) {
+        document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+        walletUpdateHandler = null;
+    }
 
     // Show loading state immediately
     app.innerHTML = `
@@ -124,6 +133,9 @@ export async function renderAnalyticsPage(params) {
                     </div>
                 </div>
 
+                <!-- ============ USER MINT HISTORY ============ -->
+                ${renderMintHistory(userStats)}
+
                 <!-- ============ USER JOURNEY (PRIVATE) ============ -->
                 ${renderJourneyTimeline(userStats)}
 
@@ -132,7 +144,14 @@ export async function renderAnalyticsPage(params) {
     `;
 
     // Event listeners
-    document.getElementById('back-home-btn').onclick = () => router.navigate('/');
+    document.getElementById('back-home-btn').onclick = () => {
+        // Clean up wallet listener before navigating away
+        if (walletUpdateHandler) {
+            document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+            walletUpdateHandler = null;
+        }
+        router.navigate('/');
+    };
 
     // Leaderboard tab switching
     document.querySelectorAll('.analytics-tab').forEach(btn => {
@@ -150,6 +169,13 @@ export async function renderAnalyticsPage(params) {
             }
         });
     });
+
+    // Listen for wallet changes → re-render with new wallet data
+    walletUpdateHandler = () => {
+        // Small delay to let state update propagate
+        setTimeout(() => renderAnalyticsPage(params), 300);
+    };
+    document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
 }
 
 // ============================================
@@ -360,6 +386,41 @@ function renderActivityFeed(activity) {
             </div>
         `;
     }).join('');
+}
+
+function renderMintHistory(userStats) {
+    if (!userStats?.journey || userStats.journey.length === 0) return '';
+
+    // Filter only mint_success events from journey
+    const mints = userStats.journey.filter(e => e.type === 'mint_success');
+    if (mints.length === 0) return '';
+
+    return `
+        <div class="glass-card p-5 rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <span class="text-green-400">💎</span> Your Mint History
+                <span class="text-xs font-normal opacity-40 ml-auto">${mints.length} mints</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                ${mints.map(mint => `
+                    <div class="p-3 bg-white/5 rounded-xl border border-white/5 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-lg flex-shrink-0">💎</div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold truncate">${mint.collection || 'Unknown Collection'}</div>
+                            <div class="text-[10px] opacity-50 font-mono">
+                                ${mint.timestamp ? new Date(mint.timestamp).toLocaleDateString() : ''}
+                                ${mint.txHash ? ` • ${mint.txHash.slice(0, 10)}...` : ''}
+                            </div>
+                        </div>
+                        ${mint.txHash ? `
+                            <a href="https://basescan.org/tx/${mint.txHash}" target="_blank" rel="noopener noreferrer"
+                               class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0">↗</a>
+                        ` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
 }
 
 function renderJourneyTimeline(userStats) {

@@ -52,6 +52,17 @@ export default async function handler(req, res) {
             catch { return item; }
         });
 
+        // Auto-initialize first_seen if missing
+        const now = Date.now();
+        let firstSeen = profile?.first_seen ? parseInt(profile.first_seen) : null;
+        if (!firstSeen) {
+            firstSeen = now;
+            await kv.hset(`user:${wallet}:profile`, {
+                first_seen: now,
+                last_active: now
+            });
+        }
+
         // Calculate derived stats
         const totalMints = parseInt(profile?.total_mints) || 0;
         const totalAttempts = parseInt(profile?.total_attempts) || 0;
@@ -78,8 +89,8 @@ export default async function handler(req, res) {
                 totalFailures,
                 totalVolume: parseFloat(profile?.total_volume || 0).toFixed(6),
                 totalGas: parseFloat(profile?.total_gas || 0).toFixed(6),
-                firstSeen: profile?.first_seen ? new Date(parseInt(profile.first_seen)).toISOString() : null,
-                lastActive: profile?.last_active ? new Date(parseInt(profile.last_active)).toISOString() : null,
+                firstSeen: new Date(firstSeen).toISOString(),
+                lastActive: profile?.last_active ? new Date(parseInt(profile.last_active)).toISOString() : new Date(now).toISOString(),
                 successRate,
                 streak: streak.current,
                 longestStreak: streak.longest
