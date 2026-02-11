@@ -48,20 +48,22 @@ async function init() {
     // Step 2: Setup routes (synchronous, no waiting)
     setupRoutes();
 
-    // Step 3: Initialize wallet + render page IN PARALLEL
-    // This shows the page immediately while wallet connects in background
-    await Promise.all([
-        initWallet(),
-        router.handleRoute() // User sees content immediately!
-    ]);
+    // Step 3: Render page immediately (Critical for perceptional performance)
+    await router.handleRoute();
 
-    // Step 4: Notify Farcaster we're ready (non-blocking)
+    // Step 4: Notify Farcaster we're ready (CRITICAL: Do this BEFORE wallet init to prevent hanging)
     if (farcasterResult.sdk) {
+        console.log('🔔 Sending ready command to Farcaster...');
         notifyFarcasterReady(farcasterResult.sdk);
     }
 
-    // Step 5: Hide loading overlay
+    // Step 5: Hide loading overlay immediately
     hideLoading();
+
+    // Step 6: Initialize wallet in background
+    // We don't await this because we want user to see the app ASAP.
+    // Wallet auto-connect will trigger UI updates via events.
+    initWallet().catch(e => console.error('Wallet init failed:', e));
 
     // Performance logging
     const loadTime = performance.now() - startTime;
