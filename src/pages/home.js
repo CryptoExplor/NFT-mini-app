@@ -88,56 +88,46 @@ export async function renderHomePage() {
       <!-- Profile Modal / Drawer -->
       <div id="profile-modal" class="fixed inset-0 z-50 hidden transition-all duration-300">
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300" id="profile-backdrop"></div>
-          <div class="absolute right-0 top-0 bottom-0 w-full max-w-md bg-[#0f172a] border-l border-white/10 p-6 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col" id="profile-content">
+          <div class="absolute right-0 top-0 bottom-0 w-full max-w-xs bg-[#0f172a] border-l border-white/10 p-6 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col justify-center gap-6" id="profile-content">
               
-              <!-- Modal Header -->
-              <div class="flex justify-between items-center mb-6">
-                  <h2 class="text-2xl font-bold">My Profile</h2>
-                  <button id="close-profile-btn" class="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-              </div>
-              
-              <!-- Wallet Connect Section -->
-              <div class="mb-8 p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div id="profile-wallet-info" class="flex flex-col items-center">
-                      <p class="opacity-50 text-sm mb-2">Wallet Status</p>
-                      <button id="modal-connect-btn" class="w-full glass-card py-3 rounded-xl font-bold hover:bg-indigo-500/20 transition-all">
-                        Connect Wallet
-                      </button>
+              <button id="close-profile-btn" class="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <!-- Analytics -->
+              <button id="mobile-analytics-btn" class="glass-card p-5 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-all active:scale-95">
+                  <div class="flex items-center gap-4">
+                      <span class="text-lg font-bold">Analytics</span>
                   </div>
-              </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+              </button>
 
-              <!-- My NFTs Content -->
-              <div class="flex-1 overflow-hidden flex flex-col">
-                <!-- Analytics Shortcut -->
-                <div class="glass-card mb-6 p-1 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-white/5">
-                    <button id="view-analytics-btn" class="w-full flex items-center justify-between p-3 group transition-all hover:bg-white/5 rounded-lg">
-                        <div class="flex items-center gap-3">
-                            <span class="text-xl">📊</span>
-                            <span class="text-sm font-bold bg-gradient-to-r from-indigo-300 to-purple-400 bg-clip-text text-transparent">Analytics Dashboard</span>
-                        </div>
-                        <span class="text-xs opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all">Details →</span>
-                    </button>
-                </div>
+              <!-- My NFTs -->
+              <button id="mobile-gallery-btn" class="glass-card p-5 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-all active:scale-95">
+                  <div class="flex items-center gap-4">
+                      <span class="text-lg font-bold">My NFTs</span>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+              </button>
 
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold">My Collection</h3>
-                    <button id="refresh-nfts-btn" class="text-xs opacity-50 hover:opacity-100 flex items-center space-x-1">
-                        <span>🔄 Refresh</span>
-                    </button>
-                </div>
-                
-                <div id="my-nfts-grid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-3 pb-4 pr-1 custom-scrollbar">
-                    <div class="col-span-2 text-center py-20 opacity-30">
-                        <div class="text-4xl mb-4">🖼️</div>
-                        <p class="text-sm">Connect wallet to view your NFT gallery</p>
-                    </div>
-                </div>
-
-              </div>
+              <!-- Wallet -->
+              <button id="mobile-wallet-btn" class="glass-card p-5 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-all active:scale-95">
+                  <div class="flex items-center gap-4">
+                      <div class="status-glow w-6 h-6 rounded-full" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
+                      <span id="mobile-wallet-text" class="text-lg font-bold truncate max-w-[140px]">
+                          ${state.wallet?.isConnected ? shortenAddress(state.wallet.address) : 'Connect Wallet'}
+                      </span>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+              </button>
           </div>
       </div>
 
@@ -219,12 +209,6 @@ function renderCollectionCard(collection) {
   return `
     <div class="glass-card p-1 rounded-2xl cursor-pointer hover:scale-105 transition-all duration-300 group w-full sm:max-w-[320px] lg:max-w-[350px]"
          data-collection="${collection.slug}">
-      
-      ${collection.featured ? `
-        <div class="absolute top-4 right-4 z-10 bg-gradient-to-r from-yellow-500 to-orange-500 text-black px-2 py-1 rounded text-xs font-bold">
-          ⭐ FEATURED
-        </div>
-      ` : ''}
       
       <div class="relative bg-[#1a1b2e] rounded-xl overflow-hidden">
         <!-- Image -->
@@ -495,20 +479,23 @@ function updateConnectButton(account) {
 }
 
 
+
 // ============================================
 // PROFILE MODAL LOGIC
 // ============================================
 
 function setupProfileModal() {
+  const mobileBtn = document.getElementById('mobile-profile-btn');
+  const desktopBtn = document.getElementById('desktop-nfts-btn');
   const modal = document.getElementById('profile-modal');
   const backdrop = document.getElementById('profile-backdrop');
   const content = document.getElementById('profile-content');
   const closeBtn = document.getElementById('close-profile-btn');
 
-  const mobileBtn = document.getElementById('mobile-profile-btn');
-  const desktopBtn = document.getElementById('desktop-nfts-btn');
-  const refreshBtn = document.getElementById('refresh-nfts-btn');
-  const modalConnectBtn = document.getElementById('modal-connect-btn');
+  // New Menu Buttons
+  const analyticsBtn = document.getElementById('mobile-analytics-btn');
+  const galleryBtn = document.getElementById('mobile-gallery-btn');
+  const walletBtn = document.getElementById('mobile-wallet-btn');
 
   if (!modal) return;
 
@@ -518,9 +505,7 @@ function setupProfileModal() {
       backdrop.classList.remove('opacity-0');
       content.classList.remove('translate-x-full');
     }, 10);
-
     updateProfileWalletInfo(state.wallet);
-    fetchUserNFTs();
   };
 
   const closeModal = () => {
@@ -531,24 +516,35 @@ function setupProfileModal() {
     }, 300);
   };
 
-  // Event Listeners
+  // Trigger Logic
   if (mobileBtn) mobileBtn.onclick = openModal;
-  if (desktopBtn) desktopBtn.onclick = openModal;
+
+  // Desktop button logic
+  if (desktopBtn) desktopBtn.onclick = () => {
+    router.navigate('/gallery');
+  };
+
   if (closeBtn) closeBtn.onclick = closeModal;
   if (backdrop) backdrop.onclick = closeModal;
 
-  if (refreshBtn) {
-    refreshBtn.onclick = () => {
-      // Force refresh
-      fetchUserNFTs();
+  // Menu Actions
+  if (analyticsBtn) {
+    analyticsBtn.onclick = () => {
+      closeModal();
+      router.navigate('/analytics');
     };
   }
 
-  // Handle Connect inside modal
-  if (modalConnectBtn) {
-    modalConnectBtn.onclick = async () => {
+  if (galleryBtn) {
+    galleryBtn.onclick = () => {
+      closeModal();
+      router.navigate('/gallery');
+    };
+  }
+
+  if (walletBtn) {
+    walletBtn.onclick = async () => {
       if (state.wallet?.isConnected) {
-        // Disconnect immediately
         await disconnectWallet();
       } else {
         await connectWallet();
@@ -557,20 +553,28 @@ function setupProfileModal() {
   }
 }
 
-function updateProfileWalletInfo(account) {
-  const connectBtn = document.getElementById('modal-connect-btn');
-  if (!connectBtn) return;
 
-  if (account?.isConnected) {
-    connectBtn.textContent = 'Disconnect ' + shortenAddress(account.address);
-    connectBtn.className = 'w-full glass-card py-3 rounded-xl font-bold bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-all';
-  } else {
-    connectBtn.textContent = 'Connect Wallet';
-    connectBtn.className = 'w-full glass-card py-3 rounded-xl font-bold hover:bg-indigo-500/20 transition-all';
+function updateProfileWalletInfo(account) {
+  const walletText = document.getElementById('mobile-wallet-text');
+  const walletGlow = document.querySelector('#mobile-wallet-btn .status-glow');
+
+  if (walletText) {
+    walletText.textContent = account?.isConnected
+      ? shortenAddress(account.address)
+      : 'Connect Wallet';
+  }
+
+  if (walletGlow) {
+    const color = account?.isConnected ? '#10B981' : '#EF4444';
+    walletGlow.style.background = color;
+    walletGlow.style.boxShadow = `0 0 10px ${color}`;
   }
 }
 
-// Optimized Incremental Fetch
+/**
+ * Remove legacy fetchUserNFTs if no longer needed, or keep for potential reuse
+ * (It will return early as grid is gone)
+ */
 async function fetchUserNFTs() {
   const grid = document.getElementById('my-nfts-grid');
   if (!grid) return;

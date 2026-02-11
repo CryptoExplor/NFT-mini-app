@@ -23,7 +23,7 @@ import { $ } from './utils/dom.js';
 
 async function init() {
     console.log('🚀 Initializing NFT Mint App (Optimized)...');
-    
+
     const startTime = performance.now();
 
     // Step 1: Start all independent tasks in PARALLEL
@@ -38,7 +38,7 @@ async function init() {
     if (isInFarcaster() && farcasterResult.context) {
         console.log('📱 Running in Farcaster');
         state.farcaster = farcasterResult;
-        
+
         // Try auto-connect (non-blocking)
         autoConnectFarcaster().catch(e => console.warn('Auto-connect failed:', e));
     } else {
@@ -66,7 +66,7 @@ async function init() {
     // Performance logging
     const loadTime = performance.now() - startTime;
     console.log(`🎉 App initialized in ${loadTime.toFixed(0)}ms`);
-    
+
     // Track performance
     trackPerformance(loadTime);
 }
@@ -77,11 +77,11 @@ async function init() {
 
 async function autoConnectFarcaster() {
     await new Promise(resolve => setTimeout(resolve, 300));
-    
+
     const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
-        c => c.id === 'farcaster' || 
-             c.id === 'farcasterMiniApp' ||
-             c.name?.toLowerCase().includes('farcaster')
+        c => c.id === 'farcaster' ||
+            c.id === 'farcasterMiniApp' ||
+            c.name?.toLowerCase().includes('farcaster')
     );
 
     if (farcasterConnector) {
@@ -89,7 +89,7 @@ async function autoConnectFarcaster() {
         const result = await connect(wagmiAdapter.wagmiConfig, {
             connector: farcasterConnector
         });
-        
+
         if (result.accounts?.[0]) {
             console.log('✅ Auto-connected via Farcaster');
         }
@@ -126,6 +126,11 @@ function setupRoutes() {
         const { renderAnalyticsPage } = await import('./pages/analytics.js');
         await renderAnalyticsPage(params);
     });
+
+    router.route('/gallery', async () => {
+        const { renderGalleryPage } = await import('./pages/gallery.js');
+        await renderGalleryPage();
+    });
 }
 
 function hideLoading() {
@@ -147,9 +152,9 @@ function trackPerformance(loadTime) {
                     domContentLoaded: perfData.domContentLoadedEventEnd - perfData.fetchStart,
                     loadComplete: perfData.loadEventEnd - perfData.fetchStart,
                 };
-                
+
                 console.log('📊 Performance Metrics:', metrics);
-                
+
                 // Send to analytics if available
                 if (window.analytics?.trackPerformance) {
                     window.analytics.trackPerformance(metrics);
@@ -179,12 +184,12 @@ if (typeof window !== 'undefined') {
     window.router = router;
     window.state = state;
     window.navigate = (path) => router.navigate(path);
-    
+
     // Performance helper
     window.measurePerformance = () => {
         const nav = performance.getEntriesByType('navigation')[0];
         const paint = performance.getEntriesByType('paint');
-        
+
         console.table({
             'DNS': `${(nav.domainLookupEnd - nav.domainLookupStart).toFixed(0)}ms`,
             'TCP': `${(nav.connectEnd - nav.connectStart).toFixed(0)}ms`,
