@@ -46,6 +46,10 @@ export default async function handler(req, res) {
         pipe.zrevrank('leaderboard:reputation', wallet);
         pipe.zscore('leaderboard:reputation', wallet);
 
+        // 7. Points rank
+        pipe.zrevrank('leaderboard:points', wallet);
+        pipe.zscore('leaderboard:points', wallet);
+
         const [
             profile,
             journey,
@@ -56,7 +60,9 @@ export default async function handler(req, res) {
             totalMintersCount,
             globalStats,
             reputationRank,
-            reputationScore
+            reputationScore,
+            pointsRank,
+            pointsScore
         ] = await pipe.exec();
 
         // Parse journey events
@@ -104,8 +110,16 @@ export default async function handler(req, res) {
             ? ((1 - (rank / totalMinters)) * 100).toFixed(1)
             : null;
 
-        // Calculate streak (from journey)
-        const streak = calculateStreak(parsedJourney);
+        // Get streak from profile (computed in track.js)
+        const currentStreak = parseInt(profile?.streak) || 0;
+        const longestStreak = parseInt(profile?.longest_streak) || currentStreak;
+
+        // Derive badge
+        let badge = null;
+        if (currentStreak >= 30) badge = '👑 Legendary Minter';
+        else if (currentStreak >= 14) badge = '🔥 Streak Master';
+        else if (currentStreak >= 7) badge = '💎 Committed Collector';
+        else if (currentStreak >= 3) badge = '🌟 Rising Minter';
 
         // Find favorite collection (most minted)
         const favorite = findFavoriteCollection(parsedJourney);
@@ -122,8 +136,8 @@ export default async function handler(req, res) {
                 firstSeen: new Date(firstSeen).toISOString(),
                 lastActive: profile?.last_active ? new Date(parseInt(profile.last_active)).toISOString() : new Date(now).toISOString(),
                 successRate,
-                streak: streak.current,
-                longestStreak: streak.longest,
+                streak: currentStreak,
+                longestStreak: longestStreak,
                 favoriteCollection: favorite.collection,
                 favoriteCollectionMints: favorite.count,
                 mintContribution,
@@ -143,16 +157,23 @@ export default async function handler(req, res) {
                 reputation: {
                     rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
                     score: parseFloat(reputationScore || profile?.reputation_score || 0).toFixed(2)
+                },
+                points: {
+                    rank: pointsRank !== null ? pointsRank + 1 : 'Unranked',
+                    score: parseInt(pointsScore || profile?.total_points || 0)
                 }
             },
             insights: {
+                badge,
+                points: parseInt(pointsScore || profile?.total_points || 0),
                 mintContribution: `${mintContribution}%`,
                 volumeContribution: `${volumeContribution}%`,
                 avgGasPerMint: `${avgGas} ETH`,
                 favoriteCollection: favorite.collection,
                 favoriteCollectionMints: favorite.count,
                 memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
-                activityLevel: getActivityLevel(totalMints, streak.current)
+                memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
+                activityLevel: getActivityLevel(totalMints, currentStreak)
             },
             journey: parsedJourney
         });

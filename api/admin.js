@@ -99,6 +99,46 @@ export default async function handler(req, res) {
             });
         }
 
+        // Action: retention analysis (Day 1, 7, 30)
+        if (action === 'retention' && target) {
+            // target is the cohort date YYYY-MM-DD
+            const date = new Date(target);
+            const d1 = new Date(date); d1.setDate(d1.getDate() + 1);
+            const d7 = new Date(date); d7.setDate(d7.getDate() + 7);
+            const d30 = new Date(date); d30.setDate(d30.getDate() + 30);
+
+            const day1 = d1.toISOString().split('T')[0];
+            const day7 = d7.toISOString().split('T')[0];
+            const day30 = d30.toISOString().split('T')[0];
+
+            const cohortKey = `cohort:${target}`;
+            const cohortSize = await kv.scard(cohortKey) || 0;
+
+            let r1 = 0, r7 = 0, r30 = 0;
+
+            if (cohortSize > 0) {
+                // Calculate intersections
+                const s1 = await kv.sinter(cohortKey, `active:${day1}`);
+                r1 = s1?.length || 0;
+
+                const s7 = await kv.sinter(cohortKey, `active:${day7}`);
+                r7 = s7?.length || 0;
+
+                const s30 = await kv.sinter(cohortKey, `active:${day30}`);
+                r30 = s30?.length || 0;
+            }
+
+            return res.status(200).json({
+                date: target,
+                cohortSize,
+                retention: {
+                    day1: { count: r1, rate: cohortSize > 0 ? ((r1 / cohortSize) * 100).toFixed(1) : '0.0' },
+                    day7: { count: r7, rate: cohortSize > 0 ? ((r7 / cohortSize) * 100).toFixed(1) : '0.0' },
+                    day30: { count: r30, rate: cohortSize > 0 ? ((r30 / cohortSize) * 100).toFixed(1) : '0.0' }
+                }
+            });
+        }
+
         return res.status(400).json({ error: 'Invalid action. Use: overview, user, collection, cohort, daily' });
 
     } catch (error) {

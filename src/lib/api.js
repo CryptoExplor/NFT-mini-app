@@ -226,3 +226,32 @@ export async function getAdminData(action = 'overview', target = null) {
     }
 }
 
+/**
+ * Download CSV export (admin only)
+ */
+export async function downloadCSV(type) {
+    try {
+        const token = getAuthToken();
+        if (!token) throw new Error('Unauthorized');
+
+        const response = await fetch(`${API_BASE}/api/export?type=${type}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Export failed');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${type}-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (error) {
+        console.error('Download error:', error);
+        alert('Failed to download CSV: ' + error.message);
+    }
+}
+

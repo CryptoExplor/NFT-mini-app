@@ -6,7 +6,7 @@ export default defineConfig({
     build: {
         target: 'esnext',
         outDir: 'dist',
-        
+
         // Minification
         minify: 'terser',
         terserOptions: {
@@ -19,7 +19,7 @@ export default defineConfig({
                 comments: false          // Remove comments
             }
         },
-        
+
         // Code splitting configuration
         rollupOptions: {
             output: {
@@ -29,39 +29,39 @@ export default defineConfig({
                     'vendor-wagmi': ['@wagmi/core'],
                     'vendor-viem': ['viem'],
                     'vendor-appkit': ['@reown/appkit', '@reown/appkit-adapter-wagmi'],
-                    
+
                     // Feature chunks (lazy loaded)
                     'collections': ['./src/lib/loadCollections.js'],
                     'mint-helpers': ['./src/lib/mintHelpers.js'],
                     'router': ['./src/lib/router.js'],
                 },
-                
+
                 // Better file naming
                 chunkFileNames: 'assets/[name]-[hash].js',
                 entryFileNames: 'assets/[name]-[hash].js',
                 assetFileNames: 'assets/[name]-[hash].[ext]'
             }
         },
-        
+
         // Chunk size warnings
         chunkSizeWarningLimit: 500,
-        
+
         // Asset inlining threshold (10kb)
         assetsInlineLimit: 10240,
     },
-    
+
     // Development optimizations
     server: {
         host: true,
         port: 3000,
         open: false,
-        
+
         // HMR optimization
         hmr: {
             overlay: true
         }
     },
-    
+
     // Dependency optimization
     optimizeDeps: {
         include: [
@@ -74,7 +74,7 @@ export default defineConfig({
             // Exclude large dependencies that don't need pre-bundling
         ]
     },
-    
+
     // Plugins
     plugins: [
         // Image optimization
@@ -94,7 +94,7 @@ export default defineConfig({
             },
         }),
     ],
-    
+
     // CSS optimization
     css: {
         devSourcemap: true,
@@ -102,12 +102,12 @@ export default defineConfig({
             // Add any CSS preprocessor options here
         }
     },
-    
+
     // Build performance
     esbuild: {
         logOverride: { 'this-is-undefined-in-esm': 'silent' }
     },
-    
+
     // Preview server (for testing build)
     preview: {
         port: 4173,

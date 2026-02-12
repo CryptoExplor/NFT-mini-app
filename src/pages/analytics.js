@@ -1,6 +1,6 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
-import { getLeaderboard, getUserStats, getAdminData } from '../lib/api.js';
+import { getLeaderboard, getUserStats, getAdminData, downloadCSV } from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
 
@@ -63,6 +63,7 @@ export async function renderAnalyticsPage(params) {
                         <button class="analytics-tab" data-type="volume">💰 Volume</button>
                         <button class="analytics-tab" data-type="gas">⛽ Gas</button>
                         <button class="analytics-tab" data-type="reputation">⭐ Reputation</button>
+                        <button class="analytics-tab" data-type="points">🪙 Points</button>
                     </div>
                 </div>
             </header>
@@ -286,6 +287,70 @@ function renderSocialProofItems(messages) {
 
 // ========== WALLET INSIGHTS (PERSONALIZED) ==========
 
+function renderPointsSection(userStats) {
+    if (!userStats) return '';
+    const profile = userStats.profile || {};
+    const rankings = userStats.rankings || {};
+    const points = profile.total_points || 0; // Check key from api/user.js response structure? 
+    // Wait, api/user.js returns camelCase?
+    // profile.totalMints, profile.streak
+    // rankings.points.score IS present in api/user.js response
+
+    // api/user.js logic:
+    // points: { rank: ..., score: ... }
+    // profile doesn't have total_points camelCased explicitly, maybe I should check userStatslog
+    // actually api/user.js response:
+    /*
+    profile: {
+        totalMints,
+        ...
+    },
+    rankings: {
+        points: { score: ... }
+    }
+    insights: {
+        points: ...
+    }
+    */
+
+    const score = rankings.points?.score || 0;
+    const rank = rankings.points?.rank || 'Unranked';
+    const streak = profile.streak || 0;
+
+    return `
+      <div class="glass-card p-5 rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/5 to-amber-500/5 mt-4">
+        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+          <span class="text-yellow-400">🪙</span> Your Points
+        </h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <div class="text-xs opacity-50 uppercase">Total Points</div>
+            <div class="text-3xl font-bold text-yellow-400">${score.toLocaleString()}</div>
+          </div>
+          <div>
+            <div class="text-xs opacity-50 uppercase">Points Rank</div>
+            <div class="text-2xl font-bold">${rank === 'Unranked' ? '—' : `#${rank}`}</div>
+          </div>
+        </div>
+        
+        <div class="mt-4 p-3 bg-white/5 rounded-lg space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="opacity-60">From Mints (${profile.totalMints || 0} × 10)</span>
+            <span class="font-mono">${(parseInt(profile.totalMints) || 0) * 10}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="opacity-60">From Volume (Est.)</span>
+            <span class="font-mono">~${Math.floor((parseFloat(profile.totalVolume || 0) * 50))}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="opacity-60">From Streak (${streak} days)</span>
+            <span class="font-mono">${(streak >= 3 ? (streak * 3) : 0)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+}
+
 function renderWalletInsights(userStats, wallet) {
     if (!wallet?.isConnected) {
         return `
@@ -311,7 +376,11 @@ function renderWalletInsights(userStats, wallet) {
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h2 class="text-lg font-bold flex items-center gap-2 flex-wrap">
                     Wallet Insights
-                    <span class="text-xs font-normal opacity-50 bg-white/10 px-2 py-0.5 rounded-full">${shortenAddress(wallet.address)}</span>
+                    <div class="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full border border-white/5">
+                        <span class="text-xs font-normal opacity-50 font-mono">${shortenAddress(wallet.address)}</span>
+                        <a href="https://basescan.org/address/${wallet.address}" target="_blank" class="text-xs opacity-40 hover:opacity-100 transition" title="View on Explorer">↗</a>
+                    </div>
+                    ${insights.badge ? `<span class="text-xs bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-200 border border-yellow-500/20 px-2 py-0.5 rounded-full shadow-sm">${insights.badge}</span>` : ''}
                     ${insights.activityLevel ? `<span class="text-xs bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-indigo-200 px-2 py-0.5 rounded-full">${insights.activityLevel}</span>` : ''}
                     ${profile.streak > 0 ? `<span class="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">🔥 ${profile.streak} day streak</span>` : ''}
                 </h2>
@@ -387,6 +456,8 @@ function renderWalletInsights(userStats, wallet) {
                     </div>
                 `}
             </div>
+            
+            ${renderPointsSection(userStats)}
         </div>
     `;
 }
@@ -667,13 +738,27 @@ function renderAdminPanel(wallet) {
                     📅 Daily Stats
                 </button>
                 <button id="admin-cohort-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
-                    👥 Cohort Data
+                    👥 Cohort
+                </button>
+                <button id="admin-retention-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
+                    🧠 Retention
                 </button>
             </div>
+            
+            <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                <span class="text-[10px] opacity-40 uppercase py-1.5">Export CSV:</span>
+                <button onclick="window.downloadCSV('users')" class="text-xs bg-green-500/10 hover:bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg transition">Users</button>
+                <button onclick="window.downloadCSV('collections')" class="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg transition">Collections</button>
+                <button onclick="window.downloadCSV('mints')" class="text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg transition">Mints</button>
+            </div>
+
             <div id="admin-extra-content" class="mt-4"></div>
         </div>
     `;
 }
+
+// Helper for global scope access
+window.downloadCSV = downloadCSV;
 
 // Wire up admin panel event listeners (called after DOM render)
 function setupAdminListeners() {
@@ -768,6 +853,42 @@ function setupAdminListeners() {
                         <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
                         <div class="text-xs font-mono opacity-60 max-h-32 overflow-y-auto">
                             ${(data.wallets || []).map(w => shortenAddress(w)).join(', ') || 'None'}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    // Retention button
+    const retentionBtn = document.getElementById('admin-retention-btn');
+    if (retentionBtn) {
+        retentionBtn.addEventListener('click', async () => {
+            const date = document.getElementById('admin-date-input')?.value;
+            if (!date) return;
+            const content = document.getElementById('admin-extra-content');
+            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
+            const data = await getAdminData('retention', date);
+            if (data?.retention) {
+                content.innerHTML = `
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-xs font-bold opacity-60 mb-2">🧠 Retention for ${date} (Cohort: ${data.cohortSize})</div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-white/5 rounded p-2">
+                                <div class="text-[10px] opacity-40 uppercase">Day 1</div>
+                                <div class="text-lg font-bold ${parseFloat(data.retention.day1.rate) > 20 ? 'text-green-400' : ''}">${data.retention.day1.rate}%</div>
+                                <div class="text-[10px] opacity-30">${data.retention.day1.count} user${data.retention.day1.count !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div class="bg-white/5 rounded p-2">
+                                <div class="text-[10px] opacity-40 uppercase">Day 7</div>
+                                <div class="text-lg font-bold ${parseFloat(data.retention.day7.rate) > 10 ? 'text-green-400' : ''}">${data.retention.day7.rate}%</div>
+                                <div class="text-[10px] opacity-30">${data.retention.day7.count} user${data.retention.day7.count !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div class="bg-white/5 rounded p-2">
+                                <div class="text-[10px] opacity-40 uppercase">Day 30</div>
+                                <div class="text-lg font-bold ${parseFloat(data.retention.day30.rate) > 5 ? 'text-green-400' : ''}">${data.retention.day30.rate}%</div>
+                                <div class="text-[10px] opacity-30">${data.retention.day30.count} user${data.retention.day30.count !== 1 ? 's' : ''}</div>
+                            </div>
                         </div>
                     </div>
                 `;
