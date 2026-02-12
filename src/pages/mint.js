@@ -88,11 +88,7 @@ export async function renderMintPage(params) {
                      class="w-full aspect-square object-cover rounded-xl shadow-2xl img-fade-in"
                      onerror="this.src='/placeholder.png'">
                 
-                ${collection.featured ? `
-                  <div class="absolute top-4 right-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-black px-3 py-1 rounded-full text-sm font-bold">
-                    ⭐ FEATURED
-                  </div>
-                ` : ''}
+
               </div>
               
               <!-- Details -->

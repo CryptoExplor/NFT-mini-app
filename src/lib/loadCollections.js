@@ -13,14 +13,9 @@
 // ============================================
 // Import each collection file here
 import onchainSigils from '../../collections/onchain-sigils.js';
-import zorgz from '../../collections/zorgz.js';
 import baseInvaders from '../../collections/base-invaders.js';
 import BASEHEADS_404 from '../../collections/BASEHEADS_404.js';
-import baseMoods from '../../collections/basemoods.js';
-import pixelPets from '../../collections/pixelpets.js';
-import miniWorlds from '../../collections/miniworlds.js';
-import neonShapes from '../../collections/neonshapes.js';
-import baseFortunes from '../../collections/basefortunes.js';
+import QuantumQuills from '../../collections/QuantumQuills.js';
 // ADD NEW COLLECTION IMPORTS HERE:
 // import myCollection from '../../collections/my-collection.js';
 
@@ -30,14 +25,9 @@ import baseFortunes from '../../collections/basefortunes.js';
 // Map slug -> collection object
 const COLLECTIONS_MAP = {
     'onchain-sigils': onchainSigils,
-    'zorgz': zorgz,
     'base-invaders': baseInvaders,
     'baseheads-404': BASEHEADS_404,
-    'basemoods': baseMoods,
-    'pixelpets': pixelPets,
-    'miniworlds': miniWorlds,
-    'neonshapes': neonShapes,
-    'basefortunes': baseFortunes,
+    'quantum-quills': QuantumQuills,
     // ADD NEW COLLECTIONS HERE (slug: import):
     // 'my-collection': myCollection,
 };
@@ -153,9 +143,7 @@ export function loadCollections() {
 
     // Sort: featured first, then by status priority (live > upcoming > sold-out), then by launch date (newest first)
     collections.sort((a, b) => {
-        // Featured collections first
-        if (a.featured && !b.featured) return -1;
-        if (!a.featured && b.featured) return 1;
+
 
         // Then by status priority
         const statusPriority = {

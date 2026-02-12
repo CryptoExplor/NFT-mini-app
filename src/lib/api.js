@@ -95,12 +95,26 @@ export async function getLeaderboard(options = {}) {
             period: options.period || 'all_time',
             limit: options.limit || 10
         });
+
+        // If no API URL is set in dev, return mock data immediately to prevent errors
+        if (!API_BASE && import.meta.env.DEV) {
+            console.warn('⚠️ No VITE_API_URL set. Returning mock leaderboard.');
+            return { leaderboard: [], totalMints: 0, distinctMinters: 0 };
+        }
+
         const response = await fetch(`${API_BASE}/api/leaderboard?${params}`);
-        if (!response.ok) throw new Error('Failed to fetch leaderboard');
+
+        // Check content type before parsing
+        const contentType = response.headers.get("content-type");
+        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+            console.warn(`Leaderboard API unavailable (status: ${response.status}, type: ${contentType})`);
+            return { leaderboard: [], totalMints: 0, distinctMinters: 0 };
+        }
+
         return await response.json();
     } catch (error) {
         console.error('Failed to fetch leaderboard:', error);
-        return null;
+        return { leaderboard: [], totalMints: 0, distinctMinters: 0 };
     }
 }
 
@@ -111,12 +125,25 @@ export async function getLeaderboard(options = {}) {
 export async function getUserStats(wallet) {
     if (!wallet) return null;
     try {
+        // If no API URL is set in dev, return mock data immediately
+        if (!API_BASE && import.meta.env.DEV) {
+            console.warn('⚠️ No VITE_API_URL set. Returning mock user stats.');
+            return { rank: '-', totalMints: 0, favCollection: '-' };
+        }
+
         const response = await fetch(`${API_BASE}/api/user?wallet=${wallet}`);
-        if (!response.ok) throw new Error('Failed to fetch user stats');
+
+        // Check content type before parsing
+        const contentType = response.headers.get("content-type");
+        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+            console.warn(`User Stats API unavailable (status: ${response.status}, type: ${contentType})`);
+            return { rank: '-', totalMints: 0, favCollection: '-' };
+        }
+
         return await response.json();
     } catch (error) {
         console.error('Failed to fetch user stats:', error);
-        return null;
+        return { rank: '-', totalMints: 0, favCollection: '-' };
     }
 }
 
@@ -254,4 +281,3 @@ export async function downloadCSV(type) {
         alert('Failed to download CSV: ' + error.message);
     }
 }
-

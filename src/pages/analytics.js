@@ -389,9 +389,17 @@ function renderWalletInsights(userStats, wallet) {
             <!-- Primary Stats Grid -->
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
                 <div>
-                    <div class="text-xs opacity-50 uppercase">Rank</div>
-                    <div class="text-2xl font-bold text-yellow-400">${rankings.mints?.rank === 'Unranked' ? '—' : `#${rankings.mints?.rank}`}</div>
-                    <div class="text-[10px] opacity-40">${rankings.mints?.percentile || ''}</div>
+                    <div class="text-xs opacity-50 uppercase">
+                        ${rankings.mints?.rank !== 'Unranked' ? 'Mint Rank' : 'Points Rank'}
+                    </div>
+                    <div class="text-2xl font-bold text-yellow-400">${rankings.mints?.rank !== 'Unranked'
+            ? `#${rankings.mints?.rank}`
+            : (rankings.points?.rank !== 'Unranked' ? `#${rankings.points?.rank}` : '—')
+        }</div>
+                    <div class="text-[10px] opacity-40">${rankings.mints?.rank !== 'Unranked'
+            ? (rankings.mints?.percentile || '')
+            : (rankings.points?.percentile || '')
+        }</div>
                 </div>
                 <div>
                     <div class="text-xs opacity-50 uppercase">Total Mints</div>

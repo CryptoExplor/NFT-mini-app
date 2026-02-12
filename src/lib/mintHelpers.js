@@ -221,24 +221,55 @@ export async function mint(collection, stage) {
 /**
  * Free mint
  */
+/**
+ * Helper to determine if a function expects quantity or tokenId
+ */
+function getMintArgs(abi, functionName, tokenId) {
+    const abiItem = abi.find(item => item.name === functionName && item.type === 'function');
+    if (!abiItem || !abiItem.inputs || abiItem.inputs.length === 0) {
+        return [];
+    }
+
+    const firstInputName = abiItem.inputs[0].name.toLowerCase();
+
+    // Heuristic: If first arg is 'quantity' or 'amount', use 1. Otherwise use tokenId.
+    if (firstInputName.includes('quantity') || firstInputName.includes('amount')) {
+        return [1]; // Mint 1
+    }
+
+    return [tokenId];
+}
+
+/**
+ * Free mint
+ */
 async function mintFree(config, wagmiConfig, tokenId) {
     console.log('🎁 Executing FREE mint...');
 
-    // Try different function names
     const functionNames = ['mint', 'freeMint', 'claim'];
 
     for (const funcName of functionNames) {
+        // Check if function exists in ABI
+        const exists = config.abi.some(item => item.name === funcName && item.type === 'function');
+        if (!exists) continue;
+
         try {
+            const args = getMintArgs(config.abi, funcName, tokenId);
+
             const hash = await writeContract(wagmiConfig, {
                 address: config.address,
                 abi: config.abi,
                 functionName: funcName,
-                args: [tokenId],
+                args: args,
                 chainId: config.chainId
             });
             return hash;
         } catch (e) {
-            console.log(`${funcName} failed, trying next...`);
+            // STOP if user explicitly rejected the transaction
+            if (e.name === 'UserRejectedRequestError' || e.message.includes('User rejected')) {
+                throw e;
+            }
+            console.log(`${funcName} failed, trying next...`, e.shortMessage || e.message);
         }
     }
 
@@ -249,24 +280,33 @@ async function mintFree(config, wagmiConfig, tokenId) {
  * Paid mint
  */
 async function mintPaid(config, wagmiConfig, tokenId, price) {
-    console.log(`💰 Executing PAID mint (${price / 1e18} ETH)...`);
+    console.log(`💰 Executing PAID mint (${Number(price) / 1e18} ETH)...`);
 
-    // Try different function names
     const functionNames = ['paidMint', 'mint', 'publicMint'];
 
     for (const funcName of functionNames) {
+        // Check if function exists in ABI
+        const exists = config.abi.some(item => item.name === funcName && item.type === 'function');
+        if (!exists) continue;
+
         try {
+            const args = getMintArgs(config.abi, funcName, tokenId);
+
             const hash = await writeContract(wagmiConfig, {
                 address: config.address,
                 abi: config.abi,
                 functionName: funcName,
-                args: [tokenId],
+                args: args,
                 value: BigInt(price),
                 chainId: config.chainId
             });
             return hash;
         } catch (e) {
-            console.log(`${funcName} failed, trying next...`);
+            // STOP if user explicitly rejected the transaction
+            if (e.name === 'UserRejectedRequestError' || e.message.includes('User rejected')) {
+                throw e;
+            }
+            console.log(`${funcName} failed, trying next...`, e.shortMessage || e.message);
         }
     }
 

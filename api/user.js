@@ -212,7 +212,7 @@ function getActivityLevel(totalMints, currentStreak) {
     if (totalMints >= 20 || currentStreak >= 3) return 'Active Collector 💎';
     if (totalMints >= 5) return 'Rising Minter ⭐';
     if (totalMints >= 1) return 'Newcomer 🌱';
-    return 'Explorer 👀';
+    return 'Visitor 👀';
 }
 
 /**
