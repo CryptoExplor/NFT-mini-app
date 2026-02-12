@@ -1,4 +1,5 @@
 import { kv } from '@vercel/kv';
+import { requireAuth } from './lib/authMiddleware.js';
 
 function cors(res) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -12,9 +13,11 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { wallet } = req.query;
+    // Auth: JWT preferred, query param fallback
+    const auth = await requireAuth(req);
+    const wallet = auth?.wallet || req.query?.wallet;
 
-    if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    if (!wallet || !/^0x[a-fA-F0-9]{40}$/i.test(wallet)) {
         return res.status(400).json({ error: 'Invalid wallet address' });
     }
 
@@ -24,8 +27,8 @@ export default async function handler(req, res) {
         // 1. Wallet profile
         pipe.hgetall(`user:${wallet}:profile`);
 
-        // 2. Journey (last 50 events)
-        pipe.lrange(`user:${wallet}:journey`, 0, 49);
+        // 2. Journey (last 200 events)
+        pipe.lrange(`user:${wallet}:journey`, 0, 199);
 
         // 3. Ranks across leaderboards
         pipe.zrevrank('leaderboard:mints:all_time', wallet);
@@ -36,6 +39,13 @@ export default async function handler(req, res) {
         // 4. Total leaderboard size (for percentile)
         pipe.zcard('leaderboard:mints:all_time');
 
+        // 5. Global stats (for contribution %)
+        pipe.hgetall('stats:global');
+
+        // 6. Reputation rank
+        pipe.zrevrank('leaderboard:reputation', wallet);
+        pipe.zscore('leaderboard:reputation', wallet);
+
         const [
             profile,
             journey,
@@ -43,7 +53,10 @@ export default async function handler(req, res) {
             mintScore,
             volumeRank,
             volumeScore,
-            totalMintersCount
+            totalMintersCount,
+            globalStats,
+            reputationRank,
+            reputationScore
         ] = await pipe.exec();
 
         // Parse journey events
@@ -67,9 +80,22 @@ export default async function handler(req, res) {
         const totalMints = parseInt(profile?.total_mints) || 0;
         const totalAttempts = parseInt(profile?.total_attempts) || 0;
         const totalFailures = parseInt(profile?.total_failures) || 0;
+        const totalVolume = parseFloat(profile?.total_volume || 0);
+        const totalGas = parseFloat(profile?.total_gas || 0);
         const successRate = totalAttempts > 0
             ? ((totalMints / totalAttempts) * 100).toFixed(1)
             : '100.0';
+
+        // Average gas per mint
+        const avgGas = totalMints > 0
+            ? (totalGas / totalMints).toFixed(6)
+            : '0.000000';
+
+        // Contribution % (user mints vs global mints)
+        const globalMints = parseInt(globalStats?.total_mints) || 1;
+        const globalVolume = parseFloat(globalStats?.total_volume) || 1;
+        const mintContribution = ((totalMints / globalMints) * 100).toFixed(2);
+        const volumeContribution = ((totalVolume / globalVolume) * 100).toFixed(2);
 
         // Calculate percentile
         const totalMinters = parseInt(totalMintersCount) || 0;
@@ -81,30 +107,52 @@ export default async function handler(req, res) {
         // Calculate streak (from journey)
         const streak = calculateStreak(parsedJourney);
 
+        // Find favorite collection (most minted)
+        const favorite = findFavoriteCollection(parsedJourney);
+
         return res.status(200).json({
             wallet,
             profile: {
                 totalMints,
                 totalAttempts,
                 totalFailures,
-                totalVolume: parseFloat(profile?.total_volume || 0).toFixed(6),
-                totalGas: parseFloat(profile?.total_gas || 0).toFixed(6),
+                totalVolume: totalVolume.toFixed(6),
+                totalGas: totalGas.toFixed(6),
+                avgGas,
                 firstSeen: new Date(firstSeen).toISOString(),
                 lastActive: profile?.last_active ? new Date(parseInt(profile.last_active)).toISOString() : new Date(now).toISOString(),
                 successRate,
                 streak: streak.current,
-                longestStreak: streak.longest
+                longestStreak: streak.longest,
+                favoriteCollection: favorite.collection,
+                favoriteCollectionMints: favorite.count,
+                mintContribution,
+                volumeContribution
             },
             rankings: {
                 mints: {
                     rank: rank || 'Unranked',
                     score: parseInt(mintScore) || 0,
-                    percentile: percentile ? `Top ${(100 - parseFloat(percentile)).toFixed(1)}%` : 'N/A'
+                    percentile: percentile ? `Top ${(100 - parseFloat(percentile)).toFixed(1)}%` : 'N/A',
+                    totalMinters
                 },
                 volume: {
                     rank: volumeRank !== null ? volumeRank + 1 : 'Unranked',
                     score: parseFloat(volumeScore || 0).toFixed(6)
+                },
+                reputation: {
+                    rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
+                    score: parseFloat(reputationScore || profile?.reputation_score || 0).toFixed(2)
                 }
+            },
+            insights: {
+                mintContribution: `${mintContribution}%`,
+                volumeContribution: `${volumeContribution}%`,
+                avgGasPerMint: `${avgGas} ETH`,
+                favoriteCollection: favorite.collection,
+                favoriteCollectionMints: favorite.count,
+                memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
+                activityLevel: getActivityLevel(totalMints, streak.current)
             },
             journey: parsedJourney
         });
@@ -113,6 +161,37 @@ export default async function handler(req, res) {
         console.error('User stats error:', error);
         return res.status(500).json({ error: 'Failed to fetch user stats' });
     }
+}
+
+/**
+ * Find the user's most-minted collection from journey
+ */
+function findFavoriteCollection(journey) {
+    const counts = {};
+    for (const event of journey) {
+        if (event.type === 'mint_success' && event.collection) {
+            counts[event.collection] = (counts[event.collection] || 0) + 1;
+        }
+    }
+
+    let favorite = { collection: null, count: 0 };
+    for (const [collection, count] of Object.entries(counts)) {
+        if (count > favorite.count) {
+            favorite = { collection, count };
+        }
+    }
+    return favorite;
+}
+
+/**
+ * Get activity level label based on mints and streak
+ */
+function getActivityLevel(totalMints, currentStreak) {
+    if (totalMints >= 50 || currentStreak >= 7) return 'Power Minter 🔥';
+    if (totalMints >= 20 || currentStreak >= 3) return 'Active Collector 💎';
+    if (totalMints >= 5) return 'Rising Minter ⭐';
+    if (totalMints >= 1) return 'Newcomer 🌱';
+    return 'Explorer 👀';
 }
 
 /**

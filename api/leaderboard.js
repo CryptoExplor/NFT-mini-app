@@ -30,10 +30,13 @@ export default async function handler(req, res) {
         // 4. Recent global activity
         pipe.lrange('activity:global', 0, 29);
 
-        // Execute batch
-        const [globalStats, funnelData, leaderboard, recentActivity] = await pipe.exec();
+        // 5. Total unique wallets
+        pipe.scard('wallets:connected');
 
-        // 5. Fetch top collection stats (separate query)
+        // Execute batch
+        const [globalStats, funnelData, leaderboard, recentActivity, uniqueWallets] = await pipe.exec();
+
+        // 6. Fetch top collection stats (separate query)
         const collections = await getTopCollections();
 
         // Format leaderboard data
@@ -48,29 +51,46 @@ export default async function handler(req, res) {
             }
         }
 
-        // Parse activity
+        // Parse activity + generate social proof messages
         const parsedActivity = (recentActivity || []).map(item => {
             try { return typeof item === 'string' ? JSON.parse(item) : item; }
             catch { return item; }
         });
 
-        // Calculate funnel conversion
+        const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
+
+        // Calculate enhanced funnel with drop-off %
         const funnel = funnelData || {};
         const funnelSteps = [
-            { step: 'wallet_connect', count: parseInt(funnel.wallet_connect) || 0 },
-            { step: 'collection_view', count: parseInt(funnel.collection_view) || 0 },
-            { step: 'mint_click', count: parseInt(funnel.mint_click) || 0 },
-            { step: 'tx_sent', count: parseInt(funnel.tx_sent) || 0 },
-            { step: 'mint_success', count: parseInt(funnel.mint_success) || 0 }
+            { step: 'wallet_connect', label: 'Wallet Connect', count: parseInt(funnel.wallet_connect) || 0 },
+            { step: 'collection_view', label: 'View Collection', count: parseInt(funnel.collection_view) || 0 },
+            { step: 'mint_click', label: 'Click Mint', count: parseInt(funnel.mint_click) || 0 },
+            { step: 'tx_sent', label: 'Send Transaction', count: parseInt(funnel.tx_sent) || 0 },
+            { step: 'mint_success', label: 'Mint Success', count: parseInt(funnel.mint_success) || 0 }
         ];
 
-        // Calculate conversion rates
-        for (let i = 1; i < funnelSteps.length; i++) {
-            const prev = funnelSteps[i - 1].count;
-            funnelSteps[i].conversionFromPrev = prev > 0
-                ? ((funnelSteps[i].count / prev) * 100).toFixed(1)
-                : '0.0';
+        // Calculate conversion + drop-off rates
+        const firstStep = funnelSteps[0].count || 1;
+        for (let i = 0; i < funnelSteps.length; i++) {
+            const step = funnelSteps[i];
+            // Conversion from previous step
+            if (i > 0) {
+                const prev = funnelSteps[i - 1].count;
+                step.conversionFromPrev = prev > 0
+                    ? ((step.count / prev) * 100).toFixed(1)
+                    : '0.0';
+                step.dropOff = prev > 0
+                    ? (((prev - step.count) / prev) * 100).toFixed(1)
+                    : '0.0';
+            }
+            // Overall conversion from first step
+            step.overallConversion = ((step.count / firstStep) * 100).toFixed(1);
         }
+
+        // Overall funnel conversion
+        const overallConversion = firstStep > 0
+            ? ((funnelSteps[funnelSteps.length - 1].count / firstStep) * 100).toFixed(1)
+            : '0.0';
 
         const stats = globalStats || {};
         const totalViews = parseInt(stats.total_views) || 0;
@@ -96,12 +116,15 @@ export default async function handler(req, res) {
                 conversionRate,
                 totalConnects: parseInt(stats.total_connects) || 0,
                 totalFailures: parseInt(stats.total_failures) || 0,
-                totalEvents: parseInt(stats.total_events) || 0
+                totalEvents: parseInt(stats.total_events) || 0,
+                uniqueWallets: uniqueWallets || 0
             },
             funnel: funnelSteps,
+            overallConversion,
             leaderboard: formattedLeaderboard,
             collections,
-            recentActivity: parsedActivity
+            recentActivity: parsedActivity,
+            socialProof
         });
 
     } catch (error) {
@@ -111,14 +134,77 @@ export default async function handler(req, res) {
 }
 
 /**
+ * Generate social proof messages from recent activity
+ */
+function generateSocialProof(activity, leaderboard, collections) {
+    const messages = [];
+
+    // Whale alerts — top minters with high scores
+    if (leaderboard.length > 0) {
+        const top = leaderboard[0];
+        if (top.score >= 5) {
+            messages.push({
+                type: 'whale',
+                icon: '🐋',
+                text: `Whale alert: ${shortenAddr(top.wallet)} minted ${top.score} NFTs`,
+                timestamp: Date.now()
+            });
+        }
+    }
+
+    // Collection milestones
+    for (const col of collections) {
+        const milestones = [1000, 500, 100, 50, 10];
+        for (const m of milestones) {
+            if (col.mints >= m) {
+                messages.push({
+                    type: 'milestone',
+                    icon: '🎯',
+                    text: `${col.slug} just hit ${m}+ mints!`,
+                    timestamp: Date.now()
+                });
+                break; // Only show highest milestone per collection
+            }
+        }
+    }
+
+    // Recent activity highlights
+    if (activity.length > 0) {
+        const latest = activity[0];
+        if (latest && latest.wallet) {
+            messages.push({
+                type: 'recent',
+                icon: '💎',
+                text: `${shortenAddr(latest.wallet)} just minted from ${latest.collection || 'a collection'}`,
+                timestamp: latest.timestamp || Date.now()
+            });
+        }
+    }
+
+    // Active minters count
+    const uniqueRecentWallets = new Set(activity.map(a => a.wallet).filter(Boolean)).size;
+    if (uniqueRecentWallets > 1) {
+        messages.push({
+            type: 'social',
+            icon: '🔥',
+            text: `${uniqueRecentWallets} wallets minting right now`,
+            timestamp: Date.now()
+        });
+    }
+
+    return messages;
+}
+
+function shortenAddr(addr) {
+    if (!addr || addr.length < 10) return addr || 'Unknown';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+/**
  * Fetch top collections by mints
- * Since we don't have a master list in Redis, we use known slugs
- * or scan for collection keys. For now, return available collections.
  */
 async function getTopCollections() {
     try {
-        // Get all collection stat keys (limited approach for Vercel KV)
-        // In production, maintain a set of collection slugs
         const knownSlugs = [
             'onchain-sigils', 'zorgz', 'base-invaders',
             'baseheads-404', 'basemoods', 'pixelpets',
@@ -149,7 +235,6 @@ async function getTopCollections() {
             }
         }
 
-        // Sort by views descending
         collections.sort((a, b) => b.views - a.views);
         return collections;
 

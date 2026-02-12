@@ -1,21 +1,11 @@
 import { kv } from '@vercel/kv';
+import { requireAdmin } from './lib/authMiddleware.js';
 
 function cors(res) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Wallet');
-}
-
-/**
- * Check if wallet is in the admin allowlist
- */
-function isAdmin(wallet) {
-    const adminList = (process.env.ADMIN_WALLETS || '')
-        .split(',')
-        .map(w => w.trim().toLowerCase())
-        .filter(Boolean);
-    return adminList.includes(wallet.toLowerCase());
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Wallet');
 }
 
 export default async function handler(req, res) {
@@ -23,10 +13,15 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    // Admin auth check
-    const wallet = req.headers['x-admin-wallet'] || req.query.wallet;
-    if (!wallet || !isAdmin(wallet)) {
-        return res.status(403).json({ error: 'Unauthorized. Admin wallet required.' });
+    // JWT admin auth (preferred) with header fallback
+    const auth = await requireAdmin(req);
+    if (!auth) {
+        // Fallback: x-admin-wallet header (legacy)
+        const wallet = req.headers['x-admin-wallet'] || req.query.wallet;
+        const adminList = (process.env.ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+        if (!wallet || !adminList.includes(wallet.toLowerCase())) {
+            return res.status(403).json({ error: 'Unauthorized. Admin JWT or wallet required.' });
+        }
     }
 
     const { action, target } = req.query;

@@ -147,3 +147,82 @@ function getCampaign() {
     const params = new URLSearchParams(window.location.search);
     return params.get('utm_campaign') || params.get('ref') || null;
 }
+
+// ============================================
+// AUTH (EIP-4361 SIWE)
+// ============================================
+
+let authToken = null;
+
+/**
+ * Store auth token (call after successful verify)
+ */
+export function setAuthToken(token) {
+    authToken = token;
+    try { sessionStorage.setItem('auth_token', token); } catch { }
+}
+
+/**
+ * Get stored auth token
+ */
+export function getAuthToken() {
+    if (authToken) return authToken;
+    try { authToken = sessionStorage.getItem('auth_token'); } catch { }
+    return authToken;
+}
+
+/**
+ * Clear auth token (logout)
+ */
+export function clearAuthToken() {
+    authToken = null;
+    try { sessionStorage.removeItem('auth_token'); } catch { }
+}
+
+/**
+ * Request a nonce for SIWE sign-in
+ */
+export async function getNonce(wallet) {
+    const response = await fetch(`${API_BASE}/api/auth/nonce?wallet=${wallet}`);
+    if (!response.ok) throw new Error('Failed to get nonce');
+    return await response.json();
+}
+
+/**
+ * Verify SIWE signature and get JWT
+ */
+export async function verifySignature(message, signature) {
+    const response = await fetch(`${API_BASE}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, signature })
+    });
+    if (!response.ok) throw new Error('Verification failed');
+    const data = await response.json();
+    if (data.token) setAuthToken(data.token);
+    return data;
+}
+
+/**
+ * Get admin analytics data (requires admin wallet)
+ */
+export async function getAdminData(action = 'overview', target = null) {
+    try {
+        const params = new URLSearchParams({ action });
+        if (target) params.set('target', target);
+
+        const headers = {};
+        const token = getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`${API_BASE}/api/admin?${params}`, { headers });
+        if (!response.ok) throw new Error('Admin request failed');
+        return await response.json();
+    } catch (error) {
+        console.error('Admin data error:', error);
+        return null;
+    }
+}
+

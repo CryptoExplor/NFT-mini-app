@@ -1,24 +1,24 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
-import { getLeaderboard, getUserStats } from '../lib/api.js';
+import { getLeaderboard, getUserStats, getAdminData } from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
 
-// Track listener for cleanup
+const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+
+// Cleanup references
 let walletUpdateHandler = null;
+let activityInterval = null;
 
 export async function renderAnalyticsPage(params) {
     const { slug } = params || {};
     const collections = loadCollections();
     const app = document.getElementById('app');
 
-    // Clean up previous wallet listener
-    if (walletUpdateHandler) {
-        document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
-        walletUpdateHandler = null;
-    }
+    // Clean up previous listeners + intervals
+    cleanup();
 
-    // Show loading state immediately
+    // Show loading state
     app.innerHTML = `
         <div class="min-h-screen bg-slate-900 text-white p-6 pb-24">
             <div class="max-w-6xl mx-auto text-center py-20">
@@ -38,9 +38,11 @@ export async function renderAnalyticsPage(params) {
 
     const stats = leaderboardData?.stats || {};
     const funnel = leaderboardData?.funnel || [];
+    const overallConversion = leaderboardData?.overallConversion || '0.0';
     const leaderboard = leaderboardData?.leaderboard || [];
     const collectionStats = leaderboardData?.collections || [];
     const recentActivity = leaderboardData?.recentActivity || [];
+    const socialProof = leaderboardData?.socialProof || [];
     const liveCount = collections.filter(c => c.status.toLowerCase() === 'live').length;
 
     app.innerHTML = `
@@ -52,22 +54,26 @@ export async function renderAnalyticsPage(params) {
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                     <div>
                         <h1 class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">
-                            ${slug ? `${slug} Analytics` : 'Platform Analytics'}
+                            ${slug ? `${slug} Analytics` : 'Mint Intelligence'}
                         </h1>
                         <p class="text-sm opacity-50 mt-1">Real-time insights • Powered by Vercel KV</p>
                     </div>
-                    <div class="flex gap-2">
-                        <button id="lb-mints-btn" class="analytics-tab analytics-tab-active" data-type="mints">🏆 Mints</button>
-                        <button id="lb-volume-btn" class="analytics-tab" data-type="volume">💰 Volume</button>
-                        <button id="lb-gas-btn" class="analytics-tab" data-type="gas">⛽ Gas</button>
+                    <div class="flex gap-2 flex-wrap">
+                        <button class="analytics-tab analytics-tab-active" data-type="mints">🏆 Mints</button>
+                        <button class="analytics-tab" data-type="volume">💰 Volume</button>
+                        <button class="analytics-tab" data-type="gas">⛽ Gas</button>
+                        <button class="analytics-tab" data-type="reputation">⭐ Reputation</button>
                     </div>
                 </div>
             </header>
 
             <main class="max-w-6xl mx-auto space-y-6">
 
-                <!-- ============ USER STATS (PRIVATE) ============ -->
-                ${renderUserSection(userStats, state.wallet)}
+                <!-- ============ SOCIAL PROOF TICKER ============ -->
+                ${renderSocialProof(socialProof)}
+
+                <!-- ============ WALLET INSIGHTS (PERSONALIZED) ============ -->
+                ${renderWalletInsights(userStats, state.wallet)}
 
                 <!-- ============ GLOBAL SUMMARY CARDS ============ -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -79,23 +85,28 @@ export async function renderAnalyticsPage(params) {
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     ${summaryCard('⚡', 'Total Events', stats.totalEvents || 0, 'cyan')}
-                    ${summaryCard('🔗', 'Wallet Connects', stats.totalConnects || 0, 'blue')}
+                    ${summaryCard('🔗', 'Unique Wallets', stats.uniqueWallets || stats.totalConnects || 0, 'blue')}
                     ${summaryCard('💸', 'Total Volume', `${parseFloat(stats.totalVolume || 0).toFixed(4)} ETH`, 'emerald')}
                     ${summaryCard('🔴', 'Collections Live', liveCount, 'red')}
                 </div>
 
-                <!-- ============ FUNNEL + LEADERBOARD ============ -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                    <!-- Conversion Funnel -->
-                    <div class="glass-card p-5 rounded-2xl border border-white/10">
-                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                            <span class="text-orange-400">🔥</span> Mint Funnel
+                <!-- ============ CONVERSION FUNNEL ============ -->
+                <div class="glass-card p-5 rounded-2xl border border-white/10">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 gap-2">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <span class="text-orange-400">🔥</span> Conversion Funnel
                         </h3>
-                        <div class="space-y-3">
-                            ${renderFunnel(funnel)}
+                        <div class="text-sm">
+                            <span class="opacity-50">Overall:</span>
+                            <span class="font-bold ${parseFloat(overallConversion) > 50 ? 'text-green-400' : parseFloat(overallConversion) > 20 ? 'text-yellow-400' : 'text-red-400'}">${overallConversion}%</span>
+                            <span class="opacity-40 text-xs ml-1">wallets → success</span>
                         </div>
                     </div>
+                    ${renderEnhancedFunnel(funnel)}
+                </div>
+
+                <!-- ============ LEADERBOARD + ACTIVITY ============ -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                     <!-- Leaderboard -->
                     <div class="lg:col-span-2 glass-card p-5 rounded-2xl border border-white/10">
@@ -107,37 +118,40 @@ export async function renderAnalyticsPage(params) {
                             ${renderLeaderboard(leaderboard)}
                         </div>
                     </div>
-                </div>
 
-                <!-- ============ COLLECTIONS + ACTIVITY ============ -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    <!-- Popular Collections -->
-                    <div class="glass-card p-5 rounded-2xl border border-white/10">
-                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                            <span class="text-blue-400">📊</span> Collection Performance
-                        </h3>
-                        <div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                            ${renderCollectionStats(collectionStats)}
+                    <!-- Live Activity Feed -->
+                    <div class="glass-card p-5 rounded-2xl border border-green-500/20 relative" id="activity-feed-card">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                Live Feed
+                            </h3>
+                            <span id="feed-status" class="text-[10px] opacity-40 font-mono">auto-refresh 10s</span>
                         </div>
-                    </div>
-
-                    <!-- Recent Activity -->
-                    <div class="glass-card p-5 rounded-2xl border border-white/10">
-                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                            <span class="text-green-400">⚡</span> Live Activity Feed
-                        </h3>
-                        <div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                        <div class="space-y-2 max-h-[450px] overflow-y-auto custom-scrollbar pr-1" id="activity-feed">
                             ${renderActivityFeed(recentActivity)}
                         </div>
                     </div>
                 </div>
 
-                <!-- ============ USER MINT HISTORY ============ -->
+                <!-- ============ COLLECTIONS ============ -->
+                <div class="glass-card p-5 rounded-2xl border border-white/10">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <span class="text-blue-400">📊</span> Collection Performance
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        ${renderCollectionStats(collectionStats)}
+                    </div>
+                </div>
+
+                <!-- ============ MINT HISTORY ============ -->
                 ${renderMintHistory(userStats)}
 
-                <!-- ============ USER JOURNEY (PRIVATE) ============ -->
+                <!-- ============ USER JOURNEY ============ -->
                 ${renderJourneyTimeline(userStats)}
+
+                <!-- ============ ADMIN PANEL ============ -->
+                ${renderAdminPanel(state.wallet)}
 
             </main>
         </div>
@@ -145,11 +159,7 @@ export async function renderAnalyticsPage(params) {
 
     // Event listeners
     document.getElementById('back-home-btn').onclick = () => {
-        // Clean up wallet listener before navigating away
-        if (walletUpdateHandler) {
-            document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
-            walletUpdateHandler = null;
-        }
+        cleanup();
         router.navigate('/');
     };
 
@@ -158,11 +168,9 @@ export async function renderAnalyticsPage(params) {
         btn.addEventListener('click', async () => {
             document.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('analytics-tab-active'));
             btn.classList.add('analytics-tab-active');
-
             const type = btn.dataset.type;
             const container = document.getElementById('leaderboard-container');
             container.innerHTML = '<div class="text-center py-8 opacity-30">Loading...</div>';
-
             const data = await getLeaderboard({ type });
             if (data?.leaderboard) {
                 container.innerHTML = renderLeaderboard(data.leaderboard);
@@ -170,12 +178,61 @@ export async function renderAnalyticsPage(params) {
         });
     });
 
-    // Listen for wallet changes → re-render with new wallet data
+    // Wire up admin panel (if rendered)
+    setupAdminListeners();
+
+    // ========== AUTO-REFRESH ACTIVITY FEED (every 10s) ==========
+    let isPaused = false;
+    const feedCard = document.getElementById('activity-feed-card');
+    if (feedCard) {
+        feedCard.addEventListener('mouseenter', () => { isPaused = true; updateFeedStatus('paused'); });
+        feedCard.addEventListener('mouseleave', () => { isPaused = false; updateFeedStatus('auto-refresh 10s'); });
+    }
+
+    activityInterval = setInterval(async () => {
+        if (isPaused) return;
+        try {
+            const freshData = await getLeaderboard();
+            if (freshData?.recentActivity) {
+                const feedEl = document.getElementById('activity-feed');
+                if (feedEl) {
+                    feedEl.innerHTML = renderActivityFeed(freshData.recentActivity);
+                    // Flash the feed status
+                    updateFeedStatus('updated ✓');
+                    setTimeout(() => updateFeedStatus('auto-refresh 10s'), 2000);
+                }
+                // Update social proof too
+                if (freshData.socialProof) {
+                    const proofEl = document.getElementById('social-proof-ticker');
+                    if (proofEl) {
+                        proofEl.innerHTML = renderSocialProofItems(freshData.socialProof);
+                    }
+                }
+            }
+        } catch { /* silent fail */ }
+    }, 10000);
+
+    // Listen for wallet changes → re-render
     walletUpdateHandler = () => {
-        // Small delay to let state update propagate
         setTimeout(() => renderAnalyticsPage(params), 300);
     };
     document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+}
+
+function cleanup() {
+    if (walletUpdateHandler) {
+        document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+        walletUpdateHandler = null;
+    }
+    if (activityInterval) {
+        clearInterval(activityInterval);
+        activityInterval = null;
+    }
+}
+
+function updateFeedStatus(text) {
+    const el = document.getElementById('feed-status');
+    if (el) el.textContent = text;
 }
 
 // ============================================
@@ -203,13 +260,39 @@ function summaryCard(icon, label, value, color) {
     `;
 }
 
-function renderUserSection(userStats, wallet) {
+// ========== SOCIAL PROOF TICKER ==========
+
+function renderSocialProof(messages) {
+    if (!messages || messages.length === 0) return '';
+
+    return `
+        <div class="glass-card px-4 py-3 rounded-xl border border-yellow-500/20 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 overflow-hidden">
+            <div class="flex items-center gap-3" id="social-proof-ticker">
+                ${renderSocialProofItems(messages)}
+            </div>
+        </div>
+    `;
+}
+
+function renderSocialProofItems(messages) {
+    return messages.map(m => `
+        <div class="flex items-center gap-2 text-sm whitespace-nowrap animate-fade-in">
+            <span>${m.icon}</span>
+            <span class="font-medium">${m.text}</span>
+        </div>
+        <span class="text-white/20 mx-2">•</span>
+    `).join('');
+}
+
+// ========== WALLET INSIGHTS (PERSONALIZED) ==========
+
+function renderWalletInsights(userStats, wallet) {
     if (!wallet?.isConnected) {
         return `
             <div class="glass-card p-5 rounded-2xl border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                     <h2 class="text-lg font-bold">Connect wallet to see your stats</h2>
-                    <p class="opacity-50 text-sm">Track your rank, streak, and journey</p>
+                    <p class="opacity-50 text-sm">Track your rank, streak, and contribution</p>
                 </div>
                 <div class="text-3xl opacity-20">🔒</div>
             </div>
@@ -218,16 +301,24 @@ function renderUserSection(userStats, wallet) {
 
     const profile = userStats?.profile || {};
     const rankings = userStats?.rankings || {};
+    const insights = userStats?.insights || {};
 
     return `
         <div class="glass-card p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/5 relative overflow-hidden">
             <div class="absolute top-2 right-4 opacity-10 text-6xl pointer-events-none">👤</div>
-            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
-                My Stats
-                <span class="text-xs font-normal opacity-50 bg-white/10 px-2 py-0.5 rounded-full">${shortenAddress(wallet.address)}</span>
-                ${profile.streak > 0 ? `<span class="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">🔥 ${profile.streak} day streak</span>` : ''}
-            </h2>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+            <!-- Header -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg font-bold flex items-center gap-2 flex-wrap">
+                    Wallet Insights
+                    <span class="text-xs font-normal opacity-50 bg-white/10 px-2 py-0.5 rounded-full">${shortenAddress(wallet.address)}</span>
+                    ${insights.activityLevel ? `<span class="text-xs bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-indigo-200 px-2 py-0.5 rounded-full">${insights.activityLevel}</span>` : ''}
+                    ${profile.streak > 0 ? `<span class="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">🔥 ${profile.streak} day streak</span>` : ''}
+                </h2>
+            </div>
+
+            <!-- Primary Stats Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
                 <div>
                     <div class="text-xs opacity-50 uppercase">Rank</div>
                     <div class="text-2xl font-bold text-yellow-400">${rankings.mints?.rank === 'Unranked' ? '—' : `#${rankings.mints?.rank}`}</div>
@@ -247,47 +338,118 @@ function renderUserSection(userStats, wallet) {
                     <div class="text-[10px] opacity-40">ETH</div>
                 </div>
                 <div>
+                    <div class="text-xs opacity-50 uppercase">Avg Gas</div>
+                    <div class="text-2xl font-bold text-cyan-400">${parseFloat(profile.avgGas || 0).toFixed(4)}</div>
+                    <div class="text-[10px] opacity-40">ETH/mint</div>
+                </div>
+                <div>
+                    <div class="text-xs opacity-50 uppercase">Reputation</div>
+                    <div class="text-2xl font-bold text-amber-400">${rankings.reputation?.score || '0'}</div>
+                    <div class="text-[10px] opacity-40">${rankings.reputation?.rank === 'Unranked' ? '' : `#${rankings.reputation?.rank}`}</div>
+                </div>
+                <div>
                     <div class="text-xs opacity-50 uppercase">Member Since</div>
                     <div class="text-sm font-medium">${profile.firstSeen ? new Date(profile.firstSeen).toLocaleDateString() : '—'}</div>
+                    <div class="text-[10px] opacity-40">${insights.memberDays || 0} days</div>
                 </div>
+            </div>
+
+            <!-- Contribution & Psychological Hooks -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                ${profile.mintContribution ? `
+                    <div class="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div class="text-xs opacity-50 mb-1">🏆 Your Contribution</div>
+                        <div class="text-lg font-bold text-indigo-400">
+                            ${profile.mintContribution}%
+                            <span class="text-xs font-normal opacity-50">of all mints</span>
+                        </div>
+                    </div>
+                ` : ''}
+                ${profile.volumeContribution ? `
+                    <div class="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div class="text-xs opacity-50 mb-1">💸 Revenue Share</div>
+                        <div class="text-lg font-bold text-emerald-400">
+                            ${profile.volumeContribution}%
+                            <span class="text-xs font-normal opacity-50">of total volume</span>
+                        </div>
+                    </div>
+                ` : ''}
+                ${profile.favoriteCollection ? `
+                    <div class="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div class="text-xs opacity-50 mb-1">❤️ Favorite Collection</div>
+                        <div class="text-lg font-bold text-pink-400 truncate">${profile.favoriteCollection}</div>
+                        <div class="text-[10px] opacity-40">${profile.favoriteCollectionMints || 0} mints</div>
+                    </div>
+                ` : `
+                    <div class="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div class="text-xs opacity-50 mb-1">❤️ Favorite Collection</div>
+                        <div class="text-sm font-medium opacity-40">Mint to discover!</div>
+                    </div>
+                `}
             </div>
         </div>
     `;
 }
 
-function renderFunnel(funnel) {
+// ========== ENHANCED CONVERSION FUNNEL ==========
+
+function renderEnhancedFunnel(funnel) {
     if (!funnel || funnel.length === 0) {
         return '<div class="text-center py-8 opacity-30">No funnel data yet</div>';
     }
 
     const maxCount = Math.max(...funnel.map(s => s.count), 1);
-    const labels = {
-        wallet_connect: '🔗 Connect',
-        collection_view: '👁️ View',
-        mint_click: '👆 Click',
-        tx_sent: '📤 Send',
-        mint_success: '✅ Success'
+    const icons = {
+        wallet_connect: '🔗',
+        collection_view: '👁️',
+        mint_click: '👆',
+        tx_sent: '📤',
+        mint_success: '✅'
     };
 
-    return funnel.map((step, i) => {
-        const width = Math.max((step.count / maxCount) * 100, 8);
-        const label = labels[step.step] || step.step;
-        const convRate = step.conversionFromPrev ? `${step.conversionFromPrev}%` : '';
+    // Horizontal funnel flow
+    return `
+        <div class="space-y-1">
+            <!-- Funnel steps as horizontal connected flow -->
+            <div class="flex flex-col gap-3">
+                ${funnel.map((step, i) => {
+        const width = Math.max((step.count / maxCount) * 100, 12);
+        const icon = icons[step.step] || '📌';
+        const isLast = i === funnel.length - 1;
+        const dropOffColor = parseFloat(step.dropOff || 0) > 50 ? 'text-red-400' : parseFloat(step.dropOff || 0) > 25 ? 'text-yellow-400' : 'text-green-400';
 
         return `
-            <div>
-                <div class="flex justify-between text-xs mb-1">
-                    <span class="opacity-70">${label}</span>
-                    <span class="font-mono">${step.count.toLocaleString()} ${i > 0 ? `<span class="opacity-40">(${convRate})</span>` : ''}</span>
-                </div>
-                <div class="w-full bg-white/5 rounded-full h-3 overflow-hidden">
-                    <div class="h-full rounded-full transition-all duration-500 ${i === funnel.length - 1 ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}"
-                         style="width: ${width}%"></div>
-                </div>
+                        <div class="relative">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 text-center text-lg flex-shrink-0">${icon}</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-medium">${step.label || step.step.replace(/_/g, ' ')}</span>
+                                        <div class="flex gap-3">
+                                            <span class="font-mono font-bold">${step.count.toLocaleString()}</span>
+                                            ${i > 0 ? `
+                                                <span class="font-mono ${dropOffColor}">${step.conversionFromPrev}% pass</span>
+                                                <span class="font-mono text-red-400/60 text-[10px] leading-4">↓${step.dropOff}% drop</span>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                    <div class="w-full bg-white/5 rounded-full h-4 overflow-hidden">
+                                        <div class="h-full rounded-full transition-all duration-700 ${isLast ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}"
+                                             style="width: ${width}%">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            ${!isLast ? '<div class="ml-4 pl-[3px] h-2 border-l-2 border-dashed border-white/10"></div>' : ''}
+                        </div>
+                    `;
+    }).join('')}
             </div>
-        `;
-    }).join('');
+        </div>
+    `;
 }
+
+// ========== LEADERBOARD ==========
 
 function renderLeaderboard(leaderboard) {
     if (!leaderboard || leaderboard.length === 0) {
@@ -330,9 +492,41 @@ function renderLeaderboard(leaderboard) {
     `;
 }
 
+// ========== LIVE ACTIVITY FEED ==========
+
+function renderActivityFeed(activity) {
+    if (!activity || activity.length === 0) {
+        return '<div class="text-center py-8 opacity-30">No activity yet. Be the first to mint!</div>';
+    }
+
+    return activity.map(item => {
+        const timeAgo = getTimeAgo(item.timestamp);
+        return `
+            <div class="flex items-center gap-3 p-2.5 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all animate-fade-in">
+                <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">${item.collection || 'Unknown'}</div>
+                    <div class="text-[10px] opacity-50 font-mono">
+                        ${shortenAddress(item.wallet || '')}
+                        <span class="mx-1">•</span>
+                        ${timeAgo}
+                        ${item.price > 0 ? `<span class="mx-1">•</span> ${parseFloat(item.price).toFixed(4)} ETH` : ''}
+                    </div>
+                </div>
+                ${item.txHash ? `
+                    <a href="https://basescan.org/tx/${item.txHash}" target="_blank" rel="noopener noreferrer"
+                       class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0">↗</a>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// ========== COLLECTION STATS ==========
+
 function renderCollectionStats(collections) {
     if (!collections || collections.length === 0) {
-        return '<div class="text-center py-8 opacity-30">No collection data yet</div>';
+        return '<div class="text-center py-8 opacity-30 col-span-full">No collection data yet</div>';
     }
 
     return collections.map(col => {
@@ -358,40 +552,11 @@ function renderCollectionStats(collections) {
     }).join('');
 }
 
-function renderActivityFeed(activity) {
-    if (!activity || activity.length === 0) {
-        return '<div class="text-center py-8 opacity-30">No activity yet. Be the first to mint!</div>';
-    }
-
-    return activity.map(item => {
-        const timeAgo = getTimeAgo(item.timestamp);
-        return `
-            <div class="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all">
-                <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
-                <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate">${item.collection || 'Unknown'}</div>
-                    <div class="text-[11px] opacity-50 font-mono">
-                        ${shortenAddress(item.wallet || '')}
-                        <span class="mx-1">•</span>
-                        ${timeAgo}
-                        ${item.price > 0 ? `<span class="mx-1">•</span> ${parseFloat(item.price).toFixed(4)} ETH` : ''}
-                    </div>
-                </div>
-                ${item.txHash ? `
-                    <a href="https://basescan.org/tx/${item.txHash}" target="_blank" rel="noopener noreferrer"
-                       class="p-1.5 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0">
-                        ↗
-                    </a>
-                ` : ''}
-            </div>
-        `;
-    }).join('');
-}
+// ========== MINT HISTORY ==========
 
 function renderMintHistory(userStats) {
     if (!userStats?.journey || userStats.journey.length === 0) return '';
 
-    // Filter only mint_success events from journey
     const mints = userStats.journey.filter(e => e.type === 'mint_success');
     if (mints.length === 0) return '';
 
@@ -423,21 +588,16 @@ function renderMintHistory(userStats) {
     `;
 }
 
+// ========== JOURNEY TIMELINE ==========
+
 function renderJourneyTimeline(userStats) {
     if (!userStats?.journey || userStats.journey.length === 0) return '';
 
     const journey = userStats.journey;
     const eventIcons = {
-        page_view: '👁️',
-        collection_view: '📂',
-        mint_click: '👆',
-        mint_attempt: '⏳',
-        tx_sent: '📤',
-        mint_success: '✅',
-        mint_failure: '❌',
-        wallet_connect: '🔗',
-        gallery_view: '🖼️',
-        click: '👆'
+        page_view: '👁️', collection_view: '📂', mint_click: '👆',
+        mint_attempt: '⏳', tx_sent: '📤', mint_success: '✅',
+        mint_failure: '❌', wallet_connect: '🔗', gallery_view: '🖼️', click: '👆'
     };
 
     return `
@@ -473,3 +633,146 @@ function getTimeAgo(timestamp) {
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
 }
+
+// ========== ADMIN PANEL ==========
+
+function renderAdminPanel(wallet) {
+    if (!wallet?.isConnected) return '';
+    const isAdmin = ADMIN_WALLETS.includes(wallet.address.toLowerCase());
+    if (!isAdmin) return '';
+
+    return `
+        <div class="glass-card p-5 rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/5 to-orange-500/5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <span class="text-red-400">🛡️</span> Admin Panel
+                    <span class="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full uppercase">Admin Only</span>
+                </h3>
+                <button id="load-admin-data" class="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 px-3 py-1.5 rounded-lg transition">
+                    Load System Data
+                </button>
+            </div>
+
+            <div id="admin-panel-content" class="text-sm opacity-50 text-center py-4">
+                Click "Load System Data" to fetch admin analytics
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                <div>
+                    <label class="text-[10px] opacity-40 uppercase block mb-1">Lookup Date</label>
+                    <input id="admin-date-input" type="date" value="${new Date().toISOString().split('T')[0]}"
+                           class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white">
+                </div>
+                <button id="admin-daily-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
+                    📅 Daily Stats
+                </button>
+                <button id="admin-cohort-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
+                    👥 Cohort Data
+                </button>
+            </div>
+            <div id="admin-extra-content" class="mt-4"></div>
+        </div>
+    `;
+}
+
+// Wire up admin panel event listeners (called after DOM render)
+function setupAdminListeners() {
+    const loadBtn = document.getElementById('load-admin-data');
+    if (loadBtn) {
+        loadBtn.addEventListener('click', async () => {
+            const content = document.getElementById('admin-panel-content');
+            content.innerHTML = '<div class="text-center py-4 opacity-30">Loading...</div>';
+
+            const data = await getAdminData('overview');
+            if (!data) {
+                content.innerHTML = '<div class="text-center py-4 text-red-400">Failed to load admin data</div>';
+                return;
+            }
+
+            const stats = data.stats || {};
+            const funnel = data.funnel || {};
+            const lb = data.leaderboard || [];
+
+            content.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-[10px] opacity-40 uppercase">Total Events</div>
+                        <div class="text-xl font-bold">${parseInt(stats.total_events) || 0}</div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-[10px] opacity-40 uppercase">Total Mints</div>
+                        <div class="text-xl font-bold text-green-400">${parseInt(stats.total_mints) || 0}</div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-[10px] opacity-40 uppercase">Total Volume</div>
+                        <div class="text-xl font-bold text-purple-400">${parseFloat(stats.total_volume || 0).toFixed(4)} ETH</div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-[10px] opacity-40 uppercase">Tracked Wallets</div>
+                        <div class="text-xl font-bold text-blue-400">${data.totalTrackedWallets || 0}</div>
+                    </div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-3 mb-3">
+                    <div class="text-xs font-bold opacity-60 mb-2">Raw Funnel Counts</div>
+                    <div class="flex flex-wrap gap-3 text-xs font-mono">
+                        ${Object.entries(funnel).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join(' • ')}
+                    </div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-3">
+                    <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
+                    <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
+                        ${lb.map(u => `<div class="flex justify-between"><span>${shortenAddress(u.wallet)}</span><span class="font-bold">${u.score}</span></div>`).join('')}
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // Daily stats button
+    const dailyBtn = document.getElementById('admin-daily-btn');
+    if (dailyBtn) {
+        dailyBtn.addEventListener('click', async () => {
+            const date = document.getElementById('admin-date-input')?.value;
+            if (!date) return;
+            const content = document.getElementById('admin-extra-content');
+            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
+            const data = await getAdminData('daily', date);
+            if (data?.stats) {
+                content.innerHTML = `
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-xs font-bold opacity-60 mb-2">📅 Stats for ${date}</div>
+                        <div class="flex flex-wrap gap-4 text-sm font-mono">
+                            ${Object.entries(data.stats).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = '<div class="text-sm opacity-40">No data for this date</div>';
+            }
+        });
+    }
+
+    // Cohort button
+    const cohortBtn = document.getElementById('admin-cohort-btn');
+    if (cohortBtn) {
+        cohortBtn.addEventListener('click', async () => {
+            const date = document.getElementById('admin-date-input')?.value;
+            if (!date) return;
+            const content = document.getElementById('admin-extra-content');
+            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
+            const data = await getAdminData('cohort', date);
+            if (data) {
+                content.innerHTML = `
+                    <div class="bg-white/5 rounded-xl p-3">
+                        <div class="text-xs font-bold opacity-60 mb-2">👥 Cohort for ${date}</div>
+                        <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
+                        <div class="text-xs font-mono opacity-60 max-h-32 overflow-y-auto">
+                            ${(data.wallets || []).map(w => shortenAddress(w)).join(', ') || 'None'}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
+}
+

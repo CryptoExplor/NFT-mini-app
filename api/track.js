@@ -208,6 +208,36 @@ export default async function handler(req, res) {
         // ===== EXECUTE BATCH =====
         await pipe.exec();
 
+        // ===== REPUTATION SCORE (computed after mint_success) =====
+        if (type === 'mint_success' && wallet) {
+            try {
+                const profile = await kv.hgetall(`user:${wallet}:profile`);
+                if (profile) {
+                    const mints = parseInt(profile.total_mints) || 0;
+                    const volume = parseFloat(profile.total_volume) || 0;
+                    const attempts = parseInt(profile.total_attempts) || 1;
+                    const failures = parseInt(profile.total_failures) || 0;
+                    const successRate = attempts > 0 ? (mints / attempts) : 1;
+                    const failRate = attempts > 0 ? (failures / attempts) : 0;
+
+                    // Reputation formula
+                    const reputation = Math.max(0,
+                        (mints * 2) +
+                        (volume > 0 ? Math.log(volume + 1) * 10 : 0) +
+                        (parseInt(profile.streak) || 0) * 5 +
+                        (successRate * 20) -
+                        (failRate * 10)
+                    );
+
+                    const reputationScore = Math.round(reputation * 100) / 100;
+                    await kv.hset(`user:${wallet}:profile`, 'reputation_score', reputationScore);
+                    await kv.zadd('leaderboard:reputation', { score: reputationScore, member: wallet });
+                }
+            } catch (repError) {
+                console.warn('Reputation calc error (non-fatal):', repError);
+            }
+        }
+
         // Set weekly leaderboard TTL (8 weeks)
         await kv.expire(`leaderboard:mints:week:${weekNum}`, 60 * 60 * 24 * 56);
 
