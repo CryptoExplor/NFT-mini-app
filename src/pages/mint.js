@@ -423,6 +423,10 @@ async function initMintInterface(collection) {
 
     // Set up mint handler
     mintBtn.onclick = async () => {
+      // Track click intent
+      if (state.wallet?.address) {
+        trackMintClick(state.wallet.address, collection.slug);
+      }
       await handleMint(collection, stage);
     };
 
@@ -536,8 +540,11 @@ async function handleMint(collection, stage) {
     toast.show('Successfully minted NFT! 🎉', 'success');
 
     // Track on server (full funnel: tx_sent + mint_success)
+    const price = stage.type === 'PAID' ? (stage.price ? Number(stage.price) / 1e18 : 0) : 0;
+    const gas = 0; // Ideally estimation from preview but difficult to get exact used gas here without receipt
+
     trackTxSent(state.wallet.address, collection.slug, hash);
-    trackMint(state.wallet.address, collection.slug, hash);
+    trackMint(state.wallet.address, collection.slug, hash, price, gas);
 
     mintText.textContent = 'Success! 🎉';
     mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;

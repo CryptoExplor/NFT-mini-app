@@ -17,14 +17,10 @@ export default async function handler(req, res) {
     if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
         // Continue...
     } else {
-        // Authenticate production
+        // Production requires authenticated admin JWT
         const auth = await requireAdmin(req);
         if (!auth) {
-            const wallet = req.headers['x-admin-wallet'] || req.query.wallet;
-            const adminList = (process.env.ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
-            if (!wallet || !adminList.includes(wallet.toLowerCase())) {
-                return res.status(403).json({ error: 'Unauthorized. Admin JWT or wallet required.' });
-            }
+            return res.status(403).json({ error: 'Unauthorized. Admin JWT required.' });
         }
     }
 
