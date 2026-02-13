@@ -202,58 +202,60 @@ export default async function handler(req, res) {
             const mintPrice = parseFloat(price) || 0;
             const gasUsed = parseFloat(gas) || 0;
 
-            // Global stats
-            pipe.hincrby('stats:global', 'total_mints', 1);
-            pipe.hincrbyfloat('stats:global', 'total_volume', mintPrice);
-            pipe.hincrbyfloat('stats:global', 'total_gas', gasUsed);
 
-            // Collection stats
-            pipe.hincrby(`collection:${collection}:stats`, 'mints', 1);
-            pipe.hincrbyfloat(`collection:${collection}:stats`, 'volume', mintPrice);
-
-            // Unique wallets per collection (approximation via counter)
-            pipe.sadd(`collection:${collection}:wallets`, normalizedWallet);
-
-            // Leaderboards (all-time)
-            pipe.zincrby('leaderboard:mints:all_time', 1, normalizedWallet);
-            pipe.zincrby(`leaderboard:mints:all_time:${collection}`, 1, normalizedWallet);
-            if (mintPrice > 0) {
-                pipe.zincrby('leaderboard:volume:all_time', mintPrice, normalizedWallet);
-                pipe.zincrby(`leaderboard:volume:all_time:${collection}`, mintPrice, normalizedWallet);
-            }
-            if (gasUsed > 0) {
-                pipe.zincrby('leaderboard:gas:all_time', gasUsed, normalizedWallet);
-                pipe.zincrby(`leaderboard:gas:all_time:${collection}`, gasUsed, normalizedWallet);
-            }
-
-            // Weekly leaderboard
-            pipe.zincrby(`leaderboard:mints:week:${weekNum}`, 1, normalizedWallet);
-
-            // Wallet profile
-            pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_mints', 1);
-            pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_volume', mintPrice);
-            pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_gas', gasUsed);
-            pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
-
-            // Daily stats
-            pipe.hincrby(`daily:stats:${today}`, 'mints', 1);
-            pipe.hincrbyfloat(`daily:stats:${today}`, 'volume', mintPrice);
-
-            // Activity feed (global + collection)
-            const activityItem = JSON.stringify({
-                wallet: normalizedWallet, collection, txHash, price: mintPrice, timestamp
-            });
-            pipe.lpush('activity:global', activityItem);
-            pipe.ltrim('activity:global', 0, 99);
-            pipe.lpush(`activity:collection:${collection}`, activityItem);
-            pipe.ltrim(`activity:collection:${collection}`, 0, 49);
-
-            // Log mint for CSV export (capped list)
-            pipe.lpush('log:mints', JSON.stringify({ wallet: normalizedWallet, collection, price: mintPrice, txHash, timestamp }));
-            pipe.ltrim('log:mints', 0, 9999);
 
             // ===== POINTS LOGIC (only if new mint) =====
             if (isNewMint) {
+
+                // Global stats
+                pipe.hincrby('stats:global', 'total_mints', 1);
+                pipe.hincrbyfloat('stats:global', 'total_volume', mintPrice);
+                pipe.hincrbyfloat('stats:global', 'total_gas', gasUsed);
+
+                // Collection stats
+                pipe.hincrby(`collection:${collection}:stats`, 'mints', 1);
+                pipe.hincrbyfloat(`collection:${collection}:stats`, 'volume', mintPrice);
+
+                // Unique wallets per collection (approximation via counter)
+                pipe.sadd(`collection:${collection}:wallets`, normalizedWallet);
+
+                // Leaderboards (all-time)
+                pipe.zincrby('leaderboard:mints:all_time', 1, normalizedWallet);
+                pipe.zincrby(`leaderboard:mints:all_time:${collection}`, 1, normalizedWallet);
+                if (mintPrice > 0) {
+                    pipe.zincrby('leaderboard:volume:all_time', mintPrice, normalizedWallet);
+                    pipe.zincrby(`leaderboard:volume:all_time:${collection}`, mintPrice, normalizedWallet);
+                }
+                if (gasUsed > 0) {
+                    pipe.zincrby('leaderboard:gas:all_time', gasUsed, normalizedWallet);
+                    pipe.zincrby(`leaderboard:gas:all_time:${collection}`, gasUsed, normalizedWallet);
+                }
+
+                // Weekly leaderboard
+                pipe.zincrby(`leaderboard:mints:week:${weekNum}`, 1, normalizedWallet);
+
+                // Wallet profile
+                pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_mints', 1);
+                pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_volume', mintPrice);
+                pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_gas', gasUsed);
+                pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
+
+                // Daily stats
+                pipe.hincrby(`daily:stats:${today}`, 'mints', 1);
+                pipe.hincrbyfloat(`daily:stats:${today}`, 'volume', mintPrice);
+
+                // Activity feed (global + collection)
+                const activityItem = JSON.stringify({
+                    wallet: normalizedWallet, collection, txHash, price: mintPrice, timestamp
+                });
+                pipe.lpush('activity:global', activityItem);
+                pipe.ltrim('activity:global', 0, 99);
+                pipe.lpush(`activity:collection:${collection}`, activityItem);
+                pipe.ltrim(`activity:collection:${collection}`, 0, 49);
+
+                // Log mint for CSV export (capped list)
+                pipe.lpush('log:mints', JSON.stringify({ wallet: normalizedWallet, collection, price: mintPrice, txHash, timestamp }));
+                pipe.ltrim('log:mints', 0, 9999);
                 // Base: 10
                 let points = 10;
 
