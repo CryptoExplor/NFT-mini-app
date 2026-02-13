@@ -354,10 +354,15 @@ export default async function handler(req, res) {
             pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
 
             // Journey log (trimmed)
-            pipe.lpush(`user:${normalizedWallet}:journey`, JSON.stringify({
-                type, collection, page, timestamp,
-                ...(txHash ? { txHash } : {})
-            }));
+            const journeyItem = {
+                type,
+                collection,
+                page,
+                timestamp,
+                ...(txHash ? { txHash } : {}),
+                ...(price > 0 ? { price: parseFloat(price) } : {})
+            };
+            pipe.lpush(`user:${normalizedWallet}:journey`, JSON.stringify(journeyItem));
             pipe.ltrim(`user:${normalizedWallet}:journey`, 0, 199);
         }
 
