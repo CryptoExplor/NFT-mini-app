@@ -51,8 +51,14 @@ export default {
     // OPTIONAL FIELDS
     // ============================================
 
-    featured: true,
-    farcaster: null,
+    farcaster: {
+        frame: true,
+        shareText: [
+            "I inscribed my ONCHAIN_SIGIL — geometry encoded forever. ⟁",
+            "This sigil now lives fully on-chain. No storage. No decay. ONCHAIN_SIGILS.",
+            "Activated my ONCHAIN_SIGIL. The pattern chose me."
+        ]
+    },
     openseaUrl: "https://opensea.io/collection/onchain_sigils",
     website: null,
     twitter: null,

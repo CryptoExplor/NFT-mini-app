@@ -60,7 +60,11 @@ export default {
     featured: false,
     farcaster: {
         frame: true,
-        shareText: "I have stared into the VOID and it stared back. ⚫"
+        shareText: [
+            "I stepped into the void. VOID_PFPS minted. ⚫",
+            "Minimal. Cold. On-chain. My VOID_PFPS exists in silence.",
+            "Negative space. Fracture. Glow. VOID_PFPS now lives on Base."
+        ]
     },
     openseaUrl: "https://opensea.io/collection/void-pfps",
     website: null,

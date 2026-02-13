@@ -17,6 +17,7 @@ import baseInvaders from '../../collections/base-invaders.js';
 import BASEHEADS_404 from '../../collections/BASEHEADS_404.js';
 import QuantumQuills from '../../collections/QuantumQuills.js';
 import VoidPFPs from '../../collections/void-pfps.js';
+import BaseMoods from '../../collections/basemoods.js';
 // ADD NEW COLLECTION IMPORTS HERE:
 // import myCollection from '../../collections/my-collection.js';
 
@@ -30,6 +31,7 @@ const COLLECTIONS_MAP = {
     'baseheads-404': BASEHEADS_404,
     'quantum-quills': QuantumQuills,
     'void-pfps': VoidPFPs,
+    'base-moods': BaseMoods,
     // ADD NEW COLLECTIONS HERE (slug: import):
     // 'my-collection': myCollection,
 };

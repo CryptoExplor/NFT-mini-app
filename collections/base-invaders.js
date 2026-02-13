@@ -59,8 +59,6 @@ export default {
     // OPTIONAL FIELDS
     // ============================================
 
-    featured: true,
-
     traits: {
         Faction: ["OG", "GLITCHED", "CORRUPTED"],
         Background: ["Void", "Grid", "Matrix", "Neon", "Glitch"],
@@ -80,7 +78,11 @@ export default {
 
     farcaster: {
         frame: true,
-        shareText: "I just deployed a Base Invader 👾"
+        shareText: [
+            "My BASE_INVADER just landed. 8-bit. On-chain. Unstoppable. 👾",
+            "Arcade logic meets Base chain. BASE_INVADER minted.",
+            "Pixel identity locked in. BASE_INVADER online."
+        ]
     },
 
     openseaUrl: "https://opensea.io/collection/base-invaders-",

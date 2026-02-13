@@ -108,11 +108,13 @@ export default {
     // OPTIONAL / ECOSYSTEM
     // ============================================
 
-    featured: true,
-
     farcaster: {
         frame: true,
-        shareText: "I burned pratiksharma and minted a BASEHEADS_404."
+        shareText: [
+            "I just minted my BASEHEAD_404 — signal strong, error intentional. ⚡🖥️",
+            "My BASEHEAD_404 just booted on Base. Terminal-core identity unlocked.",
+            "404 not found. Identity located. BASEHEAD_404 minted."
+        ]
     },
 
     openseaUrl: "https://opensea.io/collection/baseheads-404",

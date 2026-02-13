@@ -99,9 +99,6 @@ export default {
     // OPTIONAL FIELDS
     // ============================================
 
-    // Featured on homepage (shows star badge)
-    featured: false,
-
     // Farcaster frame URL
     farcaster: null,
 

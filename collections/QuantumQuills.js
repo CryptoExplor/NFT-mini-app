@@ -57,10 +57,13 @@ export default {
     // OPTIONAL FIELDS
     // ============================================
 
-    featured: false,
     farcaster: {
         frame: true,
-        shareText: "My Quantum Quill is writing the future of the cosmos ✒️✨"
+        shareText: [
+            "My Quantum Quill is writing the future of the cosmos ✒️✨",
+            "Ink from another timeline. Quantum Quill activated.",
+            "Cosmic ink encoded on-chain. My Quantum Quill is alive."
+        ]
     },
     openseaUrl: "https://opensea.io/collection/quantumquills",
     website: null,

@@ -570,11 +570,11 @@ async function handleMint(collection, stage) {
 
     // Attach success share handlers
     document.getElementById('share-farcaster-success')?.addEventListener('click', () => {
-      shareToFarcaster(collection, `I just minted ${collection.name} on Base! 🔵🚀`);
+      shareToFarcaster(collection);
     });
 
     document.getElementById('share-twitter-success')?.addEventListener('click', () => {
-      shareToTwitter(collection, `I just minted ${collection.name} on Base! 🔵🚀`);
+      shareToTwitter(collection);
     });
 
     // Store transaction locally

@@ -2,6 +2,21 @@ import { toast } from '../utils/toast.js';
 import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
 
 /**
+ * Get share text from collection config
+ * Supports string or array of strings (random selection)
+ */
+function getCollectionShareText(collection) {
+    // Try farcaster.shareText first (as it's currently the only place for share text)
+    const shareTextConfig = collection.farcaster?.shareText;
+
+    if (Array.isArray(shareTextConfig) && shareTextConfig.length > 0) {
+        return shareTextConfig[Math.floor(Math.random() * shareTextConfig.length)];
+    }
+
+    return shareTextConfig || null;
+}
+
+/**
  * Get the platform-specific share URL for a collection
  */
 function getPlatformShareUrl(platform, slug) {
@@ -47,10 +62,11 @@ export async function shareCollection(collection) {
     const fcUrl = getPlatformShareUrl('farcaster', collection.slug);
     const baseAppUrl = getPlatformShareUrl('x', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
-    const text = appendOpenSeaText(
-        `I'm minting ${collection.name} on Base! Check it out:`,
-        openSeaUrl
-    );
+
+    const configText = getCollectionShareText(collection);
+    const baseText = configText || `I'm minting ${collection.name} on Base! Check it out:`;
+
+    const text = appendOpenSeaText(baseText, openSeaUrl);
 
     // 1. Try Farcaster Native Share if in Farcaster
     if (isInFarcaster()) {
@@ -98,10 +114,11 @@ export async function shareCollection(collection) {
 export async function shareToFarcaster(collection, customText = null) {
     const url = getPlatformShareUrl('farcaster', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
-    const text = appendOpenSeaText(
-        customText || `Just minted ${collection.name} on Base!`,
-        openSeaUrl
-    );
+
+    const configText = getCollectionShareText(collection);
+    const baseText = customText || configText || `Just minted ${collection.name} on Base!`;
+
+    const text = appendOpenSeaText(baseText, openSeaUrl);
 
     if (isInFarcaster()) {
         const sdk = getFarcasterSDK();
@@ -127,10 +144,12 @@ export async function shareToFarcaster(collection, customText = null) {
 export function shareToTwitter(collection, customText = null) {
     const url = getPlatformShareUrl('x', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
-    const text = appendOpenSeaText(
-        customText || `I'm minting ${collection.name} on Base!`,
-        openSeaUrl
-    );
+
+    const configText = getCollectionShareText(collection);
+    const baseText = customText || configText || `I'm minting ${collection.name} on Base!`;
+
+    const text = appendOpenSeaText(baseText, openSeaUrl);
+
     const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(intentUrl, '_blank');
 }
