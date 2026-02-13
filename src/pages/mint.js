@@ -540,11 +540,9 @@ async function handleMint(collection, stage) {
     toast.show('Successfully minted NFT! 🎉', 'success');
 
     // Track on server (full funnel: tx_sent + mint_success)
-    const price = stage.type === 'PAID' ? (stage.price ? Number(stage.price) / 1e18 : 0) : 0;
-    const gas = 0; // Ideally estimation from preview but difficult to get exact used gas here without receipt
-
+    const mintPrice = stage.price ? Number(stage.price) / 1e18 : 0;
     trackTxSent(state.wallet.address, collection.slug, hash);
-    trackMint(state.wallet.address, collection.slug, hash, price, gas);
+    trackMint(state.wallet.address, collection.slug, hash, mintPrice);
 
     mintText.textContent = 'Success! 🎉';
     mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
