@@ -298,28 +298,14 @@ async function scanAllKeys(match) {
 }
 
 function getConfiguredCollectionSlugs() {
-    const FALLBACK_SLUGS = new Set([
-        'onchain-sigils',
-        'base-invaders',
-        'baseheads-404',
-        'quantum-quills',
-        'void-pfps',
-        'base-moods'
-    ]);
-
     try {
         const collections = loadCollections();
-        if (!collections || collections.length === 0) {
-            console.warn('loadCollections returned empty, using fallback slugs');
-            return FALLBACK_SLUGS;
-        }
         return new Set(
-            collections
+            (collections || [])
                 .filter((collection) => collection?.slug)
                 .map((collection) => collection.slug)
         );
-    } catch (error) {
-        console.error('Failed to load collections config:', error);
-        return FALLBACK_SLUGS;
+    } catch {
+        return new Set();
     }
 }
