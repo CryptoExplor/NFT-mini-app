@@ -95,6 +95,9 @@ export async function getLeaderboard(options = {}) {
             period: options.period || 'all_time',
             limit: options.limit || 10
         });
+        if (options.collection) {
+            params.set('collection', options.collection);
+        }
 
         // Allow relative paths in dev (e.g. vercel dev)
         // if (!API_BASE && import.meta.env.DEV) { ... }
@@ -105,13 +108,29 @@ export async function getLeaderboard(options = {}) {
         const contentType = response.headers.get("content-type");
         if (!response.ok || !contentType || !contentType.includes("application/json")) {
             console.warn(`Leaderboard API unavailable (status: ${response.status}, type: ${contentType})`);
-            return { leaderboard: [], totalMints: 0, distinctMinters: 0 };
+            return {
+                stats: {},
+                funnel: [],
+                overallConversion: '0.0',
+                leaderboard: [],
+                collections: [],
+                recentActivity: [],
+                socialProof: []
+            };
         }
 
         return await response.json();
     } catch (error) {
         console.error('Failed to fetch leaderboard:', error);
-        return { leaderboard: [], totalMints: 0, distinctMinters: 0 };
+        return {
+            stats: {},
+            funnel: [],
+            overallConversion: '0.0',
+            leaderboard: [],
+            collections: [],
+            recentActivity: [],
+            socialProof: []
+        };
     }
 }
 
@@ -239,11 +258,25 @@ export async function getAdminData(action = 'overview', target = null) {
         }
 
         const response = await fetch(`${API_BASE}/api/admin?${params}`, { headers });
-        if (!response.ok) throw new Error('Admin request failed');
-        return await response.json();
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json')
+            ? await response.json()
+            : null;
+
+        if (!response.ok) {
+            return {
+                error: payload?.error || 'Admin request failed',
+                status: response.status
+            };
+        }
+
+        return payload;
     } catch (error) {
         console.error('Admin data error:', error);
-        return null;
+        return {
+            error: error?.message || 'Admin request failed',
+            status: 0
+        };
     }
 }
 
@@ -253,13 +286,23 @@ export async function getAdminData(action = 'overview', target = null) {
 export async function downloadCSV(type) {
     try {
         const token = getAuthToken();
-        if (!token) throw new Error('Unauthorized');
+        if (!token) {
+            return { success: false, error: 'Unauthorized', status: 401 };
+        }
 
         const response = await fetch(`${API_BASE}/api/export?type=${type}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!response.ok) throw new Error('Export failed');
+        if (!response.ok) {
+            let errorMessage = 'Export failed';
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const payload = await response.json();
+                if (payload?.error) errorMessage = payload.error;
+            }
+            return { success: false, error: errorMessage, status: response.status };
+        }
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -270,8 +313,13 @@ export async function downloadCSV(type) {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+        return { success: true };
     } catch (error) {
         console.error('Download error:', error);
-        alert('Failed to download CSV: ' + error.message);
+        return {
+            success: false,
+            error: error?.message || 'Export failed',
+            status: 0
+        };
     }
 }

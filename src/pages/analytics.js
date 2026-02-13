@@ -1,22 +1,37 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
-import { getLeaderboard, getUserStats, getAdminData, downloadCSV } from '../lib/api.js';
+import {
+    getLeaderboard,
+    getUserStats,
+    getAdminData,
+    downloadCSV,
+    getNonce,
+    verifySignature,
+    getAuthToken,
+    clearAuthToken
+} from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
+import { signMessage } from '@wagmi/core';
+import { wagmiAdapter } from '../wallet.js';
 
 const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
 
-// Cleanup references
+let renderVersion = 0;
 let walletUpdateHandler = null;
 let activityInterval = null;
+let feedStatusTimeout = null;
+let collectionCardClickHandler = null;
 
 export async function renderAnalyticsPage(params) {
+    const currentRender = ++renderVersion;
     const { slug } = params || {};
     const collections = loadCollections();
     const app = document.getElementById('app');
+    if (!app) return;
 
     // Clean up previous listeners + intervals
-    cleanup();
+    teardownAnalyticsPage();
 
     // Show loading state
     app.innerHTML = `
@@ -30,11 +45,12 @@ export async function renderAnalyticsPage(params) {
 
     // Fetch data in parallel
     const [leaderboardData, userStats] = await Promise.all([
-        getLeaderboard().catch(() => null),
+        getLeaderboard({ collection: slug || undefined }).catch(() => null),
         state.wallet?.isConnected
             ? getUserStats(state.wallet.address).catch(() => null)
             : Promise.resolve(null)
     ]);
+    if (currentRender !== renderVersion) return;
 
     const stats = leaderboardData?.stats || {};
     const funnel = leaderboardData?.funnel || [];
@@ -141,7 +157,7 @@ export async function renderAnalyticsPage(params) {
 
                 ${renderJourneyTimeline(userStats)}
 
-                ${renderAdminPanel(state.wallet)}
+                ${renderAdminPanel(state.wallet, slug)}
 
             </main>
         </div>
@@ -149,24 +165,35 @@ export async function renderAnalyticsPage(params) {
 
     // Event listeners
     document.getElementById('back-home-btn').onclick = () => {
-        cleanup();
+        teardownAnalyticsPage();
         router.navigate('/');
     };
 
     // Leaderboard tab switching
     document.querySelectorAll('.analytics-tab').forEach(btn => {
         btn.addEventListener('click', async () => {
+            if (currentRender !== renderVersion) return;
             document.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('analytics-tab-active'));
             btn.classList.add('analytics-tab-active');
             const type = btn.dataset.type;
             const container = document.getElementById('leaderboard-container');
+            if (!container) return;
             container.innerHTML = '<div class="text-center py-8 opacity-30">Loading...</div>';
-            const data = await getLeaderboard({ type });
-            if (data?.leaderboard) {
-                container.innerHTML = renderLeaderboard(data.leaderboard);
+            try {
+                const data = await getLeaderboard({ type, collection: slug || undefined });
+                if (currentRender !== renderVersion) return;
+                if (data?.leaderboard) {
+                    container.innerHTML = renderLeaderboard(data.leaderboard);
+                } else {
+                    container.innerHTML = '<div class="text-center py-8 text-red-400">Failed to load leaderboard</div>';
+                }
+            } catch {
+                container.innerHTML = '<div class="text-center py-8 text-red-400">Failed to load leaderboard</div>';
             }
         });
     });
+
+    bindCollectionCardNavigation();
 
     // Wire up admin panel (if rendered)
     setupAdminListeners();
@@ -182,14 +209,16 @@ export async function renderAnalyticsPage(params) {
     activityInterval = setInterval(async () => {
         if (isPaused) return;
         try {
-            const freshData = await getLeaderboard();
+            const freshData = await getLeaderboard({ collection: slug || undefined });
+            if (currentRender !== renderVersion) return;
             if (freshData?.recentActivity) {
                 const feedEl = document.getElementById('activity-feed');
                 if (feedEl) {
                     feedEl.innerHTML = renderActivityFeed(freshData.recentActivity);
                     // Flash the feed status
                     updateFeedStatus('updated ✓');
-                    setTimeout(() => updateFeedStatus('auto-refresh 10s'), 2000);
+                    if (feedStatusTimeout) clearTimeout(feedStatusTimeout);
+                    feedStatusTimeout = setTimeout(() => updateFeedStatus('auto-refresh 10s'), 2000);
                 }
                 // Update social proof too
                 if (freshData.socialProof) {
@@ -212,7 +241,7 @@ export async function renderAnalyticsPage(params) {
     window.refreshAnalytics = () => renderAnalyticsPage(params);
 }
 
-function cleanup() {
+export function teardownAnalyticsPage() {
     if (walletUpdateHandler) {
         document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
         walletUpdateHandler = null;
@@ -221,11 +250,38 @@ function cleanup() {
         clearInterval(activityInterval);
         activityInterval = null;
     }
+    if (feedStatusTimeout) {
+        clearTimeout(feedStatusTimeout);
+        feedStatusTimeout = null;
+    }
+    if (collectionCardClickHandler) {
+        document.removeEventListener('click', collectionCardClickHandler);
+        collectionCardClickHandler = null;
+    }
+    if (window.refreshAnalytics) {
+        delete window.refreshAnalytics;
+    }
 }
 
 function updateFeedStatus(text) {
     const el = document.getElementById('feed-status');
     if (el) el.textContent = text;
+}
+
+function bindCollectionCardNavigation() {
+    if (collectionCardClickHandler) {
+        document.removeEventListener('click', collectionCardClickHandler);
+    }
+
+    collectionCardClickHandler = (event) => {
+        const card = event.target?.closest?.('[data-slug]');
+        if (!card) return;
+        const slug = card.getAttribute('data-slug');
+        if (!slug) return;
+        router.navigate(`/analytics/${encodeURIComponent(slug)}`);
+    };
+
+    document.addEventListener('click', collectionCardClickHandler);
 }
 
 // ============================================
@@ -363,7 +419,7 @@ function renderWalletInsights(userStats, wallet) {
                     Wallet Insights
                     <div class="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full border border-white/5">
                         <span class="text-xs font-normal opacity-50 font-mono">${shortenAddress(wallet.address)}</span>
-                        <a href="https://basescan.org/address/${wallet.address}" target="_blank" class="text-xs opacity-40 hover:opacity-100 transition" title="View on Explorer">↗</a>
+                        <a href="https://basescan.org/address/${wallet.address}" target="_blank" rel="noopener noreferrer" class="text-xs opacity-40 hover:opacity-100 transition" title="View on Explorer">↗</a>
                     </div>
                     ${insights.badge ? `<span class="text-xs bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-200 border border-yellow-500/20 px-2 py-0.5 rounded-full shadow-sm">${insights.badge}</span>` : ''}
                     ${insights.activityLevel ? `<span class="text-xs bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-indigo-200 px-2 py-0.5 rounded-full">${insights.activityLevel}</span>` : ''}
@@ -531,7 +587,7 @@ function renderLeaderboard(leaderboard) {
             </thead>
             <tbody class="text-sm">
                 ${leaderboard.map((user, i) => {
-        const isMe = user.wallet === state.wallet?.address;
+        const isMe = (user.wallet || '').toLowerCase() === (state.wallet?.address || '').toLowerCase();
         return `
                         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors ${isMe ? 'bg-indigo-500/10' : ''}">
                             <td class="py-3 pl-3 font-mono text-indigo-300">
@@ -669,19 +725,23 @@ function renderJourneyTimeline(userStats) {
                 <span class="text-xs font-normal opacity-40 ml-auto">Last ${journey.length} events</span>
             </h3>
             <div class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                ${journey.map(event => `
+                ${journey.map((event) => {
+        const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
+        const safeTimestamp = event?.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'unknown';
+        return `
                     <div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
-                        <div class="text-base flex-shrink-0">${eventIcons[event.type] || '📌'}</div>
+                        <div class="text-base flex-shrink-0">${eventIcons[eventType] || '📌'}</div>
                         <div class="flex-1 min-w-0">
-                            <span class="text-sm font-medium">${event.type.replace(/_/g, ' ')}</span>
+                            <span class="text-sm font-medium">${eventType.replace(/_/g, ' ')}</span>
                             ${event.collection ? `<span class="text-xs opacity-50 ml-2">${event.collection}</span>` : ''}
                             ${event.page ? `<span class="text-xs opacity-50 ml-2">${event.page}</span>` : ''}
                         </div>
                         <div class="text-[10px] opacity-40 font-mono flex-shrink-0">
-                            ${new Date(event.timestamp).toLocaleTimeString()}
+                            ${safeTimestamp}
                         </div>
                     </div>
-                `).join('')}
+                `;
+                }).join('')}
             </div>
         </div>
     `;
@@ -695,52 +755,60 @@ function getTimeAgo(timestamp) {
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
 }
-
 // ========== ADMIN PANEL ==========
 
-function renderAdminPanel(wallet) {
+function renderAdminPanel(wallet, slug) {
     if (!wallet?.isConnected) return '';
-    const isAdmin = ADMIN_WALLETS.includes(wallet.address.toLowerCase());
-    if (!isAdmin) return '';
+
+    const walletAddress = wallet.address?.toLowerCase();
+    const adminHintAllowed = ADMIN_WALLETS.length === 0 || ADMIN_WALLETS.includes(walletAddress);
+    if (!adminHintAllowed) return '';
+
+    const hasToken = Boolean(getAuthToken());
+    const scopeHint = slug ? `<span class="text-[10px] opacity-50">Scoped to ${slug}</span>` : '';
 
     return `
         <div class="glass-card p-5 rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/5 to-orange-500/5">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h3 class="text-lg font-bold flex items-center gap-2">
-                    <span class="text-red-400">🛡️</span> Admin Panel
+                    <span class="text-red-400">Admin</span> Admin Panel
                     <span class="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full uppercase">Admin Only</span>
                 </h3>
-                <button id="load-admin-data" class="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 px-3 py-1.5 rounded-lg transition">
-                    Load System Data
-                </button>
+                <div class="flex items-center gap-2">
+                    ${scopeHint}
+                    ${hasToken
+            ? '<button id="admin-signout-btn" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition">Sign Out</button>'
+            : '<button id="admin-signin-btn" class="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 px-3 py-1.5 rounded-lg transition">Sign In as Admin</button>'}
+                    <button id="load-admin-data" class="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 px-3 py-1.5 rounded-lg transition ${hasToken ? '' : 'hidden'}">
+                        Load System Data
+                    </button>
+                </div>
+            </div>
+
+            <div id="admin-auth-state" class="text-xs opacity-50 mb-3 ${hasToken ? 'text-green-300' : ''}">
+                ${hasToken ? 'Authenticated with admin token.' : 'Sign in with your wallet to unlock admin analytics.'}
             </div>
 
             <div id="admin-panel-content" class="text-sm opacity-50 text-center py-4">
-                Click "Load System Data" to fetch admin analytics
+                ${hasToken ? 'Click "Load System Data" to fetch admin analytics' : 'Admin analytics is locked until you authenticate'}
             </div>
 
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 ${hasToken ? '' : 'opacity-40 pointer-events-none'}" id="admin-actions-group">
                 <div>
                     <label class="text-[10px] opacity-40 uppercase block mb-1">Lookup Date</label>
                     <input id="admin-date-input" type="date" value="${new Date().toISOString().split('T')[0]}"
                            class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white">
                 </div>
-                <button id="admin-daily-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
-                    📅 Daily Stats
-                </button>
-                <button id="admin-cohort-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
-                    👥 Cohort
-                </button>
-                <button id="admin-retention-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">
-                    🧠 Retention
-                </button>
+                <button id="admin-daily-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">Daily Stats</button>
+                <button id="admin-cohort-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">Cohort</button>
+                <button id="admin-retention-btn" class="self-end text-xs bg-white/10 hover:bg-white/15 px-3 py-1.5 rounded-lg transition">Retention</button>
             </div>
             
-            <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+            <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5 ${hasToken ? '' : 'opacity-40 pointer-events-none'}" id="admin-export-group">
                 <span class="text-[10px] opacity-40 uppercase py-1.5">Export CSV:</span>
-                <button onclick="window.downloadCSV('users')" class="text-xs bg-green-500/10 hover:bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg transition">Users</button>
-                <button onclick="window.downloadCSV('collections')" class="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg transition">Collections</button>
-                <button onclick="window.downloadCSV('mints')" class="text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg transition">Mints</button>
+                <button data-export-type="users" class="text-xs bg-green-500/10 hover:bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg transition">Users</button>
+                <button data-export-type="collections" class="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 px-3 py-1.5 rounded-lg transition">Collections</button>
+                <button data-export-type="mints" class="text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 px-3 py-1.5 rounded-lg transition">Mints</button>
             </div>
 
             <div id="admin-extra-content" class="mt-4"></div>
@@ -748,142 +816,276 @@ function renderAdminPanel(wallet) {
     `;
 }
 
-// Helper for global scope access
-window.downloadCSV = downloadCSV;
+async function requestAdminAuth() {
+    const wallet = state.wallet?.address;
+    if (!wallet) return { success: false, error: 'Connect wallet first' };
 
-// Wire up admin panel event listeners (called after DOM render)
-function setupAdminListeners() {
+    try {
+        const chainId = state.wallet?.chainId || 8453;
+        const nonceData = await getNonce(wallet);
+        const nonce = nonceData?.nonce;
+        if (!nonce) return { success: false, error: 'Failed to get nonce' };
+
+        const domain = window.location.host;
+        const origin = window.location.origin;
+        const issuedAt = new Date().toISOString();
+        const message = `${domain} wants you to sign in with your Ethereum account:\n${wallet}\n\nSign in to Mint Intelligence Admin\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;
+
+        const signature = await signMessage(wagmiAdapter.wagmiConfig, { message });
+        const verified = await verifySignature(message, signature);
+        if (!verified?.token) {
+            return { success: false, error: 'Signature verified but no token returned' };
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error?.message || 'Admin sign-in failed' };
+    }
+}
+
+function setAdminLockedState(locked) {
     const loadBtn = document.getElementById('load-admin-data');
-    if (loadBtn) {
-        loadBtn.addEventListener('click', async () => {
-            const content = document.getElementById('admin-panel-content');
-            content.innerHTML = '<div class="text-center py-4 opacity-30">Loading...</div>';
+    const actions = document.getElementById('admin-actions-group');
+    const exports = document.getElementById('admin-export-group');
 
-            const data = await getAdminData('overview');
-            if (!data) {
-                content.innerHTML = '<div class="text-center py-4 text-red-400">Failed to load admin data</div>';
-                return;
-            }
+    if (loadBtn) loadBtn.classList.toggle('hidden', locked);
+    if (actions) actions.classList.toggle('pointer-events-none', locked);
+    if (actions) actions.classList.toggle('opacity-40', locked);
+    if (exports) exports.classList.toggle('pointer-events-none', locked);
+    if (exports) exports.classList.toggle('opacity-40', locked);
+}
 
-            const stats = data.stats || {};
-            const funnel = data.funnel || {};
-            const lb = data.leaderboard || [];
+function setAdminAuthState(text, isError = false) {
+    const stateEl = document.getElementById('admin-auth-state');
+    if (!stateEl) return;
 
+    stateEl.textContent = text;
+    stateEl.classList.toggle('text-red-400', isError);
+    stateEl.classList.toggle('text-green-300', !isError);
+}
+
+function isUnauthorizedAdminResponse(data) {
+    return data?.status === 401 || data?.status === 403;
+}
+
+async function loadAdminOverview() {
+    const content = document.getElementById('admin-panel-content');
+    if (!content) return;
+
+    content.innerHTML = '<div class="text-center py-4 opacity-30">Loading...</div>';
+    const data = await getAdminData('overview');
+
+    if (isUnauthorizedAdminResponse(data)) {
+        clearAuthToken();
+        setAdminLockedState(true);
+        setAdminAuthState('Admin session expired. Sign in again.', true);
+        content.innerHTML = '<div class="text-center py-4 text-red-400">Unauthorized</div>';
+        return;
+    }
+
+    if (data?.error) {
+        content.innerHTML = `<div class="text-center py-4 text-red-400">${data.error}</div>`;
+        return;
+    }
+
+    const stats = data.stats || {};
+    const funnel = data.funnel || {};
+    const lb = data.leaderboard || [];
+
+    content.innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-[10px] opacity-40 uppercase">Total Events</div>
+                <div class="text-xl font-bold">${parseInt(stats.total_events, 10) || 0}</div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-[10px] opacity-40 uppercase">Total Mints</div>
+                <div class="text-xl font-bold text-green-400">${parseInt(stats.total_mints, 10) || 0}</div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-[10px] opacity-40 uppercase">Total Volume</div>
+                <div class="text-xl font-bold text-purple-400">${parseFloat(stats.total_volume || 0).toFixed(4)} ETH</div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-[10px] opacity-40 uppercase">Tracked Wallets</div>
+                <div class="text-xl font-bold text-blue-400">${data.totalTrackedWallets || 0}</div>
+            </div>
+        </div>
+        <div class="bg-white/5 rounded-xl p-3 mb-3">
+            <div class="text-xs font-bold opacity-60 mb-2">Raw Funnel Counts</div>
+            <div class="flex flex-wrap gap-3 text-xs font-mono">
+                ${Object.entries(funnel).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join(' | ')}
+            </div>
+        </div>
+        <div class="bg-white/5 rounded-xl p-3">
+            <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
+            <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
+                ${lb.map(u => `<div class="flex justify-between"><span>${shortenAddress(u.wallet)}</span><span class="font-bold">${u.score}</span></div>`).join('')}
+            </div>
+        </div>
+    `;
+}
+
+async function handleAdminDateAction(action, title) {
+    const date = document.getElementById('admin-date-input')?.value;
+    if (!date) return;
+
+    const content = document.getElementById('admin-extra-content');
+    if (!content) return;
+
+    content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
+    const data = await getAdminData(action, date);
+
+    if (isUnauthorizedAdminResponse(data)) {
+        clearAuthToken();
+        setAdminLockedState(true);
+        setAdminAuthState('Admin session expired. Sign in again.', true);
+        content.innerHTML = '<div class="text-red-400 text-sm">Unauthorized</div>';
+        return;
+    }
+
+    if (data?.error) {
+        content.innerHTML = `<div class="text-red-400 text-sm">${data.error}</div>`;
+        return;
+    }
+
+    if (action === 'daily') {
+        if (data?.stats) {
             content.innerHTML = `
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-[10px] opacity-40 uppercase">Total Events</div>
-                        <div class="text-xl font-bold">${parseInt(stats.total_events) || 0}</div>
-                    </div>
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-[10px] opacity-40 uppercase">Total Mints</div>
-                        <div class="text-xl font-bold text-green-400">${parseInt(stats.total_mints) || 0}</div>
-                    </div>
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-[10px] opacity-40 uppercase">Total Volume</div>
-                        <div class="text-xl font-bold text-purple-400">${parseFloat(stats.total_volume || 0).toFixed(4)} ETH</div>
-                    </div>
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-[10px] opacity-40 uppercase">Tracked Wallets</div>
-                        <div class="text-xl font-bold text-blue-400">${data.totalTrackedWallets || 0}</div>
-                    </div>
-                </div>
-                <div class="bg-white/5 rounded-xl p-3 mb-3">
-                    <div class="text-xs font-bold opacity-60 mb-2">Raw Funnel Counts</div>
-                    <div class="flex flex-wrap gap-3 text-xs font-mono">
-                        ${Object.entries(funnel).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join(' • ')}
-                    </div>
-                </div>
                 <div class="bg-white/5 rounded-xl p-3">
-                    <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
-                    <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
-                        ${lb.map(u => `<div class="flex justify-between"><span>${shortenAddress(u.wallet)}</span><span class="font-bold">${u.score}</span></div>`).join('')}
+                    <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date}</div>
+                    <div class="flex flex-wrap gap-4 text-sm font-mono">
+                        ${Object.entries(data.stats).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join('')}
                     </div>
                 </div>
             `;
+        } else {
+            content.innerHTML = '<div class="text-sm opacity-40">No data for this date</div>';
+        }
+        return;
+    }
+
+    if (action === 'cohort') {
+        content.innerHTML = `
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date}</div>
+                <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
+                <div class="text-xs font-mono opacity-60 max-h-32 overflow-y-auto">
+                    ${(data.wallets || []).map(w => shortenAddress(w)).join(', ') || 'None'}
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    if (action === 'retention' && data?.retention) {
+        content.innerHTML = `
+            <div class="bg-white/5 rounded-xl p-3">
+                <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date} (Cohort: ${data.cohortSize})</div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-white/5 rounded p-2">
+                        <div class="text-[10px] opacity-40 uppercase">Day 1</div>
+                        <div class="text-lg font-bold ${parseFloat(data.retention.day1.rate) > 20 ? 'text-green-400' : ''}">${data.retention.day1.rate}%</div>
+                        <div class="text-[10px] opacity-30">${data.retention.day1.count} user${data.retention.day1.count !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div class="bg-white/5 rounded p-2">
+                        <div class="text-[10px] opacity-40 uppercase">Day 7</div>
+                        <div class="text-lg font-bold ${parseFloat(data.retention.day7.rate) > 10 ? 'text-green-400' : ''}">${data.retention.day7.rate}%</div>
+                        <div class="text-[10px] opacity-30">${data.retention.day7.count} user${data.retention.day7.count !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div class="bg-white/5 rounded p-2">
+                        <div class="text-[10px] opacity-40 uppercase">Day 30</div>
+                        <div class="text-lg font-bold ${parseFloat(data.retention.day30.rate) > 5 ? 'text-green-400' : ''}">${data.retention.day30.rate}%</div>
+                        <div class="text-[10px] opacity-30">${data.retention.day30.count} user${data.retention.day30.count !== 1 ? 's' : ''}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    content.innerHTML = '<div class="text-sm opacity-40">No data available</div>';
+}
+
+async function handleCsvExport(type) {
+    const result = await downloadCSV(type);
+    if (result?.success) return;
+
+    if (result?.status === 401 || result?.status === 403) {
+        clearAuthToken();
+        setAdminLockedState(true);
+        setAdminAuthState('Admin session expired. Sign in again.', true);
+        return;
+    }
+
+    setAdminAuthState(result?.error || 'CSV export failed', true);
+}
+
+function setupAdminListeners() {
+    const hasToken = Boolean(getAuthToken());
+    setAdminLockedState(!hasToken);
+
+    const signInBtn = document.getElementById('admin-signin-btn');
+    if (signInBtn) {
+        signInBtn.addEventListener('click', async () => {
+            signInBtn.disabled = true;
+            setAdminAuthState('Signing admin message...');
+            const authResult = await requestAdminAuth();
+            signInBtn.disabled = false;
+
+            if (!authResult.success) {
+                setAdminAuthState(authResult.error || 'Admin sign in failed', true);
+                return;
+            }
+
+            setAdminAuthState('Authenticated with admin token.');
+            setAdminLockedState(false);
+            renderAnalyticsPage(router.getParams());
         });
     }
 
-    // Daily stats button
+    const signOutBtn = document.getElementById('admin-signout-btn');
+    if (signOutBtn) {
+        signOutBtn.addEventListener('click', () => {
+            clearAuthToken();
+            setAdminAuthState('Signed out.');
+            setAdminLockedState(true);
+            renderAnalyticsPage(router.getParams());
+        });
+    }
+
+    const loadBtn = document.getElementById('load-admin-data');
+    if (loadBtn) {
+        loadBtn.addEventListener('click', async () => {
+            await loadAdminOverview();
+        });
+    }
+
     const dailyBtn = document.getElementById('admin-daily-btn');
     if (dailyBtn) {
         dailyBtn.addEventListener('click', async () => {
-            const date = document.getElementById('admin-date-input')?.value;
-            if (!date) return;
-            const content = document.getElementById('admin-extra-content');
-            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
-            const data = await getAdminData('daily', date);
-            if (data?.stats) {
-                content.innerHTML = `
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-xs font-bold opacity-60 mb-2">📅 Stats for ${date}</div>
-                        <div class="flex flex-wrap gap-4 text-sm font-mono">
-                            ${Object.entries(data.stats).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join('')}
-                        </div>
-                    </div>
-                `;
-            } else {
-                content.innerHTML = '<div class="text-sm opacity-40">No data for this date</div>';
-            }
+            await handleAdminDateAction('daily', 'Daily stats');
         });
     }
 
-    // Cohort button
     const cohortBtn = document.getElementById('admin-cohort-btn');
     if (cohortBtn) {
         cohortBtn.addEventListener('click', async () => {
-            const date = document.getElementById('admin-date-input')?.value;
-            if (!date) return;
-            const content = document.getElementById('admin-extra-content');
-            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
-            const data = await getAdminData('cohort', date);
-            if (data) {
-                content.innerHTML = `
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-xs font-bold opacity-60 mb-2">👥 Cohort for ${date}</div>
-                        <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
-                        <div class="text-xs font-mono opacity-60 max-h-32 overflow-y-auto">
-                            ${(data.wallets || []).map(w => shortenAddress(w)).join(', ') || 'None'}
-                        </div>
-                    </div>
-                `;
-            }
+            await handleAdminDateAction('cohort', 'Cohort');
         });
     }
 
-    // Retention button
     const retentionBtn = document.getElementById('admin-retention-btn');
     if (retentionBtn) {
         retentionBtn.addEventListener('click', async () => {
-            const date = document.getElementById('admin-date-input')?.value;
-            if (!date) return;
-            const content = document.getElementById('admin-extra-content');
-            content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
-            const data = await getAdminData('retention', date);
-            if (data?.retention) {
-                content.innerHTML = `
-                    <div class="bg-white/5 rounded-xl p-3">
-                        <div class="text-xs font-bold opacity-60 mb-2">🧠 Retention for ${date} (Cohort: ${data.cohortSize})</div>
-                        <div class="grid grid-cols-3 gap-2 text-center">
-                            <div class="bg-white/5 rounded p-2">
-                                <div class="text-[10px] opacity-40 uppercase">Day 1</div>
-                                <div class="text-lg font-bold ${parseFloat(data.retention.day1.rate) > 20 ? 'text-green-400' : ''}">${data.retention.day1.rate}%</div>
-                                <div class="text-[10px] opacity-30">${data.retention.day1.count} user${data.retention.day1.count !== 1 ? 's' : ''}</div>
-                            </div>
-                            <div class="bg-white/5 rounded p-2">
-                                <div class="text-[10px] opacity-40 uppercase">Day 7</div>
-                                <div class="text-lg font-bold ${parseFloat(data.retention.day7.rate) > 10 ? 'text-green-400' : ''}">${data.retention.day7.rate}%</div>
-                                <div class="text-[10px] opacity-30">${data.retention.day7.count} user${data.retention.day7.count !== 1 ? 's' : ''}</div>
-                            </div>
-                            <div class="bg-white/5 rounded p-2">
-                                <div class="text-[10px] opacity-40 uppercase">Day 30</div>
-                                <div class="text-lg font-bold ${parseFloat(data.retention.day30.rate) > 5 ? 'text-green-400' : ''}">${data.retention.day30.rate}%</div>
-                                <div class="text-[10px] opacity-30">${data.retention.day30.count} user${data.retention.day30.count !== 1 ? 's' : ''}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
+            await handleAdminDateAction('retention', 'Retention');
         });
     }
+
+    document.querySelectorAll('[data-export-type]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const type = btn.getAttribute('data-export-type');
+            if (type) await handleCsvExport(type);
+        });
+    });
 }

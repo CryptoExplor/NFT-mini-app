@@ -111,13 +111,21 @@ async function autoConnectFarcaster() {
 // notifyFarcasterReady removed — ready() is now called immediately after SDK init
 
 function setupRoutes() {
+    const cleanupAnalyticsIfNeeded = async () => {
+        if (window.location.pathname.startsWith('/analytics')) return;
+        const { teardownAnalyticsPage } = await import('./pages/analytics.js');
+        teardownAnalyticsPage();
+    };
+
     // Lazy-load page modules for code splitting
     router.route('/', async () => {
+        await cleanupAnalyticsIfNeeded();
         const { renderHomePage } = await import('./pages/home.js');
         await renderHomePage();
     });
 
     router.route('/mint/:slug', async (params) => {
+        await cleanupAnalyticsIfNeeded();
         const { renderMintPage } = await import('./pages/mint.js');
         await renderMintPage(params);
     });
@@ -133,6 +141,7 @@ function setupRoutes() {
     });
 
     router.route('/gallery', async () => {
+        await cleanupAnalyticsIfNeeded();
         const { renderGalleryPage } = await import('./pages/gallery.js');
         await renderGalleryPage();
     });
