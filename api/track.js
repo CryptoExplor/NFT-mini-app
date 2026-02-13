@@ -65,6 +65,10 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: `Invalid event type. Valid: ${VALID_EVENTS.join(', ')}` });
         }
 
+        const normalizedWallet = (wallet && wallet !== 'anonymous')
+            ? String(wallet).toLowerCase()
+            : wallet;
+
         const timestamp = Date.now();
         const eventId = `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
         const today = getUTCDate(); // Use consistent UTC date
@@ -73,7 +77,7 @@ export default async function handler(req, res) {
         // 0. Rate Limiting
         // Identify user by wallet OR IP address for anonymous users
         const clientIp = req.headers['x-forwarded-for'] || 'unknown_ip';
-        const rateLimitKey = (wallet && wallet !== 'anonymous') ? wallet : clientIp;
+        const rateLimitKey = (normalizedWallet && normalizedWallet !== 'anonymous') ? normalizedWallet : clientIp;
 
         await checkRateLimit(rateLimitKey, type);
 
@@ -85,7 +89,7 @@ export default async function handler(req, res) {
         // Build event payload
         const event = {
             type,
-            wallet: wallet || 'anonymous',
+            wallet: normalizedWallet || 'anonymous',
             collection: collection || null,
             txHash: txHash || null,
             price: price || 0,
@@ -110,6 +114,9 @@ export default async function handler(req, res) {
         // 3. Funnel tracking
         if (FUNNEL_STEPS.includes(type)) {
             pipe.hincrby('funnel:mint', type, 1);
+            if (collection) {
+                pipe.hincrby(`funnel:mint:${collection}`, type, 1);
+            }
         }
 
         // 4. Daily stats
@@ -135,52 +142,52 @@ export default async function handler(req, res) {
         }
 
         // Active cohort tracking (for retention)
-        if (wallet && wallet !== 'anonymous') {
-            pipe.sadd(`active:${today}`, wallet.toLowerCase());
+        if (normalizedWallet && normalizedWallet !== 'anonymous') {
+            pipe.sadd(`active:${today}`, normalizedWallet);
             // Expire active set after 60 days (save space)
             pipe.expire(`active:${today}`, 60 * 60 * 24 * 60);
         }
 
-        if (type === 'wallet_connect' && wallet) {
+        if (type === 'wallet_connect' && normalizedWallet) {
             // Only count unique wallet connects (SADD returns 1 if new, 0 if exists)
-            const isNew = await kv.sadd('wallets:connected', wallet.toLowerCase());
+            const isNew = await kv.sadd('wallets:connected', normalizedWallet);
             if (isNew) {
                 pipe.hincrby('stats:global', 'total_connects', 1);
 
                 // Points: First connect (+2)
-                const alreadyConnected = await kv.get(`user:${wallet}:first_connect`);
+                const alreadyConnected = await kv.get(`user:${normalizedWallet}:first_connect`);
                 if (!alreadyConnected) {
-                    pipe.set(`user:${wallet}:first_connect`, 1);
-                    pipe.hincrby(`user:${wallet}:profile`, 'total_points', 2);
-                    pipe.zincrby('leaderboard:points', 2, wallet);
-                    pipe.zincrby(`leaderboard:points:week:${weekNum}`, 2, wallet);
+                    pipe.set(`user:${normalizedWallet}:first_connect`, 1);
+                    pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_points', 2);
+                    pipe.zincrby('leaderboard:points', 2, normalizedWallet);
+                    pipe.zincrby(`leaderboard:points:week:${weekNum}`, 2, normalizedWallet);
                 }
             }
         }
 
-        if (type === 'collection_view' && wallet && collection) {
+        if (type === 'collection_view' && normalizedWallet && collection) {
             // Points: Daily view (+1, max once per day)
-            const viewKey = `user:${wallet}:daily_view:${today}`;
+            const viewKey = `user:${normalizedWallet}:daily_view:${today}`;
             const seenToday = await kv.get(viewKey);
             if (!seenToday) {
                 pipe.set(viewKey, 1, { ex: 60 * 60 * 24 + 3600 }); // TTL > 1 day
-                pipe.hincrby(`user:${wallet}:profile`, 'total_points', 1);
-                pipe.zincrby('leaderboard:points', 1, wallet);
-                pipe.zincrby(`leaderboard:points:week:${weekNum}`, 1, wallet);
+                pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_points', 1);
+                pipe.zincrby('leaderboard:points', 1, normalizedWallet);
+                pipe.zincrby(`leaderboard:points:week:${weekNum}`, 1, normalizedWallet);
             }
         }
 
-        if (type === 'mint_success' && wallet && collection) {
+        if (type === 'mint_success' && normalizedWallet && collection) {
             // 1. Verify Transaction (Must be real mint)
             if (txHash) {
-                const isValid = await verifyMintTransaction(txHash, wallet);
+                const isValid = await verifyMintTransaction(txHash, normalizedWallet);
                 if (!isValid) {
-                    console.warn(`Invalid mint tx: ${txHash} for wallet ${wallet}`);
+                    console.warn(`Invalid mint tx: ${txHash} for wallet ${normalizedWallet}`);
                     return res.status(400).json({ error: 'Invalid transaction' });
                 }
             } else {
                 // No txHash provided for mint_success is suspicious
-                console.warn(`Mint success reported without txHash: ${wallet}`);
+                console.warn(`Mint success reported without txHash: ${normalizedWallet}`);
                 // For now allow it but maybe flag? Or reject. User requested verification, so let's reject if strict.
                 // But legacy client might not send it? Let's assume strict verification for points.
             }
@@ -205,25 +212,28 @@ export default async function handler(req, res) {
             pipe.hincrbyfloat(`collection:${collection}:stats`, 'volume', mintPrice);
 
             // Unique wallets per collection (approximation via counter)
-            pipe.sadd(`collection:${collection}:wallets`, wallet);
+            pipe.sadd(`collection:${collection}:wallets`, normalizedWallet);
 
             // Leaderboards (all-time)
-            pipe.zincrby('leaderboard:mints:all_time', 1, wallet);
+            pipe.zincrby('leaderboard:mints:all_time', 1, normalizedWallet);
+            pipe.zincrby(`leaderboard:mints:all_time:${collection}`, 1, normalizedWallet);
             if (mintPrice > 0) {
-                pipe.zincrby('leaderboard:volume:all_time', mintPrice, wallet);
+                pipe.zincrby('leaderboard:volume:all_time', mintPrice, normalizedWallet);
+                pipe.zincrby(`leaderboard:volume:all_time:${collection}`, mintPrice, normalizedWallet);
             }
             if (gasUsed > 0) {
-                pipe.zincrby('leaderboard:gas:all_time', gasUsed, wallet);
+                pipe.zincrby('leaderboard:gas:all_time', gasUsed, normalizedWallet);
+                pipe.zincrby(`leaderboard:gas:all_time:${collection}`, gasUsed, normalizedWallet);
             }
 
             // Weekly leaderboard
-            pipe.zincrby(`leaderboard:mints:week:${weekNum}`, 1, wallet);
+            pipe.zincrby(`leaderboard:mints:week:${weekNum}`, 1, normalizedWallet);
 
             // Wallet profile
-            pipe.hincrby(`user:${wallet}:profile`, 'total_mints', 1);
-            pipe.hincrbyfloat(`user:${wallet}:profile`, 'total_volume', mintPrice);
-            pipe.hincrbyfloat(`user:${wallet}:profile`, 'total_gas', gasUsed);
-            pipe.hset(`user:${wallet}:profile`, 'last_active', timestamp);
+            pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_mints', 1);
+            pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_volume', mintPrice);
+            pipe.hincrbyfloat(`user:${normalizedWallet}:profile`, 'total_gas', gasUsed);
+            pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
 
             // Daily stats
             pipe.hincrby(`daily:stats:${today}`, 'mints', 1);
@@ -231,7 +241,7 @@ export default async function handler(req, res) {
 
             // Activity feed (global + collection)
             const activityItem = JSON.stringify({
-                wallet, collection, txHash, price: mintPrice, timestamp
+                wallet: normalizedWallet, collection, txHash, price: mintPrice, timestamp
             });
             pipe.lpush('activity:global', activityItem);
             pipe.ltrim('activity:global', 0, 99);
@@ -239,7 +249,7 @@ export default async function handler(req, res) {
             pipe.ltrim(`activity:collection:${collection}`, 0, 49);
 
             // Log mint for CSV export (capped list)
-            pipe.lpush('log:mints', JSON.stringify({ wallet, collection, price: mintPrice, txHash, timestamp }));
+            pipe.lpush('log:mints', JSON.stringify({ wallet: normalizedWallet, collection, price: mintPrice, txHash, timestamp }));
             pipe.ltrim('log:mints', 0, 9999);
 
             // ===== POINTS LOGIC (only if new mint) =====
@@ -253,16 +263,16 @@ export default async function handler(req, res) {
                 }
 
                 // Fetch streak for bonus
-                const streakData = await kv.hget(`user:${wallet}:profile`, 'streak');
+                const streakData = await kv.hget(`user:${normalizedWallet}:profile`, 'streak');
                 const streak = parseInt(streakData) || 0;
                 if (streak >= 3) {
                     points += (streak * 3);
                 }
 
                 const finalPoints = Math.round(points);
-                pipe.hincrby(`user:${wallet}:profile`, 'total_points', finalPoints);
-                pipe.zincrby('leaderboard:points', finalPoints, wallet);
-                pipe.zincrby(`leaderboard:points:week:${weekNum}`, finalPoints, wallet);
+                pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_points', finalPoints);
+                pipe.zincrby('leaderboard:points', finalPoints, normalizedWallet);
+                pipe.zincrby(`leaderboard:points:week:${weekNum}`, finalPoints, normalizedWallet);
 
                 // 3. Points Audit Log
                 const logEntry = JSON.stringify({
@@ -272,36 +282,36 @@ export default async function handler(req, res) {
                     timestamp,
                     txHash
                 });
-                pipe.lpush(`user:${wallet}:points_log`, logEntry);
-                pipe.ltrim(`user:${wallet}:points_log`, 0, 499);
+                pipe.lpush(`user:${normalizedWallet}:points_log`, logEntry);
+                pipe.ltrim(`user:${normalizedWallet}:points_log`, 0, 499);
             }
         }
 
-        if (type === 'mint_attempt' && wallet) {
+        if (type === 'mint_attempt' && normalizedWallet) {
             pipe.hincrby('stats:global', 'total_attempts', 1);
             if (collection) {
                 pipe.hincrby(`collection:${collection}:stats`, 'attempts', 1);
             }
-            pipe.hincrby(`user:${wallet}:profile`, 'total_attempts', 1);
+            pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_attempts', 1);
         }
 
-        if (type === 'mint_failure' && wallet) {
+        if (type === 'mint_failure' && normalizedWallet) {
             pipe.hincrby('stats:global', 'total_failures', 1);
             if (collection) {
                 pipe.hincrby(`collection:${collection}:stats`, 'failures', 1);
             }
-            pipe.hincrby(`user:${wallet}:profile`, 'total_failures', 1);
+            pipe.hincrby(`user:${normalizedWallet}:profile`, 'total_failures', 1);
         }
 
         // ===== WALLET-LEVEL TRACKING =====
         // ===== WALLET-LEVEL TRACKING (STREAK) =====
-        if (wallet && wallet !== 'anonymous') {
+        if (normalizedWallet && normalizedWallet !== 'anonymous') {
             // Ensure first_seen is set (only once)
-            const profile = await kv.hgetall(`user:${wallet}:profile`);
+            const profile = await kv.hgetall(`user:${normalizedWallet}:profile`);
             if (!profile?.first_seen) {
-                pipe.hset(`user:${wallet}:profile`, 'first_seen', timestamp);
+                pipe.hset(`user:${normalizedWallet}:profile`, { first_seen: timestamp });
                 // Cohort tracking
-                pipe.sadd(`cohort:${today}`, wallet.toLowerCase());
+                pipe.sadd(`cohort:${today}`, normalizedWallet);
             }
 
             // UTC Streak Logic (Enhanced)
@@ -312,8 +322,8 @@ export default async function handler(req, res) {
 
             if (!lastActiveDate) {
                 newStreak = 1;
-                pipe.hset(`user:${wallet}:profile`, 'streak', 1);
-                pipe.hset(`user:${wallet}:profile`, 'last_active_date', today);
+                pipe.hset(`user:${normalizedWallet}:profile`, { streak: 1 });
+                pipe.hset(`user:${normalizedWallet}:profile`, { last_active_date: today });
             } else if (lastActiveDate !== today) {
                 // Check days diff
                 const d1 = new Date(lastActiveDate);
@@ -323,39 +333,39 @@ export default async function handler(req, res) {
 
                 if (diffDays === 1) {
                     newStreak += 1;
-                    pipe.hincrby(`user:${wallet}:profile`, 'streak', 1);
+                    pipe.hincrby(`user:${normalizedWallet}:profile`, 'streak', 1);
                 } else {
                     newStreak = 1;
-                    pipe.hset(`user:${wallet}:profile`, 'streak', 1);
+                    pipe.hset(`user:${normalizedWallet}:profile`, { streak: 1 });
                 }
 
                 // Update longest
                 const longest = parseInt(profile?.longest_streak) || 0;
                 if (newStreak > longest) {
-                    pipe.hset(`user:${wallet}:profile`, 'longest_streak', newStreak);
+                    pipe.hset(`user:${normalizedWallet}:profile`, { longest_streak: newStreak });
                 }
 
-                pipe.hset(`user:${wallet}:profile`, 'last_active_date', today);
+                pipe.hset(`user:${normalizedWallet}:profile`, { last_active_date: today });
             }
 
             // Update last_active timestamp
-            pipe.hset(`user:${wallet}:profile`, 'last_active', timestamp);
+            pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
 
             // Journey log (trimmed)
-            pipe.lpush(`user:${wallet}:journey`, JSON.stringify({
+            pipe.lpush(`user:${normalizedWallet}:journey`, JSON.stringify({
                 type, collection, page, timestamp,
                 ...(txHash ? { txHash } : {})
             }));
-            pipe.ltrim(`user:${wallet}:journey`, 0, 199);
+            pipe.ltrim(`user:${normalizedWallet}:journey`, 0, 199);
         }
 
         // ===== EXECUTE BATCH =====
         await pipe.exec();
 
         // ===== REPUTATION SCORE (computed after mint_success) =====
-        if (type === 'mint_success' && wallet) {
+        if (type === 'mint_success' && normalizedWallet) {
             try {
-                const profile = await kv.hgetall(`user:${wallet}:profile`);
+                const profile = await kv.hgetall(`user:${normalizedWallet}:profile`);
                 if (profile) {
                     const mints = parseInt(profile.total_mints) || 0;
                     const volume = parseFloat(profile.total_volume) || 0;
@@ -374,8 +384,8 @@ export default async function handler(req, res) {
                     );
 
                     const reputationScore = Math.round(reputation * 100) / 100;
-                    await kv.hset(`user:${wallet}:profile`, 'reputation_score', reputationScore);
-                    await kv.zadd('leaderboard:reputation', { score: reputationScore, member: wallet });
+                    await kv.hset(`user:${normalizedWallet}:profile`, { reputation_score: reputationScore });
+                    await kv.zadd('leaderboard:reputation', { score: reputationScore, member: normalizedWallet });
                 }
             } catch (repError) {
                 console.warn('Reputation calc error (non-fatal):', repError);
@@ -384,6 +394,7 @@ export default async function handler(req, res) {
 
         // Set weekly leaderboard TTL (8 weeks)
         await kv.expire(`leaderboard:mints:week:${weekNum}`, 60 * 60 * 24 * 56);
+        await kv.expire(`leaderboard:points:week:${weekNum}`, 60 * 60 * 24 * 56);
 
         return res.status(200).json({ success: true, eventId });
 
