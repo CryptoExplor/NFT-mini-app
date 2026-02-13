@@ -62,6 +62,7 @@ export default async function handler(req, res) {
         // Calculate enhanced funnel with drop-off %
         const funnel = funnelData || {};
         const funnelSteps = [
+            { step: 'page_view', label: 'Page View', count: parseInt(funnel.page_view) || 0 },
             { step: 'wallet_connect', label: 'Wallet Connect', count: parseInt(funnel.wallet_connect) || 0 },
             { step: 'collection_view', label: 'View Collection', count: parseInt(funnel.collection_view) || 0 },
             { step: 'mint_click', label: 'Click Mint', count: parseInt(funnel.mint_click) || 0 },

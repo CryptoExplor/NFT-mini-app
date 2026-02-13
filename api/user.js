@@ -172,7 +172,6 @@ export default async function handler(req, res) {
                 favoriteCollection: favorite.collection,
                 favoriteCollectionMints: favorite.count,
                 memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
-                memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
                 activityLevel: getActivityLevel(totalMints, currentStreak)
             },
             journey: parsedJourney

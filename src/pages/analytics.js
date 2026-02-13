@@ -70,13 +70,10 @@ export async function renderAnalyticsPage(params) {
 
             <main class="max-w-6xl mx-auto space-y-6">
 
-                <!-- ============ SOCIAL PROOF TICKER ============ -->
                 ${renderSocialProof(socialProof)}
 
-                <!-- ============ WALLET INSIGHTS (PERSONALIZED) ============ -->
                 ${renderWalletInsights(userStats, state.wallet)}
 
-                <!-- ============ GLOBAL SUMMARY CARDS ============ -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     ${summaryCard('👁️', 'Total Views', stats.totalViews || 0, 'indigo')}
                     ${summaryCard('💎', 'Total Mints', stats.totalMints || 0, 'green')}
@@ -91,7 +88,6 @@ export async function renderAnalyticsPage(params) {
                     ${summaryCard('🔴', 'Collections Live', liveCount, 'red')}
                 </div>
 
-                <!-- ============ CONVERSION FUNNEL ============ -->
                 <div class="glass-card p-5 rounded-2xl border border-white/10">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 gap-2">
                         <h3 class="text-lg font-bold flex items-center gap-2">
@@ -106,10 +102,8 @@ export async function renderAnalyticsPage(params) {
                     ${renderEnhancedFunnel(funnel)}
                 </div>
 
-                <!-- ============ LEADERBOARD + ACTIVITY ============ -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    <!-- Leaderboard -->
                     <div class="lg:col-span-2 glass-card p-5 rounded-2xl border border-white/10">
                         <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                             <span class="text-yellow-400">🏆</span> Top Minters
@@ -120,7 +114,6 @@ export async function renderAnalyticsPage(params) {
                         </div>
                     </div>
 
-                    <!-- Live Activity Feed -->
                     <div class="glass-card p-5 rounded-2xl border border-green-500/20 relative" id="activity-feed-card">
                         <div class="flex items-center justify-between mb-4">
                             <h3 class="text-lg font-bold flex items-center gap-2">
@@ -135,7 +128,6 @@ export async function renderAnalyticsPage(params) {
                     </div>
                 </div>
 
-                <!-- ============ COLLECTIONS ============ -->
                 <div class="glass-card p-5 rounded-2xl border border-white/10">
                     <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                         <span class="text-blue-400">📊</span> Collection Performance
@@ -145,13 +137,10 @@ export async function renderAnalyticsPage(params) {
                     </div>
                 </div>
 
-                <!-- ============ MINT HISTORY ============ -->
                 ${renderMintHistory(userStats)}
 
-                <!-- ============ USER JOURNEY ============ -->
                 ${renderJourneyTimeline(userStats)}
 
-                <!-- ============ ADMIN PANEL ============ -->
                 ${renderAdminPanel(state.wallet)}
 
             </main>
@@ -218,6 +207,9 @@ export async function renderAnalyticsPage(params) {
         setTimeout(() => renderAnalyticsPage(params), 300);
     };
     document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+
+    // Expose refresh method for external triggers (e.g., mint.js)
+    window.refreshAnalytics = () => renderAnalyticsPage(params);
 }
 
 function cleanup() {
@@ -291,15 +283,9 @@ function renderPointsSection(userStats) {
     if (!userStats) return '';
     const profile = userStats.profile || {};
     const rankings = userStats.rankings || {};
-    const points = profile.total_points || 0; // Check key from api/user.js response structure? 
-    // Wait, api/user.js returns camelCase?
-    // profile.totalMints, profile.streak
-    // rankings.points.score IS present in api/user.js response
+    // Removed unused points variable here
 
-    // api/user.js logic:
-    // points: { rank: ..., score: ... }
-    // profile doesn't have total_points camelCased explicitly, maybe I should check userStatslog
-    // actually api/user.js response:
+    // api/user.js response:
     /*
     profile: {
         totalMints,
@@ -372,7 +358,6 @@ function renderWalletInsights(userStats, wallet) {
         <div class="glass-card p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/5 relative overflow-hidden">
             <div class="absolute top-2 right-4 opacity-10 text-6xl pointer-events-none">👤</div>
 
-            <!-- Header -->
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h2 class="text-lg font-bold flex items-center gap-2 flex-wrap">
                     Wallet Insights
@@ -386,7 +371,6 @@ function renderWalletInsights(userStats, wallet) {
                 </h2>
             </div>
 
-            <!-- Primary Stats Grid -->
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
                 <div>
                     <div class="text-xs opacity-50 uppercase">
@@ -431,7 +415,6 @@ function renderWalletInsights(userStats, wallet) {
                 </div>
             </div>
 
-            <!-- Contribution & Psychological Hooks -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 ${profile.mintContribution ? `
                     <div class="bg-white/5 rounded-xl p-3 border border-white/5">
@@ -479,6 +462,7 @@ function renderEnhancedFunnel(funnel) {
 
     const maxCount = Math.max(...funnel.map(s => s.count), 1);
     const icons = {
+        page_view: '📄',
         wallet_connect: '🔗',
         collection_view: '👁️',
         mint_click: '👆',
@@ -489,7 +473,6 @@ function renderEnhancedFunnel(funnel) {
     // Horizontal funnel flow
     return `
         <div class="space-y-1">
-            <!-- Funnel steps as horizontal connected flow -->
             <div class="flex flex-col gap-3">
                 ${funnel.map((step, i) => {
         const width = Math.max((step.count / maxCount) * 100, 12);
@@ -904,4 +887,3 @@ function setupAdminListeners() {
         });
     }
 }
-

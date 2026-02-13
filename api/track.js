@@ -3,9 +3,10 @@ import { createPublicClient, http, keccak256 } from 'viem';
 import { base } from 'viem/chains';
 
 // RPC Client for verification
+// Use RPC_URL env var if available, otherwise fallback to default public
 const publicClient = createPublicClient({
     chain: base,
-    transport: http()
+    transport: http(process.env.RPC_URL)
 });
 
 // CORS helper
@@ -32,6 +33,7 @@ const VALID_EVENTS = [
 
 // Funnel steps (ordered)
 const FUNNEL_STEPS = [
+    'page_view',
     'wallet_connect',
     'collection_view',
     'mint_click',
@@ -69,9 +71,11 @@ export default async function handler(req, res) {
         const weekNum = getWeekNumber(new Date());
 
         // 0. Rate Limiting
-        if (wallet && wallet !== 'anonymous') {
-            await checkRateLimit(wallet, type);
-        }
+        // Identify user by wallet OR IP address for anonymous users
+        const clientIp = req.headers['x-forwarded-for'] || 'unknown_ip';
+        const rateLimitKey = (wallet && wallet !== 'anonymous') ? wallet : clientIp;
+
+        await checkRateLimit(rateLimitKey, type);
 
         // 0.1 Occasional Cleanup (1% chance)
         if (Math.random() < 0.01) {
@@ -405,11 +409,11 @@ function getUTCDate() {
 }
 
 // Helper: Rate Limiting
-async function checkRateLimit(wallet, action) {
-    const key = `ratelimit:${wallet}:${action}`;
-    const count = await kv.incr(key);
+async function checkRateLimit(key, action) {
+    const limitKey = `ratelimit:${key}:${action}`;
+    const count = await kv.incr(limitKey);
     if (count === 1) {
-        await kv.expire(key, 60); // 1 min window
+        await kv.expire(limitKey, 60); // 1 min window
     }
 
     const limits = {

@@ -8,6 +8,7 @@ import sigil from './abis/sigil.js';
 import baseInvaders from './abis/base-invaders.js';
 import BASEHEADS_404 from './abis/BASEHEADS_404.js';
 import QuantumQuills from './abis/QuantumQuills.js';
+import VoidPFPs from './abis/void-pfps.js';
 // Import more ABIs as you add different contract types:
 // import FreeMint from './abis/FreeMint.js';
 // import PaidMint from './abis/PaidMint.js';
@@ -19,6 +20,7 @@ const ABIS = {
     'base-invaders': baseInvaders,
     'BASEHEADS_404': BASEHEADS_404,
     'QuantumQuills': QuantumQuills,
+    'void-pfps': VoidPFPs,
     // ADD NEW ABIS HERE:
     // 'FreeMint': FreeMint,
     // 'PaidMint': PaidMint,

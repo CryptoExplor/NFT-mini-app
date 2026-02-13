@@ -16,6 +16,7 @@ import onchainSigils from '../../collections/onchain-sigils.js';
 import baseInvaders from '../../collections/base-invaders.js';
 import BASEHEADS_404 from '../../collections/BASEHEADS_404.js';
 import QuantumQuills from '../../collections/QuantumQuills.js';
+import VoidPFPs from '../../collections/void-pfps.js';
 // ADD NEW COLLECTION IMPORTS HERE:
 // import myCollection from '../../collections/my-collection.js';
 
@@ -28,6 +29,7 @@ const COLLECTIONS_MAP = {
     'base-invaders': baseInvaders,
     'baseheads-404': BASEHEADS_404,
     'quantum-quills': QuantumQuills,
+    'void-pfps': VoidPFPs,
     // ADD NEW COLLECTIONS HERE (slug: import):
     // 'my-collection': myCollection,
 };

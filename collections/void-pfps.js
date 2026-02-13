@@ -1,6 +1,6 @@
 /**
- * Quantum Quills Collection
- * Ultra generative animated cosmic ink. Fully on-chain.
+ * VOID PFPS Collection
+ * Cold abstract void faces rendered fully on-chain.
  */
 
 export default {
@@ -8,18 +8,18 @@ export default {
     // REQUIRED FIELDS
     // ============================================
 
-    name: "Quantum Quills",
-    slug: "quantum-quills",
-    description: "Ultra generative Animated cosmic ink artifacts that evolve with supply. Fully on-chain generative nebula, distortion filters, and dynamic evolution.",
-    imageUrl: "/quantum-quills.png",
+    name: "VOID PFPs",
+    slug: "void-pfps",
+    description: "Cold abstract void faces rendered fully on-chain. Negative space. Distortion. Fracture. Glow.",
+    imageUrl: "/void-pfps.png", // Ensure this image exists in public/ or update path
 
     // ============================================
     // CONTRACT CONFIGURATION
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0xA794691e186a4D43333BBF2E73d739565b90Bab1",
-    abiName: "QuantumQuills",
+    contractAddress: "0x3Fe053d29BebBAe4F711aa56325dE46Fa7a1Dd64", // TODO: Replace with deployed address
+    abiName: "void-pfps", // TODO: Ensure ABI is added to contracts/abis/ and exported in contracts/index.js
 
     // ============================================
     // MINT CONFIGURATION
@@ -27,12 +27,12 @@ export default {
 
     mintPolicy: {
         maxSupply: 10000,
-        maxPerWallet: null, // Unlimited per wallet (but first 5 are free)
+        maxPerWallet: null, // Unlimited total (but free limit applies)
         stages: [
             {
                 type: "FREE",
                 limit: 5,
-                name: "Genesis Allocation"
+                name: "Free Claim"
             },
             {
                 type: "PAID",
@@ -47,11 +47,11 @@ export default {
     // METADATA
     // ============================================
 
-    category: ["Art", "Generative", "Animated"],
-    tags: ["on-chain", "svg", "animated", "cosmic", "Base"],
+    category: ["Art", "Generative", "On-Chain", "PFP"],
+    tags: ["void", "abstract", "minimalist", "svg", "base"],
     status: "live",
     visibility: "public",
-    launched: "2026-02-12",
+    launched: "2026-02-13",
 
     // ============================================
     // OPTIONAL FIELDS
@@ -60,7 +60,7 @@ export default {
     featured: false,
     farcaster: {
         frame: true,
-        shareText: "My Quantum Quill is writing the future of the cosmos ✒️✨"
+        shareText: "I have stared into the VOID and it stared back. ⚫"
     },
     website: null,
     twitter: null,
