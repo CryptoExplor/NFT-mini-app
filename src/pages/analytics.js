@@ -741,7 +741,7 @@ function renderJourneyTimeline(userStats) {
                         </div>
                     </div>
                 `;
-    }).join('')}
+                }).join('')}
             </div>
         </div>
     `;
@@ -1089,3 +1089,4 @@ function setupAdminListeners() {
         });
     });
 }
+
