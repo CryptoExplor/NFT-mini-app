@@ -115,6 +115,7 @@ export default {
         shareText: "I burned pratiksharma and minted a BASEHEADS_404."
     },
 
+    openseaUrl: "https://opensea.io/collection/baseheads-404",
     website: null,
     twitter: null,
     discord: null

@@ -127,6 +127,17 @@ export async function renderMintPage(params) {
                     </span>
                   `).join('')}
                 </div>
+
+                ${collection.openseaUrl ? `
+                  <div class="mt-5">
+                    <a href="${collection.openseaUrl}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/25 hover:text-emerald-200 transition-colors text-sm font-semibold">
+                      View on OpenSea
+                    </a>
+                  </div>
+                ` : ''}
               </div>
             </div>
           </div>
@@ -215,6 +226,17 @@ export async function renderMintPage(params) {
               </a>
             </p>
             <p>Chain: ${getChainName(collection.chainId)}</p>
+            ${collection.openseaUrl ? `
+              <p>
+                OpenSea:
+                <a href="${collection.openseaUrl}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="hover:text-emerald-300 hover:underline transition-colors">
+                  View Collection
+                </a>
+              </p>
+            ` : ''}
           </div>
         </div>
       </main>
@@ -524,6 +546,9 @@ async function handleMint(collection, stage) {
     mintStatus.innerHTML = `
       <div class="flex flex-col items-center space-y-4">
         <a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline text-sm mb-2">View on Explorer</a>
+        ${collection.openseaUrl ? `
+          <a href="${collection.openseaUrl}" target="_blank" rel="noopener noreferrer" class="text-emerald-300 underline text-sm">View Collection on OpenSea</a>
+        ` : ''}
         
         <div class="w-full h-px bg-white/10 my-2"></div>
         

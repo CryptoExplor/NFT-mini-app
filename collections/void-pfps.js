@@ -62,6 +62,7 @@ export default {
         frame: true,
         shareText: "I have stared into the VOID and it stared back. ⚫"
     },
+    openseaUrl: "https://opensea.io/collection/void-pfps",
     website: null,
     twitter: null,
     discord: null

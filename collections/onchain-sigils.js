@@ -53,6 +53,7 @@ export default {
 
     featured: true,
     farcaster: null,
+    openseaUrl: "https://opensea.io/collection/onchain_sigils",
     website: null,
     twitter: null,
     discord: null

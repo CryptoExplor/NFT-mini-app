@@ -83,6 +83,7 @@ export default {
         shareText: "I just deployed a Base Invader 👾"
     },
 
+    openseaUrl: "https://opensea.io/collection/base-invaders-",
     website: null,
     twitter: null,
     discord: null

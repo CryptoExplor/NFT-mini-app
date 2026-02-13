@@ -62,6 +62,7 @@ export default {
         frame: true,
         shareText: "My Quantum Quill is writing the future of the cosmos ✒️✨"
     },
+    openseaUrl: "https://opensea.io/collection/quantumquills",
     website: null,
     twitter: null,
     discord: null
