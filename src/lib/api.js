@@ -115,7 +115,8 @@ export async function getLeaderboard(options = {}) {
                 leaderboard: [],
                 collections: [],
                 recentActivity: [],
-                socialProof: []
+                socialProof: [],
+                error: 'API_UNAVAILABLE'
             };
         }
 
@@ -129,7 +130,8 @@ export async function getLeaderboard(options = {}) {
             leaderboard: [],
             collections: [],
             recentActivity: [],
-            socialProof: []
+            socialProof: [],
+            error: 'API_ERROR'
         };
     }
 }
@@ -150,13 +152,13 @@ export async function getUserStats(wallet) {
         const contentType = response.headers.get("content-type");
         if (!response.ok || !contentType || !contentType.includes("application/json")) {
             console.warn(`User Stats API unavailable (status: ${response.status}, type: ${contentType})`);
-            return { rank: '-', totalMints: 0, favCollection: '-' };
+            return { rank: '-', totalMints: 0, favCollection: '-', error: 'API_UNAVAILABLE' };
         }
 
         return await response.json();
     } catch (error) {
         console.error('Failed to fetch user stats:', error);
-        return { rank: '-', totalMints: 0, favCollection: '-' };
+        return { rank: '-', totalMints: 0, favCollection: '-', error: 'API_ERROR' };
     }
 }
 
