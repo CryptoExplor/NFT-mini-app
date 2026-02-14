@@ -193,15 +193,15 @@ export default async function handler(req, res) {
             }
 
             // 2. Idempotency check: Prevent point farming on same txHash
+            // Check if processed BEFORE doing work (but don't set flag yet)
             let isNewMint = true;
             if (txHash) {
-                const processed = await kv.set(`mint:processed:${txHash}`, 1, { nx: true, ex: 60 * 60 * 24 * 7 });
-                if (!processed) isNewMint = false; // Already processed
+                const processed = await kv.get(`mint:processed:${txHash}`);
+                if (processed) isNewMint = false; // Already processed
             }
 
             const mintPrice = parseFloat(price) || 0;
             const gasUsed = parseFloat(gas) || 0;
-
 
 
             // ===== POINTS LOGIC (only if new mint) =====
@@ -368,6 +368,13 @@ export default async function handler(req, res) {
 
         // ===== EXECUTE BATCH =====
         await pipe.exec();
+
+        // Mark as processed AFTER successful execution
+        if (type === 'mint_success' && txHash && normalizedWallet && collection) {
+            // We only mark processed here to ensure retries work if pipeline fails
+            // (Small window for double counting but better than data loss)
+            await kv.set(`mint:processed:${txHash}`, 1, { ex: 60 * 60 * 24 * 7 });
+        }
 
         // ===== REPUTATION SCORE (computed after mint_success) =====
         if (type === 'mint_success' && normalizedWallet) {
