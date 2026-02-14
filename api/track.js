@@ -374,7 +374,8 @@ export default async function handler(req, res) {
         }
 
         // ===== EXECUTE BATCH =====
-        await pipe.exec();
+        const results = await pipe.exec();
+        console.log(`[Track] Pipeline results for ${type}:`, JSON.stringify(results));
 
         // Mark as processed AFTER successful execution
         if (type === 'mint_success' && txHash && normalizedWallet && collection) {

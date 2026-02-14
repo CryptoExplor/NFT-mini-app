@@ -28,6 +28,7 @@ export default async function handler(req, res) {
         }
 
         const walletKey = await resolveWalletKey(candidates);
+        console.log(`[UserAPI] Resolved key for ${normalizedWallet} -> ${walletKey}`);
 
         const pipe = kv.pipeline();
         pipe.hgetall(`user:${walletKey}:profile`);
@@ -57,6 +58,8 @@ export default async function handler(req, res) {
             pointsRank,
             pointsScore
         ] = await pipe.exec();
+
+        console.log(`[UserAPI] Raw profile for ${walletKey}:`, profile);
 
         const parsedJourney = parseJourney(journey);
 
