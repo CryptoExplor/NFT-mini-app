@@ -70,11 +70,12 @@ export default async function handler(req, res) {
             });
         }
 
+        // FIXED: Proper parsing of numeric values
         const totalMints = parseInt(profile?.total_mints, 10) || 0;
         const totalAttempts = parseInt(profile?.total_attempts, 10) || 0;
         const totalFailures = parseInt(profile?.total_failures, 10) || 0;
-        const totalVolume = parseFloat(profile?.total_volume || 0);
-        const totalGas = parseFloat(profile?.total_gas || 0);
+        const totalVolume = parseFloat(profile?.total_volume) || 0;  // FIXED: Remove toFixed here
+        const totalGas = parseFloat(profile?.total_gas) || 0;        // FIXED: Remove toFixed here
         const totalPoints = parseInt(profile?.total_points, 10) || 0;
 
         const successRate = totalAttempts > 0
@@ -113,8 +114,8 @@ export default async function handler(req, res) {
                 totalMints,
                 totalAttempts,
                 totalFailures,
-                totalVolume: totalVolume.toFixed(6),
-                totalGas: totalGas.toFixed(6),
+                totalVolume: parseFloat(totalVolume.toFixed(6)),  // FIXED: Convert back to number
+                totalGas: parseFloat(totalGas.toFixed(6)),        // FIXED: Convert back to number
                 avgGas,
                 firstSeen: new Date(firstSeen).toISOString(),
                 lastActive: profile?.last_active ? new Date(parseInt(profile.last_active, 10)).toISOString() : new Date(now).toISOString(),
@@ -135,11 +136,11 @@ export default async function handler(req, res) {
                 },
                 volume: {
                     rank: volumeRank !== null ? volumeRank + 1 : 'Unranked',
-                    score: parseFloat(volumeScore || 0).toFixed(6)
+                    score: parseFloat(volumeScore) || 0  // FIXED: Parse float properly
                 },
                 reputation: {
                     rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
-                    score: parseFloat(profile?.reputation_score || 0).toFixed(2)
+                    score: parseFloat(reputationScore || profile?.reputation_score || 0).toFixed(2)
                 },
                 points: {
                     rank: pointsRank !== null ? pointsRank + 1 : 'Unranked',
@@ -152,10 +153,10 @@ export default async function handler(req, res) {
                 mintContribution: `${mintContribution}%`,
                 volumeContribution: `${volumeContribution}%`,
                 avgGasPerMint: `${avgGas} ETH`,
-                favoriteCollection: favorite.collection || 'None',
-                favoriteCollectionMints: favorite.count || 0,
+                favoriteCollection: favorite.collection,
+                favoriteCollectionMints: favorite.count,
                 memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
-                activityLevel
+                activityLevel: getActivityLevel(totalMints, currentStreak)
             },
             journey: parsedJourney
         });
@@ -164,7 +165,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Failed to fetch user stats' });
     }
 
-
+    // ... rest of your helper functions remain the same ...
     async function resolveWalletKey(candidates) {
         if (!Array.isArray(candidates) || candidates.length === 0) return null;
         if (candidates.length === 1) return candidates[0];
