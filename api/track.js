@@ -216,6 +216,8 @@ export default async function handler(req, res) {
                 pipe.hincrby(`collection:${collection}:stats`, 'mints', 1);
                 pipe.hincrbyfloat(`collection:${collection}:stats`, 'volume', mintPrice);
 
+                console.log(`[Track] recording mint volume: ${mintPrice} for ${normalizedWallet} (Collection: ${collection})`);
+
                 // Unique wallets per collection (approximation via counter)
                 pipe.sadd(`collection:${collection}:wallets`, normalizedWallet);
 
@@ -316,41 +318,46 @@ export default async function handler(req, res) {
                 pipe.sadd(`cohort:${today}`, normalizedWallet);
             }
 
-            // UTC Streak Logic (Enhanced)
+            // UTC Streak Logic (Enhanced with strict date checking)
             const currentStreak = parseInt(profile?.streak) || 0;
             const lastActiveDate = profile?.last_active_date;
+
+            // Get today and yesterday consistently
+            const todayDate = today; // already computed as getUTCDate()
+            const yesterdayDate = getYesterdayDate(todayDate);
+
+            // Debug streak
+            // console.log(`[Streak] Wallet: ${normalizedWallet}, Last: ${lastActiveDate}, Today: ${todayDate}, Streak: ${currentStreak}`);
 
             let newStreak = currentStreak;
 
             if (!lastActiveDate) {
+                // First time
                 newStreak = 1;
-                pipe.hset(`user:${normalizedWallet}:profile`, { streak: 1 });
-                pipe.hset(`user:${normalizedWallet}:profile`, { last_active_date: today });
-            } else if (lastActiveDate !== today) {
-                // Check days diff
-                const d1 = new Date(lastActiveDate);
-                const d2 = new Date(today);
-                const diffTime = Math.abs(d2 - d1);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                if (diffDays === 1) {
+                pipe.hset(`user:${normalizedWallet}:profile`, { streak: 1, last_active_date: todayDate });
+            } else if (lastActiveDate !== todayDate) {
+                // Not active today yet. Check if consecutive.
+                if (lastActiveDate === yesterdayDate) {
+                    // Consecutive day!
                     newStreak += 1;
                     pipe.hincrby(`user:${normalizedWallet}:profile`, 'streak', 1);
+
+                    // Update longest
+                    const longest = parseInt(profile?.longest_streak) || 0;
+                    if (newStreak > longest) {
+                        pipe.hset(`user:${normalizedWallet}:profile`, { longest_streak: newStreak });
+                    }
                 } else {
+                    // Gap in activity - reset
                     newStreak = 1;
                     pipe.hset(`user:${normalizedWallet}:profile`, { streak: 1 });
                 }
 
-                // Update longest
-                const longest = parseInt(profile?.longest_streak) || 0;
-                if (newStreak > longest) {
-                    pipe.hset(`user:${normalizedWallet}:profile`, { longest_streak: newStreak });
-                }
-
-                pipe.hset(`user:${normalizedWallet}:profile`, { last_active_date: today });
+                // Update last active date to today
+                pipe.hset(`user:${normalizedWallet}:profile`, { last_active_date: todayDate });
             }
 
-            // Update last_active timestamp
+            // Update last_active timestamp (always)
             pipe.hset(`user:${normalizedWallet}:profile`, { last_active: timestamp });
 
             // Journey log (trimmed)
@@ -426,6 +433,13 @@ function getWeekNumber(date) {
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+// Helper: Get Yesterday (UTC YYYY-MM-DD)
+function getYesterdayDate(todayStr) {
+    const date = new Date(todayStr);
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().split('T')[0];
 }
 
 // Helper: Consistent UTC Date
