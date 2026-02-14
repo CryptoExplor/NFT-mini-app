@@ -70,12 +70,11 @@ export default async function handler(req, res) {
             });
         }
 
-        // FIXED: Proper parsing of numeric values
         const totalMints = parseInt(profile?.total_mints, 10) || 0;
         const totalAttempts = parseInt(profile?.total_attempts, 10) || 0;
         const totalFailures = parseInt(profile?.total_failures, 10) || 0;
-        const totalVolume = parseFloat(profile?.total_volume) || 0;  // FIXED: Remove toFixed here
-        const totalGas = parseFloat(profile?.total_gas) || 0;        // FIXED: Remove toFixed here
+        const totalVolume = parseFloat(profile?.total_volume || 0);
+        const totalGas = parseFloat(profile?.total_gas || 0);
         const totalPoints = parseInt(profile?.total_points, 10) || 0;
 
         const successRate = totalAttempts > 0
@@ -114,8 +113,8 @@ export default async function handler(req, res) {
                 totalMints,
                 totalAttempts,
                 totalFailures,
-                totalVolume: parseFloat(totalVolume.toFixed(6)),  // FIXED: Convert back to number
-                totalGas: parseFloat(totalGas.toFixed(6)),        // FIXED: Convert back to number
+                totalVolume,
+                totalGas,
                 avgGas,
                 firstSeen: new Date(firstSeen).toISOString(),
                 lastActive: profile?.last_active ? new Date(parseInt(profile.last_active, 10)).toISOString() : new Date(now).toISOString(),
@@ -136,7 +135,7 @@ export default async function handler(req, res) {
                 },
                 volume: {
                     rank: volumeRank !== null ? volumeRank + 1 : 'Unranked',
-                    score: parseFloat(volumeScore) || 0  // FIXED: Parse float properly
+                    score: parseFloat(volumeScore || 0)
                 },
                 reputation: {
                     rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
@@ -165,7 +164,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Failed to fetch user stats' });
     }
 
-    // ... rest of your helper functions remain the same ...
+
     async function resolveWalletKey(candidates) {
         if (!Array.isArray(candidates) || candidates.length === 0) return null;
         if (candidates.length === 1) return candidates[0];
