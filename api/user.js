@@ -139,7 +139,7 @@ export default async function handler(req, res) {
                 },
                 reputation: {
                     rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
-                    score: parseFloat(reputationScore || profile?.reputation_score || 0).toFixed(2)
+                    score: parseFloat(profile?.reputation_score || 0).toFixed(2)
                 },
                 points: {
                     rank: pointsRank !== null ? pointsRank + 1 : 'Unranked',
@@ -152,10 +152,10 @@ export default async function handler(req, res) {
                 mintContribution: `${mintContribution}%`,
                 volumeContribution: `${volumeContribution}%`,
                 avgGasPerMint: `${avgGas} ETH`,
-                favoriteCollection: favorite.collection,
-                favoriteCollectionMints: favorite.count,
+                favoriteCollection: favorite.collection || 'None',
+                favoriteCollectionMints: favorite.count || 0,
                 memberDays: Math.floor((now - firstSeen) / (1000 * 60 * 60 * 24)),
-                activityLevel: getActivityLevel(totalMints, currentStreak)
+                activityLevel
             },
             journey: parsedJourney
         });
