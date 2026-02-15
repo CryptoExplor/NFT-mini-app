@@ -12,6 +12,7 @@ export default {
     slug: "base-moods",
     description: "Fully on-chain emotional expression NFTs. Cute faces that reflect different moods - perfect for daily vibes. 100% generated in Solidity.",
     imageUrl: "/base-moods.png",
+    shareImageUrl: "/base-moods-share.png",
 
     // ============================================
     // CONTRACT CONFIGURATION

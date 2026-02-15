@@ -12,6 +12,7 @@ export default {
     slug: "quantum-quills",
     description: "Ultra generative Animated cosmic ink artifacts that evolve with supply. Fully on-chain generative nebula, distortion filters, and dynamic evolution.",
     imageUrl: "/quantum-quills.png",
+    shareImageUrl: "/quantum-quills-share.png",
 
     // ============================================
     // CONTRACT CONFIGURATION

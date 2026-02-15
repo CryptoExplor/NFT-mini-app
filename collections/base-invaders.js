@@ -12,6 +12,7 @@ export default {
     slug: "base-invaders",
     description: "Retro cyber alien invaders generated fully on-chain. 8-bit PFPs with glitch and corruption variants native to Base.",
     imageUrl: "/base-invaders.png",
+    shareImageUrl: "/base-invaders-share.png",
 
     // ============================================
     // CONTRACT CONFIGURATION
