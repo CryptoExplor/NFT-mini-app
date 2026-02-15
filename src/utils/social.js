@@ -51,7 +51,9 @@ function getCollectionImageUrl(collection) {
 function getCollectionEmbeds(collection) {
     const shareUrl = getCollectionShareUrl(collection.slug);
     const imageUrl = getCollectionImageUrl(collection);
-    return uniqueUrls([shareUrl, imageUrl]);
+    // Keep collection casts to a single embed to avoid duplicate cards in compose.
+    // `/share/:slug` already contains the collection image metadata.
+    return uniqueUrls([shareUrl, imageUrl], 1);
 }
 
 function getMainAppShareUrl() {
