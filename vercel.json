@@ -8,6 +8,14 @@
   ],
   "rewrites": [
     {
+      "source": "/share",
+      "destination": "/api/share"
+    },
+    {
+      "source": "/share/:slug",
+      "destination": "/api/share?slug=:slug"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -1,6 +1,129 @@
 import { toast } from '../utils/toast.js';
 import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
 
+const APP_ORIGIN = 'https://base-mintapp.vercel.app';
+const WARPCAST_COMPOSE_URL = 'https://warpcast.com/~/compose';
+const COLLECTION_SHARE_FALLBACK_IMAGE = '/image.png';
+const MAIN_SHARE_PRIMARY_IMAGE = '/image.png';
+const MAIN_SHARE_SECONDARY_IMAGE = '/image1.png';
+
+function getAppOrigin() {
+    if (typeof window !== 'undefined' && typeof window.location?.origin === 'string' && window.location.origin.startsWith('http')) {
+        return window.location.origin;
+    }
+    return APP_ORIGIN;
+}
+
+function toAbsoluteUrl(url, baseUrl = getAppOrigin()) {
+    if (typeof url !== 'string') return null;
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    try {
+        return new URL(trimmed, baseUrl).toString();
+    } catch {
+        return null;
+    }
+}
+
+function uniqueUrls(urls, limit = 2) {
+    const deduped = [];
+    for (const url of urls) {
+        if (!url || deduped.includes(url)) continue;
+        deduped.push(url);
+        if (deduped.length >= limit) break;
+    }
+    return deduped;
+}
+
+function getCollectionShareUrl(slug) {
+    return toAbsoluteUrl(`/share/${slug}`);
+}
+
+function getCollectionMintUrl(slug) {
+    return toAbsoluteUrl(`/mint/${slug}`);
+}
+
+function getCollectionImageUrl(collection) {
+    return toAbsoluteUrl(collection?.imageUrl || COLLECTION_SHARE_FALLBACK_IMAGE);
+}
+
+function getCollectionEmbeds(collection) {
+    const shareUrl = getCollectionShareUrl(collection.slug);
+    const imageUrl = getCollectionImageUrl(collection);
+    return uniqueUrls([shareUrl, imageUrl]);
+}
+
+function getMainAppShareUrl() {
+    return toAbsoluteUrl('/share');
+}
+
+function getMainAppEmbeds() {
+    const shareUrl = getMainAppShareUrl();
+    const secondaryImageUrl = toAbsoluteUrl(MAIN_SHARE_SECONDARY_IMAGE);
+    return uniqueUrls([shareUrl, secondaryImageUrl]);
+}
+
+async function tryComposeCast(text, embeds) {
+    if (!isInFarcaster()) return false;
+
+    const sdk = getFarcasterSDK();
+    if (!sdk?.actions?.composeCast) return false;
+
+    try {
+        await sdk.actions.composeCast({
+            text,
+            embeds: uniqueUrls(embeds)
+        });
+        return true;
+    } catch (error) {
+        console.error('Farcaster composeCast failed:', error);
+        return false;
+    }
+}
+
+function buildComposeIntentUrl(text, embeds) {
+    const params = new URLSearchParams();
+    if (text) params.set('text', text);
+    for (const embed of uniqueUrls(embeds)) {
+        params.append('embeds[]', embed);
+    }
+    return `${WARPCAST_COMPOSE_URL}?${params.toString()}`;
+}
+
+async function openExternalUrl(url) {
+    if (!url || typeof window === 'undefined') return false;
+
+    if (isInFarcaster()) {
+        const sdk = getFarcasterSDK();
+        if (sdk?.actions?.openUrl) {
+            try {
+                await sdk.actions.openUrl(url);
+                return true;
+            } catch (error) {
+                console.error('Farcaster openUrl fallback failed:', error);
+            }
+        }
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return true;
+}
+
+async function copySharePayload(payload) {
+    if (!payload) return;
+    try {
+        if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(payload);
+            toast.show('Link copied to clipboard!', 'success');
+            return;
+        }
+    } catch (error) {
+        console.error('Clipboard write failed:', error);
+    }
+    toast.show('Unable to share automatically.', 'error');
+}
+
 /**
  * Get share text from collection config
  * Supports string or array of strings (random selection)
@@ -21,13 +144,15 @@ function getCollectionShareText(collection) {
  */
 function getPlatformShareUrl(platform, slug) {
     if (platform === 'farcaster') {
-        return `https://base-mintapp.vercel.app/mint/${slug}`;
+        return getCollectionShareUrl(slug);
+    }
+    if (platform === 'web') {
+        return getCollectionShareUrl(slug);
     }
     if (platform === 'x') {
-        // format: https://base.app/app/https:/base-mintapp.vercel.app/mint/base-invaders
-        return `https://base.app/app/https:/base-mintapp.vercel.app/mint/${slug}`;
+        return getCollectionMintUrl(slug);
     }
-    return `${window.location.origin}/mint/${slug}`;
+    return toAbsoluteUrl(`/mint/${slug}`);
 }
 
 function getOpenSeaUrl(collection) {
@@ -60,50 +185,56 @@ function buildClipboardPayload(text, primaryUrl, openSeaUrl) {
  */
 export async function shareCollection(collection) {
     const fcUrl = getPlatformShareUrl('farcaster', collection.slug);
-    const baseAppUrl = getPlatformShareUrl('x', collection.slug);
+    const baseAppUrl = getPlatformShareUrl('web', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
+    const imageUrl = getCollectionImageUrl(collection);
+    const embeds = getCollectionEmbeds(collection);
 
     const configText = getCollectionShareText(collection);
     const baseText = configText || `I'm minting ${collection.name} on Base! Check it out:`;
 
     const text = appendOpenSeaText(baseText, openSeaUrl);
+    const intentUrl = buildComposeIntentUrl(text, embeds);
 
-    // 1. Try Farcaster Native Share if in Farcaster
+    // 1. Try Farcaster Native Share if in Farcaster/Base App
     if (isInFarcaster()) {
-        const sdk = getFarcasterSDK();
-        if (sdk?.actions?.composeCast) {
-            try {
-                await sdk.actions.composeCast({
-                    text,
-                    embeds: openSeaUrl ? [fcUrl, openSeaUrl] : [fcUrl]
-                });
-                return;
-            } catch (e) {
-                console.error('Farcaster composeCast failed:', e);
-            }
+        if (await tryComposeCast(text, embeds)) {
+            return;
         }
+        await openExternalUrl(intentUrl);
+        return;
     }
 
     // 2. Try Web Share API
     const shareData = {
         title: collection.name,
         text,
-        url: baseAppUrl
+        url: fcUrl || baseAppUrl
     };
 
     try {
-        if (navigator.share) {
+        if (navigator?.share) {
             await navigator.share(shareData);
+            return;
         } else {
-            // Fallback to copy link + context
-            await navigator.clipboard.writeText(buildClipboardPayload(text, baseAppUrl, openSeaUrl));
-            toast.show('Link copied to clipboard!', 'success');
+            // Web fallback to Warpcast compose intent
+            await openExternalUrl(intentUrl);
+            return;
         }
-    } catch (e) {
-        if (e.name !== 'AbortError') {
-            console.error('Share failed:', e);
-            await navigator.clipboard.writeText(buildClipboardPayload(text, baseAppUrl, openSeaUrl));
-            toast.show('Link copied to clipboard!', 'success');
+    } catch (error) {
+        if (error?.name !== 'AbortError') {
+            console.error('Share failed:', error);
+            // Fallback to Warpcast compose intent first
+            const opened = await openExternalUrl(intentUrl);
+            if (opened) return;
+
+            // Last fallback to copy link + context
+            const payload = buildClipboardPayload(text, fcUrl || baseAppUrl, openSeaUrl);
+            if (imageUrl && !payload.includes(imageUrl)) {
+                await copySharePayload(`${payload}\nImage: ${imageUrl}`);
+            } else {
+                await copySharePayload(payload);
+            }
         }
     }
 }
@@ -114,35 +245,26 @@ export async function shareCollection(collection) {
 export async function shareToFarcaster(collection, customText = null) {
     const url = getPlatformShareUrl('farcaster', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
+    const embeds = getCollectionEmbeds(collection);
 
     const configText = getCollectionShareText(collection);
     const baseText = customText || configText || `Just minted ${collection.name} on Base!`;
 
     const text = appendOpenSeaText(baseText, openSeaUrl);
 
-    if (isInFarcaster()) {
-        const sdk = getFarcasterSDK();
-        if (sdk?.actions?.composeCast) {
-            await sdk.actions.composeCast({
-                text,
-                embeds: openSeaUrl ? [url, openSeaUrl] : [url]
-            });
-        }
-    } else {
-        // Fallback to Warpcast intent
-        const embeds = [url];
-        if (openSeaUrl) embeds.push(openSeaUrl);
-        const embedsQuery = embeds.map((embed) => `embeds[]=${encodeURIComponent(embed)}`).join('&');
-        const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&${embedsQuery}`;
-        window.open(intentUrl, '_blank');
+    if (await tryComposeCast(text, embeds)) {
+        return;
     }
+
+    const fallbackEmbeds = uniqueUrls([url, ...embeds]);
+    await openExternalUrl(buildComposeIntentUrl(text, fallbackEmbeds));
 }
 
 /**
  * Share to Twitter/X
  */
 export function shareToTwitter(collection, customText = null) {
-    const url = getPlatformShareUrl('x', collection.slug);
+    const url = getPlatformShareUrl('web', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
     const configText = getCollectionShareText(collection);
@@ -158,19 +280,16 @@ export function shareToTwitter(collection, customText = null) {
  * Share the main app to Farcaster
  */
 export async function shareAppOnFarcaster() {
-    const url = 'https://base-mintapp.vercel.app/';
+    const url = getMainAppShareUrl();
     const text = 'Check out this minting app on Base!';
+    const embeds = getMainAppEmbeds();
+    const primaryImageUrl = toAbsoluteUrl(MAIN_SHARE_PRIMARY_IMAGE);
+    const secondaryImageUrl = toAbsoluteUrl(MAIN_SHARE_SECONDARY_IMAGE);
 
-    if (isInFarcaster()) {
-        const sdk = getFarcasterSDK();
-        if (sdk?.actions?.composeCast) {
-            await sdk.actions.composeCast({
-                text,
-                embeds: [url]
-            });
-        }
-    } else {
-        const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
-        window.open(intentUrl, '_blank');
+    if (await tryComposeCast(text, embeds)) {
+        return;
     }
+
+    const fallbackEmbeds = uniqueUrls([url, primaryImageUrl, secondaryImageUrl]);
+    await openExternalUrl(buildComposeIntentUrl(text, fallbackEmbeds));
 }
