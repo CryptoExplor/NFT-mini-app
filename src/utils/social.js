@@ -4,8 +4,6 @@ import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
 const APP_ORIGIN = 'https://base-mintapp.vercel.app';
 const WARPCAST_COMPOSE_URL = 'https://warpcast.com/~/compose';
 const COLLECTION_SHARE_FALLBACK_IMAGE = '/image.png';
-const MAIN_SHARE_PRIMARY_IMAGE = '/image.png';
-const MAIN_SHARE_SECONDARY_IMAGE = '/image1.png';
 
 function getAppOrigin() {
     if (typeof window !== 'undefined' && typeof window.location?.origin === 'string' && window.location.origin.startsWith('http')) {
@@ -45,7 +43,7 @@ function getCollectionMintUrl(slug) {
 }
 
 function getCollectionImageUrl(collection) {
-    return toAbsoluteUrl(collection?.imageUrl || COLLECTION_SHARE_FALLBACK_IMAGE);
+    return toAbsoluteUrl(collection?.shareImageUrl || collection?.imageUrl || COLLECTION_SHARE_FALLBACK_IMAGE);
 }
 
 function getCollectionEmbeds(collection) {
@@ -62,8 +60,8 @@ function getMainAppShareUrl() {
 
 function getMainAppEmbeds() {
     const shareUrl = getMainAppShareUrl();
-    const secondaryImageUrl = toAbsoluteUrl(MAIN_SHARE_SECONDARY_IMAGE);
-    return uniqueUrls([shareUrl, secondaryImageUrl]);
+    // Keep main app share to a single embed to avoid duplicate cards.
+    return uniqueUrls([shareUrl], 1);
 }
 
 async function tryComposeCast(text, embeds) {
@@ -285,13 +283,10 @@ export async function shareAppOnFarcaster() {
     const url = getMainAppShareUrl();
     const text = 'Check out this minting app on Base!';
     const embeds = getMainAppEmbeds();
-    const primaryImageUrl = toAbsoluteUrl(MAIN_SHARE_PRIMARY_IMAGE);
-    const secondaryImageUrl = toAbsoluteUrl(MAIN_SHARE_SECONDARY_IMAGE);
 
     if (await tryComposeCast(text, embeds)) {
         return;
     }
 
-    const fallbackEmbeds = uniqueUrls([url, primaryImageUrl, secondaryImageUrl]);
-    await openExternalUrl(buildComposeIntentUrl(text, fallbackEmbeds));
+    await openExternalUrl(buildComposeIntentUrl(text, uniqueUrls([url], 1)));
 }

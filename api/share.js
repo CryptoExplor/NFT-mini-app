@@ -3,6 +3,7 @@ import { getCollectionBySlug } from '../src/lib/loadCollections.js';
 const APP_NAME = 'Base Mint App';
 const DEFAULT_DESCRIPTION = 'Multi-collection minting on Farcaster and Base App.';
 const DEFAULT_IMAGE = '/image.png';
+const DEFAULT_SHARE_PREVIEW_IMAGE = '/image1.png';
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -70,7 +71,13 @@ export default async function handler(req, res) {
     const slug = collection?.slug || null;
     const pageUrl = (slug ? absoluteUrl(`/share/${slug}`, origin) : absoluteUrl('/share', origin)) || 'https://base-mintapp.vercel.app/share';
     const targetUrl = (slug ? absoluteUrl(`/mint/${slug}`, origin) : absoluteUrl('/', origin)) || 'https://base-mintapp.vercel.app/';
-    const imageUrl = absoluteUrl(collection?.imageUrl || DEFAULT_IMAGE, origin) || 'https://base-mintapp.vercel.app/image.png';
+    const miniAppImageUrl = absoluteUrl(collection?.shareImageUrl || collection?.imageUrl || DEFAULT_IMAGE, origin) || 'https://base-mintapp.vercel.app/image.png';
+    const previewImageUrl = absoluteUrl(
+        collection
+            ? (collection.shareImageUrl || collection.imageUrl || DEFAULT_IMAGE)
+            : DEFAULT_SHARE_PREVIEW_IMAGE,
+        origin
+    ) || miniAppImageUrl;
     const splashImageUrl = absoluteUrl('/splash.png', origin) || 'https://base-mintapp.vercel.app/splash.png';
 
     const title = collection ? `${collection.name} | Base Mint App` : 'Mint NFTs on Base | Base Mint App';
@@ -78,7 +85,7 @@ export default async function handler(req, res) {
     const buttonTitle = collection ? `Mint ${collection.name}` : 'Open Mint App';
 
     const miniAppMeta = buildMiniAppMeta({
-        imageUrl,
+        imageUrl: miniAppImageUrl,
         targetUrl,
         buttonTitle,
         splashImageUrl
@@ -86,7 +93,7 @@ export default async function handler(req, res) {
 
     const escapedTitle = escapeHtml(title);
     const escapedDescription = escapeHtml(description);
-    const escapedImageUrl = escapeHtml(imageUrl);
+    const escapedPreviewImageUrl = escapeHtml(previewImageUrl);
     const escapedPageUrl = escapeHtml(pageUrl);
     const escapedMiniAppMeta = escapeHtml(miniAppMeta);
 
@@ -100,12 +107,12 @@ export default async function handler(req, res) {
   <meta property="og:type" content="website">
   <meta property="og:title" content="${escapedTitle}">
   <meta property="og:description" content="${escapedDescription}">
-  <meta property="og:image" content="${escapedImageUrl}">
+  <meta property="og:image" content="${escapedPreviewImageUrl}">
   <meta property="og:url" content="${escapedPageUrl}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapedTitle}">
   <meta name="twitter:description" content="${escapedDescription}">
-  <meta name="twitter:image" content="${escapedImageUrl}">
+  <meta name="twitter:image" content="${escapedPreviewImageUrl}">
   <meta name="fc:miniapp" content='${escapedMiniAppMeta}'>
 </head>
 <body>
