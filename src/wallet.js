@@ -16,11 +16,16 @@ if (!projectId || projectId === 'REPLACE_ME') {
 // 2. Configure Networks
 export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
 
-// 3. Create Wagmi Adapter with Farcaster support
+// 3. Configure Base Builder Code (ERC-8021)
+// Using pre-encoded string provided by builder: bc_rqj8aj3n
+export const DATA_SUFFIX = '0x62635f72716a38616a336e0b0080218021802180218021802180218021';
+
+// 4. Create Wagmi Adapter with Farcaster support and Builder Code
 export const wagmiAdapter = new WagmiAdapter({
     projectId,
     networks,
-    ssr: false
+    ssr: false,
+    dataSuffix: DATA_SUFFIX
 });
 
 // 4. Create Modal with improved configuration

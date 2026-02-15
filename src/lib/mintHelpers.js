@@ -6,7 +6,7 @@
  * adapted to work with the new collection schema.
  */
 
-import { wagmiAdapter } from '../wallet.js';
+import { wagmiAdapter, DATA_SUFFIX } from '../wallet.js';
 import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
@@ -261,7 +261,8 @@ async function mintFree(config, wagmiConfig, tokenId) {
                 abi: config.abi,
                 functionName: funcName,
                 args: args,
-                chainId: config.chainId
+                chainId: config.chainId,
+                dataSuffix: DATA_SUFFIX
             });
             return hash;
         } catch (e) {
@@ -298,7 +299,8 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
                 functionName: funcName,
                 args: args,
                 value: BigInt(price),
-                chainId: config.chainId
+                chainId: config.chainId,
+                dataSuffix: DATA_SUFFIX
             });
             return hash;
         } catch (e) {
@@ -385,7 +387,8 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
             abi: erc20Abi,
             functionName: 'approve',
             args: [spenderAddress, amountToBurn], // Approve exact amount or MaxUint256
-            chainId: config.chainId
+            chainId: config.chainId,
+            dataSuffix: DATA_SUFFIX
         });
 
         console.log(`Approval tx sent: ${approveHash}`);
@@ -406,7 +409,8 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
                 abi: config.abi,
                 functionName: funcName,
                 args: [tokenId], // Some burn mints might assume tokenId, others might just be amount. Assuming tokenId based on previous logic.
-                chainId: config.chainId
+                chainId: config.chainId,
+                dataSuffix: DATA_SUFFIX
             });
             return hash;
         } catch (e) {
