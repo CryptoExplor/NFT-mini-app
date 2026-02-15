@@ -21,7 +21,7 @@ function getCollectionShareText(collection) {
  */
 function getPlatformShareUrl(platform, slug) {
     if (platform === 'farcaster') {
-        return `https://farcaster.xyz/miniapps/YE6YuWN74WWI/base-mint-app/mint/${slug}`;
+        return `https://base-mintapp.vercel.app/mint/${slug}`;
     }
     if (platform === 'x') {
         // format: https://base.app/app/https:/base-mintapp.vercel.app/mint/base-invaders
@@ -63,9 +63,6 @@ export async function shareCollection(collection) {
     const baseAppUrl = getPlatformShareUrl('x', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
-    // Resolve absolute image URL using production domain
-    const imageUrl = new URL(collection.imageUrl, 'https://base-mintapp.vercel.app').toString();
-
     const configText = getCollectionShareText(collection);
     const baseText = configText || `I'm minting ${collection.name} on Base! Check it out:`;
 
@@ -76,15 +73,9 @@ export async function shareCollection(collection) {
         const sdk = getFarcasterSDK();
         if (sdk?.actions?.composeCast) {
             try {
-                const embeds = [fcUrl];
-                if (openSeaUrl) embeds.push(openSeaUrl);
-
-                // Add image embed if available
-                if (imageUrl) embeds.push(imageUrl);
-
                 await sdk.actions.composeCast({
                     text,
-                    embeds
+                    embeds: openSeaUrl ? [fcUrl, openSeaUrl] : [fcUrl]
                 });
                 return;
             } catch (e) {
@@ -124,9 +115,6 @@ export async function shareToFarcaster(collection, customText = null) {
     const url = getPlatformShareUrl('farcaster', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
-    // Resolve absolute image URL using production domain
-    const imageUrl = new URL(collection.imageUrl, 'https://base-mintapp.vercel.app').toString();
-
     const configText = getCollectionShareText(collection);
     const baseText = customText || configText || `Just minted ${collection.name} on Base!`;
 
@@ -135,24 +123,15 @@ export async function shareToFarcaster(collection, customText = null) {
     if (isInFarcaster()) {
         const sdk = getFarcasterSDK();
         if (sdk?.actions?.composeCast) {
-            const embeds = [url];
-            if (openSeaUrl) embeds.push(openSeaUrl);
-
-            // Add image embed if available
-            if (imageUrl) embeds.push(imageUrl);
-
             await sdk.actions.composeCast({
                 text,
-                embeds
+                embeds: openSeaUrl ? [url, openSeaUrl] : [url]
             });
         }
     } else {
         // Fallback to Warpcast intent
         const embeds = [url];
         if (openSeaUrl) embeds.push(openSeaUrl);
-        // Add image embed if available
-        if (imageUrl) embeds.push(imageUrl);
-
         const embedsQuery = embeds.map((embed) => `embeds[]=${encodeURIComponent(embed)}`).join('&');
         const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&${embedsQuery}`;
         window.open(intentUrl, '_blank');
@@ -173,4 +152,25 @@ export function shareToTwitter(collection, customText = null) {
 
     const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(intentUrl, '_blank');
+}
+
+/**
+ * Share the main app to Farcaster
+ */
+export async function shareAppOnFarcaster() {
+    const url = 'https://base-mintapp.vercel.app/';
+    const text = 'Check out this minting app on Base!';
+
+    if (isInFarcaster()) {
+        const sdk = getFarcasterSDK();
+        if (sdk?.actions?.composeCast) {
+            await sdk.actions.composeCast({
+                text,
+                embeds: [url]
+            });
+        }
+    } else {
+        const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
+        window.open(intentUrl, '_blank');
+    }
 }

@@ -9,7 +9,7 @@ import { parseAbiItem, createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { toast } from '../utils/toast.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
-import { shareCollection } from '../utils/social.js';
+import { shareCollection, shareAppOnFarcaster } from '../utils/social.js';
 import { getExplorerAddressUrl } from '../utils/chain.js';
 import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
@@ -433,27 +433,7 @@ function attachEventHandlers() {
   const globalShareBtn = document.getElementById('global-share-btn');
   if (globalShareBtn) {
     globalShareBtn.addEventListener('click', async () => {
-      const shareData = {
-        title: 'Base Mint App',
-        text: 'Check out these NFT collections on Base!',
-        url: window.location.origin
-      };
-
-      try {
-        if (state.farcaster?.sdk?.actions?.composeCast) {
-          await state.farcaster.sdk.actions.composeCast({
-            text: shareData.text,
-            embeds: [shareData.url]
-          });
-        } else if (navigator.share) {
-          await navigator.share(shareData);
-        } else {
-          await navigator.clipboard.writeText(shareData.url);
-          toast.show('App link copied!', 'success');
-        }
-      } catch (e) {
-        console.error('Global share failed:', e);
-      }
+      await shareAppOnFarcaster();
     });
   }
 
