@@ -63,8 +63,8 @@ export async function shareCollection(collection) {
     const baseAppUrl = getPlatformShareUrl('x', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
-    // Resolve absolute image URL
-    const imageUrl = new URL(collection.imageUrl, window.location.origin).toString();
+    // Resolve absolute image URL using production domain
+    const imageUrl = new URL(collection.imageUrl, 'https://base-mintapp.vercel.app').toString();
 
     const configText = getCollectionShareText(collection);
     const baseText = configText || `I'm minting ${collection.name} on Base! Check it out:`;
@@ -124,8 +124,8 @@ export async function shareToFarcaster(collection, customText = null) {
     const url = getPlatformShareUrl('farcaster', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
-    // Resolve absolute image URL
-    const imageUrl = new URL(collection.imageUrl, window.location.origin).toString();
+    // Resolve absolute image URL using production domain
+    const imageUrl = new URL(collection.imageUrl, 'https://base-mintapp.vercel.app').toString();
 
     const configText = getCollectionShareText(collection);
     const baseText = customText || configText || `Just minted ${collection.name} on Base!`;
