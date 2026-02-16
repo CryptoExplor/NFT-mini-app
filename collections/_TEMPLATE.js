@@ -86,13 +86,21 @@ export default {
     // Tags for search
     tags: ["generative", "on-chain"],
 
-    // Status: "upcoming" | "live" | "sold-out" | "paused"
+    // Manual status override: "live" | "sold-out" | "paused"
+    // Runtime scheduler will compute hidden/upcoming/live from launchAt.
     status: "live",
 
     // Visibility: "public" | "private"
     visibility: "public",
 
-    // Launch date (YYYY-MM-DD)
+    // Launch datetime (UTC ISO recommended).
+    // Collection is hidden until 72h before launch, then shown as upcoming with countdown.
+    launchAt: "2026-02-01T18:00:00Z",
+
+    // Optional reveal window (hours) before launchAt. Default: 72
+    revealHours: 72,
+
+    // Backward-compatible fallback if launchAt is omitted (YYYY-MM-DD)
     launched: "2026-02-01",
 
     // ============================================

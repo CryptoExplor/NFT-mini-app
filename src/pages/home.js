@@ -19,6 +19,62 @@ import { trackPageView } from '../lib/api.js';
 let walletUpdateHandler = null;
 let searchInputHandler = null;
 let filterChangeHandler = null;
+let homeCountdownInterval = null;
+
+function getCollectionStatus(collection) {
+  return String(collection?.status || collection?.computedStatus || 'paused').toLowerCase();
+}
+
+function formatCountdown(ms) {
+  const safeMs = Math.max(0, ms);
+  const totalSeconds = Math.floor(safeMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function clearHomeCountdownTicker() {
+  if (homeCountdownInterval) {
+    clearInterval(homeCountdownInterval);
+    homeCountdownInterval = null;
+  }
+}
+
+function startHomeCountdownTicker() {
+  clearHomeCountdownTicker();
+
+  const countdownEls = document.querySelectorAll('[data-launch-ts]');
+  if (!countdownEls.length) return;
+
+  const updateCountdowns = () => {
+    let needsRefresh = false;
+    countdownEls.forEach((container) => {
+      const launchTs = Number(container.getAttribute('data-launch-ts'));
+      const textEl = container.querySelector('[data-countdown-text]');
+      if (!Number.isFinite(launchTs) || !textEl) return;
+
+      const remaining = launchTs - Date.now();
+      if (remaining <= 0) {
+        needsRefresh = true;
+        return;
+      }
+
+      textEl.textContent = formatCountdown(remaining);
+    });
+
+    if (needsRefresh) {
+      clearHomeCountdownTicker();
+      renderHomePage();
+    }
+  };
+
+  updateCountdowns();
+  homeCountdownInterval = setInterval(updateCountdowns, 1000);
+}
 
 /**
  * Render the homepage with collection grid
@@ -26,10 +82,11 @@ let filterChangeHandler = null;
 export async function renderHomePage() {
   analytics.trackView('home');
   trackPageView('home', state.wallet?.address || null);
+  clearHomeCountdownTicker();
   let collections = loadCollections();
 
   // Randomly promote one LIVE collection to the top
-  const liveCollections = collections.filter(c => c.status.toLowerCase() === 'live');
+  const liveCollections = collections.filter(c => getCollectionStatus(c) === 'live');
   if (liveCollections.length > 0) {
     const randomLive = liveCollections[Math.floor(Math.random() * liveCollections.length)];
     // Remove it from current position
@@ -215,8 +272,11 @@ export async function renderHomePage() {
  * Render a single collection card
  */
 function renderCollectionCard(collection) {
-  const statusClass = getStatusClass(collection.status);
+  const status = getCollectionStatus(collection);
+  const statusClass = getStatusClass(status);
   const mintTypeLabel = getMintTypeLabel(collection.mintPolicy);
+  const isUpcoming = status === 'upcoming' && Number.isFinite(collection.launchAtTs);
+  const countdown = isUpcoming ? formatCountdown(collection.launchAtTs - Date.now()) : '';
 
   return `
     <div class="glass-card p-1 rounded-2xl cursor-pointer hover:scale-105 transition-all duration-300 group w-full sm:max-w-[320px] lg:max-w-[350px]"
@@ -250,13 +310,19 @@ function renderCollectionCard(collection) {
           <div class="flex justify-between items-start mb-2">
             <h3 class="text-xl font-bold truncate">${collection.name}</h3>
             <span class="${statusClass} px-2 py-1 rounded text-xs font-bold uppercase whitespace-nowrap ml-2">
-              ${collection.status}
+              ${status}
             </span>
           </div>
           
           <p class="text-sm opacity-70 mb-4 line-clamp-2">
             ${collection.description}
           </p>
+
+          ${isUpcoming ? `
+            <div class="mb-3 text-xs text-blue-300/90" data-launch-ts="${collection.launchAtTs}">
+              Launches in <span data-countdown-text>${countdown}</span>
+            </div>
+          ` : ''}
           
           <div class="flex justify-between items-center">
             <div class="text-xs opacity-60">
@@ -357,7 +423,7 @@ function attachEventHandlers() {
     const collections = loadCollections();
     const filtered = collections.filter(c => {
       const matchesQuery = c.name.toLowerCase().includes(query) || c.description.toLowerCase().includes(query);
-      const matchesStatus = status === 'all' || c.status.toLowerCase() === status.toLowerCase();
+      const matchesStatus = status === 'all' || getCollectionStatus(c) === status.toLowerCase();
 
       let matchesType = true;
       if (type === 'paid') matchesType = c.mintPolicy.stages.some(s => s.type === 'PAID');
@@ -379,8 +445,10 @@ function attachEventHandlers() {
             router.navigate(`/mint/${slug}`);
           });
         });
+        startHomeCountdownTicker();
       } else {
         grid.innerHTML = '<div class="col-span-full text-center py-10 opacity-50">No collections found matching your filters</div>';
+        clearHomeCountdownTicker();
       }
     }
   };
@@ -448,6 +516,7 @@ function attachEventHandlers() {
 
   // Initialize Profile Modal
   setupProfileModal();
+  startHomeCountdownTicker();
 }
 
 /**

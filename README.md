@@ -1,47 +1,50 @@
-# 💎 NFT Mini App - Gamified Minting Platform
+# NFT Mini App - Gamified Minting Platform
 
-A premium, high-performance NFT minting platform built for **Base** and **Farcaster Frames**. This application goes beyond simple minting by integrating a robust **Gamification Engine**, **Real-time Analytics**, and a **Retention System** directly into the experience.
+A high-performance NFT minting app for Base and Farcaster mini apps.  
+It combines minting, gamification, social sharing, and analytics in one flow.
 
 ![Preview](public/image.png)
 
-## ✨ Features
+## Features
 
-### 🎮 Gamification & Engagement
-- **Points System**: Users earn points for mints, daily streaks, volume, and referrals.
-- **Streak Badges**: 
-  - 🌟 Rising Minter (3 days)
-  - 💎 Committed Collector (7 days)
-  - 🔥 Streak Master (14 days)
-  - 👑 Legendary Minter (30 days)
-- **Leaderboards**: Real-time global and weekly leaderboards for Points, Mints, and Volume.
+### Gamification and engagement
+- Points system for mints, streaks, volume, and referrals.
+- Streak badges (3, 7, 14, 30 day tiers).
+- Real-time leaderboards for points, mints, and volume.
 
-### 📊 Advanced Analytics
-- **Retention Cohorts**: Track user retention (Day 1, 7, 30) to measure campaign quality.
-- **Conversion Funnels**: Visualize drop-offs from *Wallet Connect* → *Mint Success*.
-- **Wallet Insights**: Detailed user profiles including "Whale" status, total gas spent, and mint history.
+### Collection launch scheduler
+- Time-based lifecycle: `hidden -> upcoming -> live`.
+- Collections are hidden until `launchAt - 72h` (default reveal window).
+- Upcoming collections show live countdowns on Home and Mint pages.
+- Manual status overrides still work:
+  - `status: "paused"`
+  - `status: "sold-out"`
 
-### 🛡️ Security & Admin
-- **SIWE Authentication**: Secure JWT-based authentication using Sign-In with Ethereum (EIP-4361).
-- **Transaction Verification**: On-chain validation of mints to prevent point farming.
-- **Rate Limiting**: Protection against spam and abuse.
-- **Admin Panel**:
-  - Export data as **CSV** (Users, Collections, Mints).
-  - View daily active users and raw system stats.
+### Analytics and retention
+- Retention cohorts (Day 1, Day 7, Day 30).
+- Conversion funnel from page view to mint success.
+- Wallet-level insights and mint history.
 
-## 🚀 Quick Start
+### Security and admin
+- SIWE auth with JWT.
+- On-chain transaction verification for mint events.
+- Rate limiting protections.
+- Admin export endpoints for Users, Collections, and Mints CSV.
+
+## Quick Start
 
 ### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
-- A [Vercel KV](https://vercel.com/docs/storage/vercel-kv) database (Redis)
-- A WalletConnect Project ID from [cloud.reown.com](https://cloud.reown.com/)
+- Node.js v18+
+- Vercel KV (Redis)
+- WalletConnect Project ID (Reown)
 
-### 2. Installation
+### 2. Install
 ```bash
 npm install
 ```
 
-### 3. Configuration
-Create a `.env` file in the root directory:
+### 3. Configure environment
+Create `.env` in project root:
 
 ```env
 # WalletConnect
@@ -56,30 +59,71 @@ KV_REST_API_READ_ONLY_TOKEN="..."
 # Security
 JWT_SECRET=super_secure_random_string_here
 
-# Admin Access (Comma-separated wallet addresses)
+# Admin Access (comma-separated wallets)
 VITE_ADMIN_WALLETS=0x123...,0x456...
 ```
 
-### 4. Development
+### 4. Run development
+
+Frontend only:
 ```bash
 npm run dev
 ```
 
-## 🏗️ Project Structure
+Full app (frontend + serverless functions):
+```bash
+npm run dev:full
+```
 
-- `api/`: Serverless functions (Vercel) for tracking, auth, and analytics.
-- `collections/`: Configuration for individual NFT drops.
-- `src/lib/`: Core logic (Router, API client, Wallet connection).
-- `src/pages/`: UI Components (Home, Mint, Analytics).
+## Adding Collections (Auto-Discovery)
 
-## 🛠️ Tech Stack
+Collections are auto-discovered from `collections/*.js` and indexed into `collections/index.js`.
 
-- **Frontend**: Vite, Vanilla JS, Tailwind CSS
-- **Web3**: Reown AppKit, Wagmi, Viem, SIWE
-- **Backend**: Vercel Serverless Functions
-- **Database**: Vercel KV (Redis)
-- **Analytics**: Custom event tracking pipeline with cohort analysis
+### Required workflow
+1. Create a new file in `collections/` with a default export object.
+2. Set a unique `slug`.
+3. Set `launchAt` (UTC ISO recommended), for example:
+   - `launchAt: "2026-02-18T08:00:00Z"`
+4. Optional: set `revealHours` (default is `72`).
 
-## 📄 License
+### Sync index manually
+```bash
+npm run collections:sync
+```
 
-This project is licensed under the MIT License.
+### Auto-sync
+These scripts auto-run collection sync:
+- `npm run dev`
+- `npm run build`
+- `npm run dev:full`
+
+Do not edit `collections/index.js` manually. It is generated.
+
+Legacy fallback is still supported:
+- `launched: "YYYY-MM-DD"`
+
+## Collection Status Rules
+
+- `status: "live"`: scheduler decides hidden/upcoming/live by time.
+- `status: "paused"`: forced paused.
+- `status: "sold-out"`: forced sold out.
+
+## Project Structure
+
+- `api/`: serverless functions (tracking, auth, analytics, sharing metadata)
+- `collections/`: collection configs
+- `collections/index.js`: auto-generated collection map
+- `scripts/`: utility scripts (including collection index generator)
+- `src/lib/`: core logic (router, loader, scheduler, wallet helpers)
+- `src/pages/`: UI pages (home, mint, analytics, gallery)
+
+## Tech Stack
+
+- Frontend: Vite, Vanilla JS, Tailwind CSS
+- Web3: Reown AppKit, Wagmi, Viem, SIWE
+- Backend: Vercel Serverless Functions
+- Database: Vercel KV (Redis)
+
+## License
+
+MIT

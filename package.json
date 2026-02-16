@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "collections:sync": "node scripts/generate-collections-index.mjs",
+    "predev": "npm run collections:sync",
+    "prebuild": "npm run collections:sync",
+    "predev:full": "npm run collections:sync",
     "dev": "vite",
     "dev:full": "vercel dev",
     "build": "vite build",

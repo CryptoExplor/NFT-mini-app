@@ -11,30 +11,14 @@
 // ============================================
 // COLLECTION IMPORTS
 // ============================================
-// Import each collection file here
-import onchainSigils from '../../collections/onchain-sigils.js';
-import baseInvaders from '../../collections/base-invaders.js';
-import BASEHEADS_404 from '../../collections/BASEHEADS_404.js';
-import QuantumQuills from '../../collections/QuantumQuills.js';
-import VoidPFPs from '../../collections/void-pfps.js';
-import BaseMoods from '../../collections/basemoods.js';
-// ADD NEW COLLECTION IMPORTS HERE:
-// import myCollection from '../../collections/my-collection.js';
+// Import generated collection registry
+import { COLLECTIONS_MAP } from '../../collections/index.js';
+import { parseCollectionLaunchDate, withComputedCollectionState } from './collectionSchedule.js';
 
 // ============================================
 // COLLECTIONS MAP
 // ============================================
-// Map slug -> collection object
-const COLLECTIONS_MAP = {
-    'onchain-sigils': onchainSigils,
-    'base-invaders': baseInvaders,
-    'baseheads-404': BASEHEADS_404,
-    'quantum-quills': QuantumQuills,
-    'void-pfps': VoidPFPs,
-    'base-moods': BaseMoods,
-    // ADD NEW COLLECTIONS HERE (slug: import):
-    // 'my-collection': myCollection,
-};
+// Map slug -> collection object (auto-generated in collections/index.js)
 
 // ============================================
 // VALIDATION
@@ -47,7 +31,7 @@ const REQUIRED_FIELDS = [
     'name', 'slug', 'description', 'imageUrl',
     'chainId', 'contractAddress', 'abiName',
     'mintPolicy', 'category', 'tags', 'status',
-    'visibility', 'launched'
+    'visibility'
 ];
 
 /**
@@ -91,10 +75,9 @@ function validateCollection(collection, slug) {
         }
     }
 
-    // Validate date format (YYYY-MM-DD)
-    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-    if (!datePattern.test(collection.launched)) {
-        throw new Error(`[${slug}] launched date must be YYYY-MM-DD format, got: ${collection.launched}`);
+    const launchDate = parseCollectionLaunchDate(collection);
+    if (!launchDate) {
+        throw new Error(`[${slug}] Missing or invalid launch date. Provide launchAt (ISO) or launched (YYYY-MM-DD).`);
     }
 
     // Validate slug matches
@@ -116,6 +99,7 @@ function validateCollection(collection, slug) {
 export function loadCollections() {
     const collections = [];
     const slugs = new Set();
+    const nowMs = Date.now();
 
     for (const [slug, collection] of Object.entries(COLLECTIONS_MAP)) {
         try {
@@ -138,18 +122,20 @@ export function loadCollections() {
                 continue;
             }
 
-            collections.push(collection);
+            const computed = withComputedCollectionState(collection, nowMs);
+            if (!computed.isVisible) {
+                continue;
+            }
+
+            collections.push(computed);
 
         } catch (error) {
             console.error(`Error loading collection "${slug}":`, error.message);
         }
     }
 
-    // Sort: featured first, then by status priority (live > upcoming > sold-out), then by launch date (newest first)
+    // Sort by runtime status priority, then launch date (soonest live/upcoming first)
     collections.sort((a, b) => {
-
-
-        // Then by status priority
         const statusPriority = {
             'live': 3,
             'upcoming': 2,
@@ -164,8 +150,9 @@ export function loadCollections() {
             return bPriority - aPriority; // Higher priority first
         }
 
-        // Within same status, sort by launch date (newest first)
-        return new Date(b.launched) - new Date(a.launched);
+        const aLaunch = Number.isFinite(a.launchAtTs) ? a.launchAtTs : Number.MAX_SAFE_INTEGER;
+        const bLaunch = Number.isFinite(b.launchAtTs) ? b.launchAtTs : Number.MAX_SAFE_INTEGER;
+        return aLaunch - bLaunch;
     });
 
     console.log(`✅ Loaded ${collections.length} collections`);
@@ -189,7 +176,11 @@ export function getCollectionBySlug(slug) {
     // Validate before returning
     try {
         validateCollection(collection, slug);
-        return collection;
+        const computed = withComputedCollectionState(collection, Date.now());
+        if (!computed.isVisible) {
+            return undefined;
+        }
+        return computed;
     } catch (error) {
         console.error(`Error loading collection "${slug}":`, error.message);
         return undefined;
@@ -203,7 +194,8 @@ export function getCollectionBySlug(slug) {
  */
 export function getCollectionsByStatus(status) {
     const collections = loadCollections();
-    return collections.filter(c => c.status === status);
+    const normalized = String(status || '').toLowerCase();
+    return collections.filter(c => c.status.toLowerCase() === normalized);
 }
 
 /**

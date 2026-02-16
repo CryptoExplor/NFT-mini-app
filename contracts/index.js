@@ -10,6 +10,7 @@ import BASEHEADS_404 from './abis/BASEHEADS_404.js';
 import QuantumQuills from './abis/QuantumQuills.js';
 import VoidPFPs from './abis/void-pfps.js';
 import BaseMoods from './abis/basemoods.js';
+import BaseFortunes from './abis/BaseFortunes.js';
 // Import more ABIs as you add different contract types:
 // import FreeMint from './abis/FreeMint.js';
 // import PaidMint from './abis/PaidMint.js';
@@ -23,6 +24,7 @@ const ABIS = {
     'QuantumQuills': QuantumQuills,
     'void-pfps': VoidPFPs,
     'basemoods': BaseMoods,
+    'BaseFortunes': BaseFortunes,
     // ADD NEW ABIS HERE:
     // 'FreeMint': FreeMint,
     // 'PaidMint': PaidMint,

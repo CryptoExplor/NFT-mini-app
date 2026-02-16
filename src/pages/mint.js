@@ -22,6 +22,26 @@ import { analytics } from '../utils/analytics.js';
 
 // Current collection reference
 let currentCollection = null;
+let mintCountdownInterval = null;
+
+function clearMintCountdownTicker() {
+  if (mintCountdownInterval) {
+    clearInterval(mintCountdownInterval);
+    mintCountdownInterval = null;
+  }
+}
+
+function formatMintCountdown(ms) {
+  const safeMs = Math.max(0, ms);
+  const totalSeconds = Math.floor(safeMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
 
 /**
  * Render the mint page for a collection
@@ -29,6 +49,7 @@ let currentCollection = null;
  */
 export async function renderMintPage(params) {
   const { slug } = params;
+  clearMintCountdownTicker();
   const collection = getCollectionBySlug(slug);
 
   // Track collection view for funnel analytics
@@ -307,24 +328,49 @@ async function initMintInterface(collection) {
   const mintStatus = document.getElementById('mint-status');
   const stageInfo = document.getElementById('stage-info');
   const stageName = document.getElementById('stage-name');
+  const status = String(collection.status || '').toLowerCase();
 
-  // Check wallet connection
-  if (!state.wallet?.isConnected || !state.wallet?.address) {
-    mintText.textContent = 'Connect Wallet';
-    stageName.textContent = 'Connect to view';
-
-    mintBtn.onclick = async () => {
-      await connectWallet();
-    };
-    return;
-  }
-
-  // Skip contract reading for upcoming collections (case insensitive)
-  if (collection.status.toLowerCase() === 'upcoming') {
+  // Upcoming collections are visible in the 72h window, but minting stays locked until launchAt.
+  if (status === 'upcoming') {
+    clearMintCountdownTicker();
     mintText.textContent = 'Coming Soon';
     mintBtn.disabled = true;
-    stageName.textContent = 'This collection launches on ' + collection.launched;
     stageInfo.classList.add('border-blue-500/30', 'bg-blue-500/10');
+
+    const launchTs = Number(collection.launchAtTs);
+    const hasValidLaunch = Number.isFinite(launchTs);
+
+    const renderUpcomingState = () => {
+      if (!window.location.pathname.startsWith('/mint/')) {
+        clearMintCountdownTicker();
+        return;
+      }
+
+      if (hasValidLaunch) {
+        const remaining = launchTs - Date.now();
+        if (remaining <= 0) {
+          clearMintCountdownTicker();
+          const fresh = getCollectionBySlug(collection.slug);
+          if (fresh) {
+            currentCollection = fresh;
+            initMintInterface(fresh);
+          } else {
+            router.navigate('/');
+          }
+          return;
+        }
+
+        stageName.textContent = `Launches in ${formatMintCountdown(remaining)}`;
+        mintStatus.textContent = `Launch: ${new Date(launchTs).toUTCString()}`;
+      } else {
+        stageName.textContent = 'This collection is coming soon';
+      }
+    };
+
+    renderUpcomingState();
+    if (hasValidLaunch) {
+      mintCountdownInterval = setInterval(renderUpcomingState, 1000);
+    }
 
     // Show user's mints section but with zero counts
     const yourMintsSection = document.getElementById('your-mints');
@@ -345,6 +391,20 @@ async function initMintInterface(collection) {
     document.getElementById('minted-count').textContent = '0';
     document.getElementById('supply-minted').textContent = '0';
     document.getElementById('supply-bar').style.width = '0%';
+    return;
+  }
+
+  clearMintCountdownTicker();
+  stageInfo.classList.remove('border-blue-500/30', 'bg-blue-500/10');
+
+  // Check wallet connection
+  if (!state.wallet?.isConnected || !state.wallet?.address) {
+    mintText.textContent = 'Connect Wallet';
+    stageName.textContent = 'Connect to view';
+
+    mintBtn.onclick = async () => {
+      await connectWallet();
+    };
     return;
   }
 

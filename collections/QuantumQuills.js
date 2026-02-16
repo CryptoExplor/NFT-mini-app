@@ -52,7 +52,7 @@ export default {
     tags: ["on-chain", "svg", "animated", "cosmic", "Base"],
     status: "live",
     visibility: "public",
-    launched: "2026-02-12",
+    launchAt: "2026-02-12T00:00:00Z",
 
     // ============================================
     // OPTIONAL FIELDS

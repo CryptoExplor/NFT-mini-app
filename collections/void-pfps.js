@@ -52,7 +52,7 @@ export default {
     tags: ["void", "abstract", "minimalist", "svg", "base"],
     status: "live",
     visibility: "public",
-    launched: "2026-02-13",
+    launchAt: "2026-02-13T00:00:00Z",
 
     // ============================================
     // OPTIONAL FIELDS

@@ -54,7 +54,7 @@ export default {
     ],
     status: "live",
     visibility: "public",
-    launched: "2026-02-08",
+    launchAt: "2026-02-08T00:00:00Z",
 
     // ============================================
     // OPTIONAL FIELDS
