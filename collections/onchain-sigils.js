@@ -11,7 +11,8 @@ export default {
     name: "OnchainSigils",
     slug: "onchain-sigils",
     description: "These sigils are geometric artifacts generated entirely on-chain...",
-    imageUrl: "/sigil.png",
+    imageUrl: "/sigil.webp",
+    shareImageUrl: "/sigil.png",
 
     // ============================================
     // CONTRACT CONFIGURATION

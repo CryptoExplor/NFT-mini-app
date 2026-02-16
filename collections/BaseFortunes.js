@@ -11,7 +11,7 @@ export default {
     name: "BaseFortunes",
     slug: "base-fortunes",
     description: "On-chain fortune cards with daily wisdom, lucky numbers, and category traits. Mint your personalized fortune on Base.",
-    imageUrl: "/basefortunes.png",
+    imageUrl: "/basefortunes.webp",
     shareImageUrl: "/basefortunes-share.png",
 
     // ============================================

@@ -11,7 +11,7 @@ export default {
     name: "VOID PFPs",
     slug: "void-pfps",
     description: "Cold abstract void faces rendered fully on-chain. Negative space. Distortion. Fracture. Glow.",
-    imageUrl: "/void-pfps.png", // Ensure this image exists in public/ or update path
+    imageUrl: "/void-pfps.webp", // Ensure this image exists in public/ or update path
     shareImageUrl: "/void-pfps-share.png",
 
     // ============================================

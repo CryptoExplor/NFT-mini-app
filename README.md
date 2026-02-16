@@ -102,6 +102,20 @@ Do not edit `collections/index.js` manually. It is generated.
 Legacy fallback is still supported:
 - `launched: "YYYY-MM-DD"`
 
+## Optimize Public Images
+
+Large files in `public/` are copied as-is by Vite, so optimize them explicitly:
+
+```bash
+npm run images:optimize
+```
+
+Preview changes without writing files:
+
+```bash
+npm run images:optimize:dry
+```
+
 ## Collection Status Rules
 
 - `status: "live"`: scheduler decides hidden/upcoming/live by time.

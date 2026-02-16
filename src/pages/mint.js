@@ -4,14 +4,13 @@
  */
 
 import { getCollectionBySlug } from '../lib/loadCollections.js';
-import { getContractConfig } from '../../contracts/index.js';
 import { getCollectionData, resolveStage, mint, getMintButtonText } from '../lib/mintHelpers.js';
-import { state, updateState, EVENTS } from '../state.js';
+import { state, EVENTS } from '../state.js';
 import { router } from '../lib/router.js';
-import { switchChain, estimateGas, getGasPrice } from '@wagmi/core';
-import { connectWallet, switchToBase, wagmiAdapter } from '../wallet.js';
+import { switchChain, getGasPrice } from '@wagmi/core';
+import { connectWallet, wagmiAdapter } from '../wallet.js';
 import { shortenAddress } from '../utils/dom.js';
-import { DEFAULT_CHAIN, getExplorerUrl, getChainName } from '../utils/chain.js';
+import { getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
 import { trackMint, trackMintClick, trackMintAttempt, trackTxSent, trackMintFailure, trackCollectionView } from '../lib/api.js';
@@ -591,7 +590,6 @@ async function handleMint(collection, stage) {
     analytics.trackMintAttempt(collection.slug);
     trackMintAttempt(state.wallet.address, collection.slug);
 
-    const { mint } = await import('../lib/mintHelpers.js');
     const hash = await mint(collection, stage);
 
     // Track success
@@ -712,5 +710,7 @@ async function handleWalletUpdate(e) {
 // Cleanup on page leave
 export function cleanup() {
   document.removeEventListener(EVENTS.WALLET_UPDATE, handleWalletUpdate);
+  clearMintCountdownTicker();
   currentCollection = null;
 }
+

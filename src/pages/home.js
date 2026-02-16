@@ -3,22 +3,13 @@ import { router } from '../lib/router.js';
 import { state, EVENTS } from '../state.js';
 import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
 import { shortenAddress } from '../utils/dom.js';
-import { readContract, getPublicClient, getBalance } from '@wagmi/core';
-import { getContractConfig } from '../../contracts/index.js';
-import { parseAbiItem, createPublicClient, http } from 'viem';
-import { base } from 'viem/chains';
-import { toast } from '../utils/toast.js';
-import { renderTransactionHistory } from '../components/TransactionHistory.js';
+import { getBalance } from '@wagmi/core';
 import { shareCollection, shareAppOnFarcaster } from '../utils/social.js';
-import { getExplorerAddressUrl } from '../utils/chain.js';
-import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
 import { trackPageView } from '../lib/api.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
-let searchInputHandler = null;
-let filterChangeHandler = null;
 let homeCountdownInterval = null;
 
 function getCollectionStatus(collection) {
@@ -367,20 +358,14 @@ function getMintTypeLabel(mintPolicy) {
   return 'MINT';
 }
 
-/**
- * Collection Card Skeleton
- */
-function CollectionCardSkeleton() {
-  return `
-    <div class="glass-card p-1 rounded-2xl animate-pulse w-full sm:max-w-[320px] lg:max-w-[350px]">
-      <div class="aspect-square bg-white/5 rounded-xl"></div>
-      <div class="p-4 space-y-3">
-        <div class="h-6 bg-white/10 rounded w-3/4"></div>
-        <div class="h-4 bg-white/10 rounded w-full"></div>
-        <div class="h-4 bg-white/10 rounded w-2/3"></div>
-      </div>
-    </div>
-  `;
+function bindCollectionCardNavigation() {
+  const cards = document.querySelectorAll('[data-collection]');
+  cards.forEach((card) => {
+    card.addEventListener('click', () => {
+      const slug = card.dataset.collection;
+      router.navigate(`/mint/${slug}`);
+    });
+  });
 }
 
 /**
@@ -399,13 +384,9 @@ function attachEventHandlers() {
     updateProfileWalletInfo(account);
 
     if (account?.isConnected && account?.address) {
-      // Connected — fetch balance and NFTs
       updateWalletBalance(account);
-      fetchUserNFTs();
     } else {
-      // Disconnected — clear balance display and NFT grid
       clearWalletBalance();
-      clearNFTGrid();
     }
   };
   document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
@@ -437,14 +418,7 @@ function attachEventHandlers() {
     if (grid) {
       if (filtered.length > 0) {
         grid.innerHTML = filtered.map(collection => renderCollectionCard(collection)).join('');
-        // Re-attach card listeners
-        const cards = document.querySelectorAll('[data-collection]');
-        cards.forEach(card => {
-          card.addEventListener('click', () => {
-            const slug = card.dataset.collection;
-            router.navigate(`/mint/${slug}`);
-          });
-        });
+        bindCollectionCardNavigation();
         startHomeCountdownTicker();
       } else {
         grid.innerHTML = '<div class="col-span-full text-center py-10 opacity-50">No collections found matching your filters</div>';
@@ -506,13 +480,7 @@ function attachEventHandlers() {
   }
 
   // Collection cards interaction
-  const cards = document.querySelectorAll('[data-collection]');
-  cards.forEach(card => {
-    card.addEventListener('click', () => {
-      const slug = card.dataset.collection;
-      router.navigate(`/mint/${slug}`);
-    });
-  });
+  bindCollectionCardNavigation();
 
   // Initialize Profile Modal
   setupProfileModal();
@@ -632,194 +600,7 @@ function updateProfileWalletInfo(account) {
   }
 }
 
-/**
- * Remove legacy fetchUserNFTs if no longer needed, or keep for potential reuse
- * (It will return early as grid is gone)
- */
-async function fetchUserNFTs() {
-  const grid = document.getElementById('my-nfts-grid');
-  if (!grid) return;
 
-  if (!state.wallet?.isConnected) {
-    grid.innerHTML = `
-            <div class="col-span-2 text-center py-20 opacity-30">
-                <div class="text-4xl mb-4">👛</div>
-                <p>Connect wallet to view your NFTs</p>
-            </div>
-        `;
-    return;
-  }
-
-  // Clear grid and show loader
-  grid.innerHTML = '';
-  const loadingEl = document.createElement('div');
-  loadingEl.className = 'col-span-2 text-center py-10 opacity-50 animate-pulse text-xs';
-  loadingEl.innerText = 'Scanning collections...';
-  grid.appendChild(loadingEl);
-
-  const collections = loadCollections();
-  const userAddress = state.wallet.address;
-  const client = createPublicClient({
-    chain: base,
-    transport: http('https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57')
-  });
-
-  let hasFoundAny = false;
-
-  // Process collections in parallel (skip upcoming collections)
-  await Promise.all(collections.map(async (collection) => {
-    // Skip upcoming collections - users can't own NFTs from unreleased collections
-    if (collection.status.toLowerCase() === 'upcoming') {
-      return;
-    }
-
-    try {
-      const config = getContractConfig(collection);
-
-      // 1. Get Balance
-      const balance = await readContract(wagmiAdapter.wagmiConfig, {
-        address: config.address,
-        abi: config.abi,
-        functionName: 'balanceOf',
-        args: [userAddress],
-        chainId: config.chainId
-      });
-
-      const count = Number(balance);
-
-      if (count > 0) {
-        hasFoundAny = true;
-        const cardId = `nft-card-${collection.slug}`;
-        const explorerUrl = getExplorerAddressUrl(collection.chainId, collection.contractAddress);
-
-        // 2. Render Summary Card IMMEDIATELY
-        const summaryHtml = `
-                    <div id="${cardId}" class="col-span-2 bg-white/5 p-4 rounded-xl flex items-center justify-between hover:bg-white/10 transition-colors mb-2">
-                        <div class="flex items-center space-x-3">
-                            <img src="${collection.imageUrl}" class="w-10 h-10 rounded-lg object-cover img-fade-in" loading="lazy" onerror="this.src='/placeholder.png'"/>
-                            <div>
-                                <div class="font-bold">${collection.name}</div>
-                                <div class="text-xs opacity-60">You own: <span class="text-indigo-300 font-bold">${count}</span></div>
-                                <div class="text-[10px] opacity-40 animate-pulse mt-1 status-text">Loading previews...</div>
-                            </div>
-                        </div>
-                        <a href="${explorerUrl}?a=${userAddress}" target="_blank" class="glass-card px-3 py-1 rounded-lg text-xs font-medium hover:bg-indigo-500/20 transition-colors">
-                            View
-                        </a>
-                    </div>
-                `;
-
-        const container = document.createElement('div');
-        container.className = 'col-span-2';
-        container.innerHTML = summaryHtml;
-
-        if (loadingEl.parentNode) loadingEl.remove();
-        grid.appendChild(container);
-
-        // 3. Background Fetch Images
-        (async () => {
-          try {
-            const logs = await client.getLogs({
-              address: config.address,
-              event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)'),
-              args: { to: userAddress },
-              fromBlock: 'earliest'
-            });
-
-            const uniqueIds = [...new Set(logs.map(l => l.args.tokenId))];
-            const subsetIds = uniqueIds.slice(0, 12);
-
-            let tokens = [];
-            for (const id of subsetIds) {
-              try {
-                const owner = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'ownerOf', args: [id] });
-                if (owner.toLowerCase() === userAddress.toLowerCase()) {
-                  let image = collection.imageUrl;
-                  let name = `${collection.name} #${id}`;
-                  try {
-                    const uri = await readContract(wagmiAdapter.wagmiConfig, { ...config, functionName: 'tokenURI', args: [id] });
-                    const meta = await resolveMetadata(uri);
-                    if (meta.image) image = meta.image;
-                    if (meta.name) name = meta.name;
-                  } catch (_) { }
-                  tokens.push({ id: id.toString(), image, name });
-                }
-              } catch (_) { }
-            }
-
-            if (tokens.length > 0) {
-              container.innerHTML = `
-                                <div class="col-span-2 mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
-                                    <div class="flex items-center justify-between mb-3 px-1">
-                                        <div class="flex items-center space-x-2">
-                                            <img src="${collection.imageUrl}" class="w-6 h-6 rounded-md img-fade-in" loading="lazy"/>
-                                            <span class="font-bold text-sm">${collection.name}</span>
-                                            <span class="text-xs opacity-50">(${count})</span>
-                                        </div>
-                                        <a href="${explorerUrl}?a=${userAddress}" target="_blank" class="text-[10px] opacity-50 hover:opacity-100">Explorer ↗</a>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-2">
-                                        ${tokens.map(t => `
-                                            <div class="aspect-square bg-black/50 rounded-lg overflow-hidden relative group cursor-pointer border border-white/5 hover:border-indigo-500/50 transition-all"
-                                                 onclick="window.open('${explorerUrl}?a=${t.id}', '_blank')">
-                                                <img src="${t.image}" class="w-full h-full object-cover img-fade-in" loading="lazy" onerror="this.src='${collection.imageUrl}'" />
-                                                <div class="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[9px] font-mono backdrop-blur-md">#${t.id}</div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            `;
-            } else {
-              const statusEl = container.querySelector('.status-text');
-              if (statusEl) statusEl.remove();
-            }
-          } catch (e) {
-            const statusEl = container.querySelector('.status-text');
-            if (statusEl) statusEl.textContent = 'Preview unavailable';
-          }
-        })();
-      }
-    } catch (e) {
-      console.warn(`Error processing ${collection.name}`, e);
-    }
-  }));
-
-  if (loadingEl.parentNode) {
-    loadingEl.remove();
-    if (!hasFoundAny) {
-      grid.innerHTML = '<div class="col-span-2 text-center py-20 opacity-30"><div class="text-4xl mb-4">📉</div><p>No NFTs found.</p></div>';
-    }
-  }
-}
-
-async function resolveMetadata(uri) {
-  if (!uri) return {};
-
-  const cacheKey = `metadata_${uri}`;
-  const cached = cache.get(cacheKey);
-  if (cached) return cached;
-
-  if (uri.startsWith('data:application/json;base64,')) {
-    try {
-      const json = atob(uri.replace('data:application/json;base64,', ''));
-      const data = JSON.parse(json);
-      cache.set(cacheKey, data, 24 * 60 * 60 * 1000, true);
-      return data;
-    } catch (e) { return {}; }
-  }
-  let url = uri;
-  if (uri.startsWith('ipfs://')) url = uri.replace('ipfs://', 'https://ipfs.io/ipfs/');
-  if (url.startsWith('http')) {
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      // Cache metadata persistently for 24 hours
-      cache.set(cacheKey, data, 24 * 60 * 60 * 1000, true);
-      return data;
-    } catch (e) { return {}; }
-  }
-  return {};
-}
 
 if (typeof window !== 'undefined') {
   window.router = router;
@@ -881,17 +662,11 @@ function clearWalletBalance() {
   }
 }
 
-/**
- * Clear NFT grid on disconnect
- */
-function clearNFTGrid() {
-  const grid = document.getElementById('my-nfts-grid');
-  if (grid) {
-    grid.innerHTML = `
-      <div class="col-span-2 text-center py-20 opacity-30">
-        <div class="text-4xl mb-4">🖼️</div>
-        <p class="text-sm">Connect wallet to view your NFT gallery</p>
-      </div>
-    `;
+export function cleanup() {
+  clearHomeCountdownTicker();
+  if (walletUpdateHandler) {
+    document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
+    walletUpdateHandler = null;
   }
 }
+

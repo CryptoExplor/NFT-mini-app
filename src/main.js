@@ -111,6 +111,26 @@ async function autoConnectFarcaster() {
 // notifyFarcasterReady removed — ready() is now called immediately after SDK init
 
 function setupRoutes() {
+    let activePageCleanup = null;
+
+    const runActivePageCleanup = async () => {
+        if (typeof activePageCleanup !== 'function') return;
+        try {
+            await activePageCleanup();
+        } catch (error) {
+            console.warn('Page cleanup error:', error);
+        } finally {
+            activePageCleanup = null;
+        }
+    };
+
+    const loadPageModule = async (loader) => {
+        await runActivePageCleanup();
+        const pageModule = await loader();
+        activePageCleanup = typeof pageModule.cleanup === 'function' ? pageModule.cleanup : null;
+        return pageModule;
+    };
+
     const cleanupAnalyticsIfNeeded = async () => {
         if (window.location.pathname.startsWith('/analytics')) return;
         const { teardownAnalyticsPage } = await import('./pages/analytics.js');
@@ -120,30 +140,32 @@ function setupRoutes() {
     // Lazy-load page modules for code splitting
     router.route('/', async () => {
         await cleanupAnalyticsIfNeeded();
-        const { renderHomePage } = await import('./pages/home.js');
-        await renderHomePage();
+        const page = await loadPageModule(() => import('./pages/home.js'));
+        await page.renderHomePage();
     });
 
     router.route('/mint/:slug', async (params) => {
         await cleanupAnalyticsIfNeeded();
-        const { renderMintPage } = await import('./pages/mint.js');
-        await renderMintPage(params);
+        const page = await loadPageModule(() => import('./pages/mint.js'));
+        await page.renderMintPage(params);
     });
 
     router.route('/analytics', async () => {
+        await runActivePageCleanup();
         const { renderAnalyticsPage } = await import('./pages/analytics.js');
         await renderAnalyticsPage();
     });
 
     router.route('/analytics/:slug', async (params) => {
+        await runActivePageCleanup();
         const { renderAnalyticsPage } = await import('./pages/analytics.js');
         await renderAnalyticsPage(params);
     });
 
     router.route('/gallery', async () => {
         await cleanupAnalyticsIfNeeded();
-        const { renderGalleryPage } = await import('./pages/gallery.js');
-        await renderGalleryPage();
+        const page = await loadPageModule(() => import('./pages/gallery.js'));
+        await page.renderGalleryPage();
     });
 }
 
@@ -234,3 +256,4 @@ init().catch(error => {
         </div>
     `;
 });
+

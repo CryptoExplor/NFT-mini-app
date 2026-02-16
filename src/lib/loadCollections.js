@@ -1,28 +1,13 @@
 /**
  * Collection Loader
  * Loads, validates, and provides access to all collections
- * 
- * HOW TO ADD A NEW COLLECTION:
- * 1. Create a new file in collections/ folder (e.g., my-collection.js)
- * 2. Import it below
- * 3. Add it to COLLECTIONS_MAP with slug as key
+ *
+ * Collection entries are generated from collections/*.js
+ * into collections/index.js by `npm run collections:sync`.
  */
 
-// ============================================
-// COLLECTION IMPORTS
-// ============================================
-// Import generated collection registry
 import { COLLECTIONS_MAP } from '../../collections/index.js';
 import { parseCollectionLaunchDate, withComputedCollectionState } from './collectionSchedule.js';
-
-// ============================================
-// COLLECTIONS MAP
-// ============================================
-// Map slug -> collection object (auto-generated in collections/index.js)
-
-// ============================================
-// VALIDATION
-// ============================================
 
 /**
  * Required fields for each collection
@@ -38,6 +23,16 @@ const REQUIRED_FIELDS = [
  * Valid stage types
  */
 const VALID_STAGE_TYPES = ['FREE', 'PAID', 'BURN_ERC20'];
+const STATUS_PRIORITY = {
+    live: 3,
+    upcoming: 2,
+    'sold-out': 1,
+    paused: 0
+};
+
+function normalizeStatus(status) {
+    return String(status || '').toLowerCase();
+}
 
 /**
  * Validates a collection object
@@ -88,10 +83,6 @@ function validateCollection(collection, slug) {
     return true;
 }
 
-// ============================================
-// PUBLIC API
-// ============================================
-
 /**
  * Load and validate all public collections
  * @returns {Array} Array of valid, public collections
@@ -136,15 +127,8 @@ export function loadCollections() {
 
     // Sort by runtime status priority, then launch date (soonest live/upcoming first)
     collections.sort((a, b) => {
-        const statusPriority = {
-            'live': 3,
-            'upcoming': 2,
-            'sold-out': 1,
-            'paused': 0
-        };
-
-        const aPriority = statusPriority[a.status.toLowerCase()] || 0;
-        const bPriority = statusPriority[b.status.toLowerCase()] || 0;
+        const aPriority = STATUS_PRIORITY[normalizeStatus(a.status)] || 0;
+        const bPriority = STATUS_PRIORITY[normalizeStatus(b.status)] || 0;
 
         if (aPriority !== bPriority) {
             return bPriority - aPriority; // Higher priority first
@@ -155,7 +139,7 @@ export function loadCollections() {
         return aLaunch - bLaunch;
     });
 
-    console.log(`✅ Loaded ${collections.length} collections`);
+    console.log(`[collections] Loaded ${collections.length} collections`);
 
     return collections;
 }
@@ -194,8 +178,8 @@ export function getCollectionBySlug(slug) {
  */
 export function getCollectionsByStatus(status) {
     const collections = loadCollections();
-    const normalized = String(status || '').toLowerCase();
-    return collections.filter(c => c.status.toLowerCase() === normalized);
+    const normalized = normalizeStatus(status);
+    return collections.filter(c => normalizeStatus(c.status) === normalized);
 }
 
 /**
@@ -214,3 +198,4 @@ export function getFeaturedCollections() {
 export function getCollectionSlugs() {
     return Object.keys(COLLECTIONS_MAP).filter(slug => !slug.startsWith('_'));
 }
+

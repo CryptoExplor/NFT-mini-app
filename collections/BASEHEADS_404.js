@@ -11,7 +11,8 @@ export default {
     name: "BASEHEADS_404",
     slug: "baseheads-404",
     description: "Brutalist ASCII heads generated fully on-chain. Minted by burning pratiksharma tokens. Terminal-native identity for Base.",
-    imageUrl: "/baseheads-404.png",
+    imageUrl: "/baseheads-404.webp",
+    shareImageUrl: "/baseheads-404.png",
 
     // ============================================
     // CONTRACT CONFIGURATION
