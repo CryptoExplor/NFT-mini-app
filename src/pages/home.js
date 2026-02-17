@@ -2,11 +2,11 @@ import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
 import { state, EVENTS } from '../state.js';
 import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
-import { shortenAddress } from '../utils/dom.js';
 import { getBalance } from '@wagmi/core';
 import { shareCollection, shareAppOnFarcaster } from '../utils/social.js';
 import { analytics } from '../utils/analytics.js';
 import { trackPageView } from '../lib/api.js';
+import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -75,6 +75,13 @@ export async function renderHomePage() {
   trackPageView('home', state.wallet?.address || null);
   clearHomeCountdownTicker();
   let collections = loadCollections();
+  const profile = getMiniAppProfile();
+  const profileLabel = getMiniAppProfileLabel(profile);
+  const profileSourceLabel = state.platform?.host === 'base'
+    ? 'Base profile'
+    : state.platform?.inMiniApp
+      ? 'Farcaster profile'
+      : 'Wallet profile';
 
   // Randomly promote one LIVE collection to the top
   const liveCollections = collections.filter(c => getCollectionStatus(c) === 'live');
@@ -116,8 +123,9 @@ export async function renderHomePage() {
             <!-- Desktop Connect Button -->
             <button id="connect-btn" class="hidden sm:flex glass-card px-4 py-2 rounded-full items-center space-x-2 hover:scale-105 transition-transform">
               <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
+              <img id="connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
               <span id="connect-text" class="text-sm font-medium">
-                ${state.wallet?.isConnected ? shortenAddress(state.wallet.address) : 'Connect Wallet'}
+                ${getWalletIdentityLabel(state.wallet)}
               </span>
             </button>
 
@@ -137,7 +145,8 @@ export async function renderHomePage() {
 
             <!-- Mobile Profile Button (Person Icon) -->
             <button id="mobile-profile-btn" class="sm:hidden glass-card p-2 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                <img id="mobile-profile-avatar" class="w-6 h-6 rounded-full object-cover hidden" alt="Profile avatar">
+                <svg id="mobile-profile-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                 </svg>
             </button>
@@ -155,6 +164,19 @@ export async function renderHomePage() {
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+
+              <div class="glass-card p-4 rounded-2xl flex items-center gap-3">
+                  <img id="profile-avatar" class="w-11 h-11 rounded-full object-cover hidden" alt="Profile avatar">
+                  <div id="profile-avatar-fallback" class="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 opacity-80">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                      </svg>
+                  </div>
+                  <div class="min-w-0">
+                      <div class="text-xs uppercase tracking-wide opacity-60">${profileSourceLabel}</div>
+                      <div id="profile-identity-text" class="text-base font-bold truncate">${profileLabel || 'Guest'}</div>
+                  </div>
+              </div>
 
               <!-- Analytics -->
               <button id="mobile-analytics-btn" class="glass-card p-5 rounded-2xl flex items-center justify-between group hover:bg-white/5 transition-all active:scale-95">
@@ -181,7 +203,7 @@ export async function renderHomePage() {
                   <div class="flex items-center gap-4">
                       <div class="status-glow w-6 h-6 rounded-full" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
                       <span id="mobile-wallet-text" class="text-lg font-bold truncate max-w-[140px]">
-                          ${state.wallet?.isConnected ? shortenAddress(state.wallet.address) : 'Connect Wallet'}
+                          ${getWalletIdentityLabel(state.wallet)}
                       </span>
                   </div>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
@@ -484,6 +506,9 @@ function attachEventHandlers() {
 
   // Initialize Profile Modal
   setupProfileModal();
+  updateConnectButton(state.wallet);
+  updateProfileWalletInfo(state.wallet);
+  updateMiniAppProfileUI();
   startHomeCountdownTicker();
 }
 
@@ -495,9 +520,7 @@ function updateConnectButton(account) {
   const statusGlow = document.querySelector('.status-glow');
 
   if (connectText) {
-    connectText.textContent = account?.isConnected
-      ? shortenAddress(account.address)
-      : 'Connect Wallet';
+    connectText.textContent = getWalletIdentityLabel(account);
   }
 
   if (statusGlow) {
@@ -505,6 +528,8 @@ function updateConnectButton(account) {
     statusGlow.style.background = color;
     statusGlow.style.boxShadow = `0 0 10px ${color}`;
   }
+
+  updateMiniAppProfileUI();
 }
 
 
@@ -535,6 +560,7 @@ function setupProfileModal() {
       content.classList.remove('translate-x-full');
     }, 10);
     updateProfileWalletInfo(state.wallet);
+    updateMiniAppProfileUI();
   };
 
   const closeModal = () => {
@@ -588,15 +614,33 @@ function updateProfileWalletInfo(account) {
   const walletGlow = document.querySelector('#mobile-wallet-btn .status-glow');
 
   if (walletText) {
-    walletText.textContent = account?.isConnected
-      ? shortenAddress(account.address)
-      : 'Connect Wallet';
+    walletText.textContent = getWalletIdentityLabel(account);
   }
 
   if (walletGlow) {
     const color = account?.isConnected ? '#10B981' : '#EF4444';
     walletGlow.style.background = color;
     walletGlow.style.boxShadow = `0 0 10px ${color}`;
+  }
+}
+
+function updateMiniAppProfileUI() {
+  const profile = getMiniAppProfile();
+  const profileLabel = getMiniAppProfileLabel(profile) || 'Guest';
+
+  const connectAvatar = document.getElementById('connect-avatar');
+  const mobileAvatar = document.getElementById('mobile-profile-avatar');
+  const profileAvatar = document.getElementById('profile-avatar');
+  const profileAvatarFallback = document.getElementById('profile-avatar-fallback');
+  const mobileProfileIcon = document.getElementById('mobile-profile-icon');
+  const profileIdentityText = document.getElementById('profile-identity-text');
+
+  applyMiniAppAvatar(connectAvatar);
+  applyMiniAppAvatar(mobileAvatar, mobileProfileIcon);
+  applyMiniAppAvatar(profileAvatar, profileAvatarFallback);
+
+  if (profileIdentityText) {
+    profileIdentityText.textContent = profileLabel;
   }
 }
 

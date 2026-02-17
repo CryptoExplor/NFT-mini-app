@@ -9,7 +9,6 @@ import { state, EVENTS } from '../state.js';
 import { router } from '../lib/router.js';
 import { switchChain, getGasPrice } from '@wagmi/core';
 import { connectWallet, wagmiAdapter } from '../wallet.js';
-import { shortenAddress } from '../utils/dom.js';
 import { getExplorerUrl, getChainName } from '../utils/chain.js';
 import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
@@ -18,6 +17,7 @@ import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
+import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -87,8 +87,9 @@ export async function renderMintPage(params) {
           
           <button id="connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform">
             <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
+            <img id="connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
             <span id="connect-text" class="text-sm font-medium">
-              ${state.wallet?.isConnected ? shortenAddress(state.wallet.address) : 'Connect Wallet'}
+              ${getWalletIdentityLabel(state.wallet)}
             </span>
           </button>
         </div>
@@ -265,6 +266,7 @@ export async function renderMintPage(params) {
 
   // Attach event handlers
   attachEventHandlers(collection);
+  updateMintHeaderIdentity(state.wallet);
 
   // Initialize mint interface
   await initMintInterface(collection);
@@ -688,23 +690,29 @@ async function handleWalletUpdate(e) {
   // Update state
   state.wallet = account;
 
-  // Update connect button
-  const connectText = document.getElementById('connect-text');
-  const statusGlow = document.querySelector('.status-glow');
-
-  if (connectText) {
-    connectText.textContent = account.isConnected ? shortenAddress(account.address) : 'Connect Wallet';
-  }
-
-  if (statusGlow) {
-    statusGlow.style.background = account.isConnected ? '#10B981' : '#EF4444';
-    statusGlow.style.boxShadow = `0 0 10px ${account.isConnected ? '#10B981' : '#EF4444'}`;
-  }
+  updateMintHeaderIdentity(account);
 
   // Refresh mint interface
   if (currentCollection) {
     await initMintInterface(currentCollection);
   }
+}
+
+function updateMintHeaderIdentity(account) {
+  const connectText = document.getElementById('connect-text');
+  const statusGlow = document.querySelector('.status-glow');
+  const connectAvatar = document.getElementById('connect-avatar');
+
+  if (connectText) {
+    connectText.textContent = getWalletIdentityLabel(account);
+  }
+
+  if (statusGlow) {
+    statusGlow.style.background = account?.isConnected ? '#10B981' : '#EF4444';
+    statusGlow.style.boxShadow = `0 0 10px ${account?.isConnected ? '#10B981' : '#EF4444'}`;
+  }
+
+  applyMiniAppAvatar(connectAvatar);
 }
 
 // Cleanup on page leave
