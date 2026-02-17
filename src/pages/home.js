@@ -12,6 +12,24 @@ import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
 let homeCountdownInterval = null;
+const ONBOARDING_STORAGE_KEY = 'mint_app_onboarding_seen_v1';
+const ONBOARDING_STEPS = [
+  {
+    title: 'Discover collections',
+    description: 'Browse live and upcoming drops, then open any collection to view supply and mint details.',
+    hint: 'Tip: use filters to quickly find free, paid, or burn mints.'
+  },
+  {
+    title: 'Connect and prepare',
+    description: 'Connect your wallet once to unlock minting and track your onchain activity in one place.',
+    hint: 'Your profile and wallet status are shown in the header.'
+  },
+  {
+    title: 'Mint and share',
+    description: 'Mint directly from each collection page, then share your mint and view it on OpenSea or explorer.',
+    hint: 'You are ready to start minting.'
+  }
+];
 
 function getCollectionStatus(collection) {
   return String(collection?.status || collection?.computedStatus || 'paused').toLowerCase();
@@ -207,6 +225,25 @@ export async function renderHomePage() {
                       <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                   </svg>
               </button>
+          </div>
+      </div>
+
+      <!-- Onboarding Modal -->
+      <div id="onboarding-modal" class="fixed inset-0 z-[60] hidden">
+          <div id="onboarding-backdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+          <div id="onboarding-card" class="absolute inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto glass-card rounded-2xl p-5 border border-indigo-500/30 shadow-2xl transform translate-y-4 opacity-0 transition-all duration-300">
+              <div class="flex items-center justify-between mb-4">
+                  <span id="onboarding-step-label" class="text-xs uppercase tracking-wide opacity-60">Step 1 of 3</span>
+                  <button id="onboarding-skip-btn" class="text-sm opacity-70 hover:opacity-100 transition-colors min-h-[44px] px-3">Skip</button>
+              </div>
+              <h2 id="onboarding-title" class="text-2xl font-bold mb-3"></h2>
+              <p id="onboarding-description" class="text-sm opacity-80 leading-relaxed"></p>
+              <p id="onboarding-hint" class="text-xs text-indigo-300/90 mt-3"></p>
+              <div id="onboarding-dots" class="flex items-center gap-2 mt-5"></div>
+              <div class="flex gap-2 mt-5">
+                  <button id="onboarding-prev-btn" class="glass-card min-h-[44px] px-4 rounded-xl text-sm font-medium">Back</button>
+                  <button id="onboarding-next-btn" class="legendary-button min-h-[44px] px-4 rounded-xl text-sm font-bold flex-1">Next</button>
+              </div>
           </div>
       </div>
 
@@ -502,6 +539,7 @@ function attachEventHandlers() {
   updateProfileWalletInfo(state.wallet);
   updateMiniAppProfileUI();
   bindBottomNavEvents();
+  setupOnboardingFlow();
   startHomeCountdownTicker();
 }
 
@@ -635,6 +673,98 @@ function updateMiniAppProfileUI() {
   if (profileIdentityText) {
     profileIdentityText.textContent = profileLabel;
   }
+}
+
+function hasSeenOnboarding() {
+  try {
+    return localStorage.getItem(ONBOARDING_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setOnboardingSeen() {
+  try {
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, '1');
+  } catch {
+    // Ignore storage failures in restricted contexts.
+  }
+}
+
+function setupOnboardingFlow() {
+  const modal = document.getElementById('onboarding-modal');
+  const backdrop = document.getElementById('onboarding-backdrop');
+  const card = document.getElementById('onboarding-card');
+  const stepLabel = document.getElementById('onboarding-step-label');
+  const title = document.getElementById('onboarding-title');
+  const description = document.getElementById('onboarding-description');
+  const hint = document.getElementById('onboarding-hint');
+  const dots = document.getElementById('onboarding-dots');
+  const skipBtn = document.getElementById('onboarding-skip-btn');
+  const prevBtn = document.getElementById('onboarding-prev-btn');
+  const nextBtn = document.getElementById('onboarding-next-btn');
+
+  if (!modal || !backdrop || !card || !stepLabel || !title || !description || !hint || !dots || !skipBtn || !prevBtn || !nextBtn) {
+    return;
+  }
+
+  if (hasSeenOnboarding()) {
+    modal.remove();
+    return;
+  }
+
+  let stepIndex = 0;
+
+  const renderStep = () => {
+    const step = ONBOARDING_STEPS[stepIndex];
+    if (!step) return;
+
+    stepLabel.textContent = `Step ${stepIndex + 1} of ${ONBOARDING_STEPS.length}`;
+    title.textContent = step.title;
+    description.textContent = step.description;
+    hint.textContent = step.hint;
+
+    dots.innerHTML = ONBOARDING_STEPS.map((_, index) => `
+      <span class="h-2 rounded-full transition-all ${index === stepIndex ? 'w-5 bg-indigo-400' : 'w-2 bg-white/30'}"></span>
+    `).join('');
+
+    prevBtn.classList.toggle('invisible', stepIndex === 0);
+    nextBtn.textContent = stepIndex === ONBOARDING_STEPS.length - 1 ? 'Start minting' : 'Next';
+  };
+
+  const closeModal = () => {
+    setOnboardingSeen();
+    backdrop.classList.add('opacity-0');
+    card.classList.add('opacity-0', 'translate-y-4');
+    setTimeout(() => {
+      modal.classList.add('hidden');
+    }, 250);
+  };
+
+  skipBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+
+  prevBtn.addEventListener('click', () => {
+    if (stepIndex <= 0) return;
+    stepIndex -= 1;
+    renderStep();
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (stepIndex >= ONBOARDING_STEPS.length - 1) {
+      closeModal();
+      return;
+    }
+    stepIndex += 1;
+    renderStep();
+  });
+
+  renderStep();
+  modal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    backdrop.classList.remove('opacity-0');
+    card.classList.remove('opacity-0', 'translate-y-4');
+  });
 }
 
 
