@@ -14,10 +14,11 @@ import { toast } from '../utils/toast.js';
 import { handleMintError } from '../utils/errorHandler.js';
 import { trackMint, trackMintClick, trackMintAttempt, trackTxSent, trackMintFailure, trackCollectionView } from '../lib/api.js';
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
-import { shareCollection, shareToFarcaster, shareToTwitter } from '../utils/social.js';
+import { shareCollection, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
+import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -261,6 +262,7 @@ export async function renderMintPage(params) {
           </div>
         </div>
       </main>
+      ${renderBottomNav('home')}
     </div>
   `;
 
@@ -318,6 +320,7 @@ function attachEventHandlers(collection) {
   });
 
   // Mint button - will be set up in initMintInterface
+  bindBottomNavEvents();
 }
 
 /**
@@ -620,9 +623,11 @@ async function handleMint(collection, stage) {
         <p class="text-indigo-300 font-bold">Share your mint! 🚀</p>
         
         <div class="flex space-x-3">
-          <button id="share-farcaster-success" class="bg-[#8a63d2] hover:bg-[#7a53c2] px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
-            <img src="/farcaster.png" alt="Farcaster" class="w-5 h-5" />
-            <span class="text-xs font-bold">Cast Your Mint</span>
+          <button id="share-mint-success" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 1 0 3.186m9.566-3.186a2.25 2.25 0 1 0 0 3.186m-7.566-1.593h5.566" />
+            </svg>
+            <span class="text-xs font-bold">Share Mint</span>
           </button>
           
           <button id="share-twitter-success" class="bg-black hover:bg-slate-900 border border-white/10 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
@@ -634,8 +639,8 @@ async function handleMint(collection, stage) {
     `;
 
     // Attach success share handlers
-    document.getElementById('share-farcaster-success')?.addEventListener('click', () => {
-      shareToFarcaster(collection);
+    document.getElementById('share-mint-success')?.addEventListener('click', () => {
+      shareCollection(collection);
     });
 
     document.getElementById('share-twitter-success')?.addEventListener('click', () => {

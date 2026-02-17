@@ -13,6 +13,7 @@ import { getBalance } from '@wagmi/core';
 import { toast } from '../utils/toast.js';
 import { analytics } from '../utils/analytics.js';
 import { trackEvent } from '../lib/api.js';
+import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 
 // HTML escape to prevent XSS from NFT metadata
 function esc(str) {
@@ -174,12 +175,7 @@ function buildGalleryHTML() {
             </div>
         </div>
 
-        <!-- Footer -->
-        <footer class="fixed bottom-0 left-0 right-0 glass-header p-4 z-10">
-            <div class="max-w-7xl mx-auto text-center text-sm opacity-50">
-                Built with ❤️ for Farcaster & Base
-            </div>
-        </footer>
+        ${renderBottomNav('gallery')}
     </div>
     `;
 }
@@ -597,6 +593,7 @@ function attachGalleryEvents() {
 
     // Infinite scroll
     setupInfiniteScroll();
+    bindBottomNavEvents();
 }
 
 function updateGalleryHeader(account) {

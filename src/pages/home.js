@@ -7,6 +7,7 @@ import { shareCollection, shareAppOnFarcaster } from '../utils/social.js';
 import { analytics } from '../utils/analytics.js';
 import { trackPageView } from '../lib/api.js';
 import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
+import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -77,11 +78,7 @@ export async function renderHomePage() {
   let collections = loadCollections();
   const profile = getMiniAppProfile();
   const profileLabel = getMiniAppProfileLabel(profile);
-  const profileSourceLabel = state.platform?.host === 'base'
-    ? 'Base profile'
-    : state.platform?.inMiniApp
-      ? 'Farcaster profile'
-      : 'Wallet profile';
+  const profileSourceLabel = state.platform?.inMiniApp ? 'Mini app profile' : 'Wallet profile';
 
   // Randomly promote one LIVE collection to the top
   const liveCollections = collections.filter(c => getCollectionStatus(c) === 'live');
@@ -263,12 +260,7 @@ export async function renderHomePage() {
         </div>
       </main>
       
-      <!-- Footer -->
-      <footer class="fixed bottom-0 left-0 right-0 glass-header p-4 z-10">
-        <div class="max-w-6xl mx-auto text-center text-sm opacity-50">
-          Built with ❤️ for Farcaster & Base 
-        </div>
-      </footer>
+      ${renderBottomNav('home')}
     </div>
   `;
 
@@ -509,6 +501,7 @@ function attachEventHandlers() {
   updateConnectButton(state.wallet);
   updateProfileWalletInfo(state.wallet);
   updateMiniAppProfileUI();
+  bindBottomNavEvents();
   startHomeCountdownTicker();
 }
 

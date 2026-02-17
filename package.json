@@ -17,6 +17,11 @@
     "analyze": "vite-bundle-visualizer"
   },
   "dependencies": {
+    "@base-org/account": "latest",
+    "@base-org/account-ui": "latest",
+    "@farcaster/auth-kit": "latest",
+    "@farcaster/miniapp-core": "latest",
+    "@farcaster/miniapp-node": "latest",
     "@farcaster/miniapp-sdk": "^0.2.3",
     "@farcaster/miniapp-wagmi-connector": "latest",
     "@reown/appkit": "^1.8.17",

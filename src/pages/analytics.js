@@ -14,6 +14,7 @@ import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
 import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../wallet.js';
+import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 
 const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
 
@@ -160,6 +161,7 @@ export async function renderAnalyticsPage(params) {
                 ${renderAdminPanel(state.wallet, slug)}
 
             </main>
+            ${renderBottomNav('analytics')}
         </div>
     `;
 
@@ -197,6 +199,7 @@ export async function renderAnalyticsPage(params) {
 
     // Wire up admin panel (if rendered)
     setupAdminListeners();
+    bindBottomNavEvents();
 
     // ========== AUTO-REFRESH ACTIVITY FEED (every 10s) ==========
     let isPaused = false;

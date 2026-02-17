@@ -1,7 +1,7 @@
 import { getCollectionBySlug } from '../src/lib/loadCollections.js';
 
 const APP_NAME = 'Base Mint App';
-const DEFAULT_DESCRIPTION = 'Multi-collection minting on Farcaster and Base App.';
+const DEFAULT_DESCRIPTION = 'Multi-collection minting in a Base mini app.';
 const DEFAULT_IMAGE = '/image.png';
 const DEFAULT_SHARE_PREVIEW_IMAGE = '/image1.png';
 
