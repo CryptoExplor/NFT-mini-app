@@ -5,8 +5,37 @@
 
 import { sdk } from '@farcaster/miniapp-sdk';
 
+const MINIAPP_HOSTS = {
+    WEB: 'web',
+    BASE: 'base',
+    FARCASTER: 'farcaster',
+    UNKNOWN: 'unknown-miniapp'
+};
+const BASE_APP_CLIENT_FID = 309857;
+
 let context = null;
 let isReady = false;
+let inMiniApp = false;
+let miniAppHost = MINIAPP_HOSTS.WEB;
+let miniAppClientFid = null;
+
+function resetMiniAppState() {
+    context = null;
+    inMiniApp = false;
+    miniAppHost = MINIAPP_HOSTS.WEB;
+    miniAppClientFid = null;
+}
+
+function resolveMiniAppHost(ctx) {
+    const clientFid = Number(ctx?.client?.clientFid);
+    if (!Number.isFinite(clientFid)) {
+        return { host: MINIAPP_HOSTS.UNKNOWN, clientFid: null };
+    }
+    if (clientFid === BASE_APP_CLIENT_FID) {
+        return { host: MINIAPP_HOSTS.BASE, clientFid };
+    }
+    return { host: MINIAPP_HOSTS.FARCASTER, clientFid };
+}
 
 /**
  * Initialize Farcaster SDK
@@ -15,27 +44,44 @@ let isReady = false;
  */
 export async function initFarcasterSDK() {
     try {
-        // Check if we're running in a Farcaster context
-        if (typeof window !== 'undefined' && window.parent !== window) {
-            // Get the context from SDK
-            context = await sdk.context;
-
-            console.log('Farcaster SDK initialized', context);
-            console.log('Context details:', {
-                client: context.client,
-                user: context.user,
-                location: context.location
-            });
-
-            // DO NOT call ready() here - main.js will call it after everything loads
-
-            return { sdk, context };
+        if (typeof window === 'undefined') {
+            return { sdk: null, context: null, inMiniApp: false, host: MINIAPP_HOSTS.WEB, clientFid: null };
         }
+
+        // Prefer SDK runtime check over frame heuristics.
+        if (typeof sdk?.isInMiniApp === 'function') {
+            inMiniApp = await sdk.isInMiniApp();
+        } else {
+            inMiniApp = window.parent !== window;
+        }
+
+        if (!inMiniApp) {
+            resetMiniAppState();
+            return { sdk: null, context: null, inMiniApp: false, host: MINIAPP_HOSTS.WEB, clientFid: null };
+        }
+
+        context = await sdk.context;
+        const resolved = resolveMiniAppHost(context);
+        miniAppHost = resolved.host;
+        miniAppClientFid = resolved.clientFid;
+
+        console.log('Farcaster SDK initialized', context);
+        console.log('Context details:', {
+            host: miniAppHost,
+            clientFid: miniAppClientFid,
+            client: context.client,
+            user: context.user,
+            location: context.location
+        });
+
+        // DO NOT call ready() here - main.js will call it after everything loads
+        return { sdk, context, inMiniApp, host: miniAppHost, clientFid: miniAppClientFid };
     } catch (error) {
+        resetMiniAppState();
         console.warn('Not in Farcaster context or SDK failed to load:', error);
     }
 
-    return { sdk: null, context: null };
+    return { sdk: null, context: null, inMiniApp: false, host: MINIAPP_HOSTS.WEB, clientFid: null };
 }
 
 /**
@@ -69,10 +115,45 @@ export function getFarcasterSDK() {
 }
 
 /**
- * Check if running in Farcaster
+ * Check if running in a Farcaster Mini App host (Warpcast/Base/etc).
  */
 export function isInFarcaster() {
-    return sdk !== null && context !== null;
+    return inMiniApp;
+}
+
+/**
+ * Check if running in any Mini App host.
+ */
+export function isInMiniApp() {
+    return inMiniApp;
+}
+
+/**
+ * Returns host identifier: web | base | farcaster | unknown-miniapp
+ */
+export function getMiniAppHost() {
+    return miniAppHost;
+}
+
+/**
+ * Client FID from Mini App context (when available).
+ */
+export function getMiniAppClientFid() {
+    return miniAppClientFid;
+}
+
+/**
+ * True when app is running inside Base App Mini App host.
+ */
+export function isInBaseApp() {
+    return miniAppHost === MINIAPP_HOSTS.BASE;
+}
+
+/**
+ * True when app is running in a non-Base Farcaster client (e.g. Warpcast).
+ */
+export function isInFarcasterClient() {
+    return miniAppHost === MINIAPP_HOSTS.FARCASTER;
 }
 
 /**

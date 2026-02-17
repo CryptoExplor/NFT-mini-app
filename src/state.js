@@ -3,6 +3,11 @@
  */
 
 export const state = {
+    platform: {
+        inMiniApp: false,
+        host: 'web', // 'web' | 'base' | 'farcaster' | 'unknown-miniapp'
+        clientFid: null
+    },
     wallet: {
         address: null,
         chainId: null,

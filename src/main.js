@@ -12,7 +12,7 @@ import './polyfills.js';
 // Core imports
 import { initWallet, wagmiAdapter } from './wallet.js';
 import { state, EVENTS } from './state.js';
-import { initFarcasterSDK, isInFarcaster } from './farcaster.js';
+import { initFarcasterSDK } from './farcaster.js';
 import { router } from './lib/router.js';
 import { toast } from './utils/toast.js';
 import { $ } from './utils/dom.js';
@@ -42,19 +42,34 @@ async function init() {
     const [farcasterResult, toastReady] = await Promise.all([
         initFarcasterSDK().catch(e => {
             console.warn('Farcaster init failed:', e);
-            return { sdk: null, context: null };
+            return { sdk: null, context: null, inMiniApp: false, host: 'web', clientFid: null };
         }),
         Promise.resolve(toast.init())
     ]);
 
-    if (isInFarcaster() && farcasterResult.context) {
-        console.log('📱 Running in Farcaster');
+    if (farcasterResult.inMiniApp && farcasterResult.context) {
+        console.log(`📱 Running in ${farcasterResult.host === 'base' ? 'Base App' : 'Farcaster Mini App'}`);
         state.farcaster = farcasterResult;
+        state.platform = {
+            inMiniApp: true,
+            host: farcasterResult.host || 'unknown-miniapp',
+            clientFid: farcasterResult.clientFid ?? null
+        };
 
         // Try auto-connect (non-blocking)
         autoConnectFarcaster().catch(e => console.warn('Auto-connect failed:', e));
     } else {
         console.log('🌐 Running in browser');
+        state.platform = {
+            inMiniApp: false,
+            host: 'web',
+            clientFid: null
+        };
+    }
+
+    if (typeof document !== 'undefined') {
+        document.documentElement.dataset.miniappHost = state.platform.host;
+        document.documentElement.dataset.inMiniapp = String(state.platform.inMiniApp);
     }
 
     // Step 2: Setup routes (synchronous, no waiting)
