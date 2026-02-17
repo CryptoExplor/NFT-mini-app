@@ -97,7 +97,7 @@ export async function renderHomePage() {
   let collections = loadCollections();
   const profile = getMiniAppProfile();
   const profileLabel = getMiniAppProfileLabel(profile);
-  const profileSourceLabel = state.platform?.inMiniApp ? 'Mini app profile' : 'Wallet profile';
+  const profileSourceLabel = state.platform?.inMiniApp ? 'User' : 'Wallet';
 
   // Randomly promote one LIVE collection to the top
   const liveCollections = collections.filter(c => getCollectionStatus(c) === 'live');

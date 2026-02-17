@@ -8,7 +8,7 @@ import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
 import { router } from '../lib/router.js';
 import { fetchNFTsByWallet, extractCollections } from '../lib/opensea.js';
 import { showNFTDetailModal } from '../components/NFTDetailModal.js';
-import { shortenAddress } from '../utils/dom.js';
+import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { getBalance } from '@wagmi/core';
 import { toast } from '../utils/toast.js';
 import { analytics } from '../utils/analytics.js';
@@ -46,6 +46,7 @@ export async function renderGalleryPage() {
     app.innerHTML = buildGalleryHTML();
 
     attachGalleryEvents();
+    updateGalleryHeader(state.wallet);
 
     // Load NFTs if wallet connected
     if (state.wallet?.isConnected && state.wallet?.address) {
@@ -59,7 +60,6 @@ export async function renderGalleryPage() {
  */
 function buildGalleryHTML() {
     const isConnected = state.wallet?.isConnected;
-    const address = state.wallet?.address;
 
     return `
     <div class="min-h-screen bg-slate-900 app-text font-sans">
@@ -85,7 +85,8 @@ function buildGalleryHTML() {
                     <!-- Connect -->
                     <button id="gallery-connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform text-sm font-medium">
                         <div class="status-glow" style="background: ${isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${isConnected ? '#10B981' : '#EF4444'};"></div>
-                        <span>${isConnected ? shortenAddress(address) : 'Connect Wallet'}</span>
+                        <img id="gallery-connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
+                        <span>${getWalletIdentityLabel(state.wallet)}</span>
                     </button>
                 </div>
             </div>
@@ -603,13 +604,17 @@ function updateGalleryHeader(account) {
     const connectBtn = document.getElementById('gallery-connect-btn');
     if (connectBtn) {
         const glow = connectBtn.querySelector('.status-glow');
+        const avatar = document.getElementById('gallery-connect-avatar');
         const text = connectBtn.querySelector('span:last-child');
+
+        applyMiniAppAvatar(avatar);
+
         if (account?.isConnected) {
             if (glow) { glow.style.background = '#10B981'; glow.style.boxShadow = '0 0 10px #10B981'; }
-            if (text) text.textContent = shortenAddress(account.address);
+            if (text) text.textContent = getWalletIdentityLabel(account);
         } else {
             if (glow) { glow.style.background = '#EF4444'; glow.style.boxShadow = '0 0 10px #EF4444'; }
-            if (text) text.textContent = 'Connect Wallet';
+            if (text) text.textContent = getWalletIdentityLabel(account);
         }
     }
 }
