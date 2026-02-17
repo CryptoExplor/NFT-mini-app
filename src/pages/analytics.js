@@ -15,6 +15,7 @@ import { shortenAddress } from '../utils/dom.js';
 import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../wallet.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
+import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 
 const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
 
@@ -36,7 +37,7 @@ export async function renderAnalyticsPage(params) {
 
     // Show loading state
     app.innerHTML = `
-        <div class="min-h-screen bg-slate-900 text-white p-6 pb-24">
+        <div class="min-h-screen bg-slate-900 app-text p-6 pb-24">
             <div class="max-w-6xl mx-auto text-center py-20">
                 <div class="text-4xl mb-4 animate-spin inline-block">⚡</div>
                 <p class="opacity-60">Loading analytics...</p>
@@ -63,7 +64,7 @@ export async function renderAnalyticsPage(params) {
     const liveCount = collections.filter(c => c.status.toLowerCase() === 'live').length;
 
     app.innerHTML = `
-        <div class="min-h-screen bg-slate-900 text-white p-4 md:p-6 pb-24">
+        <div class="min-h-screen bg-slate-900 app-text p-4 md:p-6 pb-24">
             <header class="max-w-6xl mx-auto mb-8">
                 <button id="back-home-btn" class="text-indigo-400 mb-3 hover:underline flex items-center gap-2 text-sm">
                     <span>←</span> Back Home
@@ -75,7 +76,8 @@ export async function renderAnalyticsPage(params) {
                         </h1>
                         <p class="text-sm opacity-50 mt-1">Real-time insights • Powered by Vercel KV</p>
                     </div>
-                    <div class="flex gap-2 flex-wrap">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        ${renderThemeToggleButton('theme-toggle-analytics')}
                         <button class="analytics-tab analytics-tab-active" data-type="mints">🏆 Mints</button>
                         <button class="analytics-tab" data-type="volume">💰 Volume</button>
                         <button class="analytics-tab" data-type="gas">⛽ Gas</button>
@@ -200,6 +202,7 @@ export async function renderAnalyticsPage(params) {
     // Wire up admin panel (if rendered)
     setupAdminListeners();
     bindBottomNavEvents();
+    bindThemeToggleEvents();
 
     // ========== AUTO-REFRESH ACTIVITY FEED (every 10s) ==========
     let isPaused = false;

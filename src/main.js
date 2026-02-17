@@ -17,6 +17,10 @@ import { router } from './lib/router.js';
 import { toast } from './utils/toast.js';
 import { $ } from './utils/dom.js';
 import { sdk as farcasterSdk } from '@farcaster/miniapp-sdk';
+import { initTheme } from './utils/theme.js';
+
+// Apply theme as early as possible to avoid flash on first paint.
+initTheme();
 
 // ============================================
 // OPTIMIZED INITIALIZATION
@@ -260,7 +264,7 @@ if (typeof window !== 'undefined') {
 init().catch(error => {
     console.error('❌ App initialization failed:', error);
     document.getElementById('app').innerHTML = `
-        <div class="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        <div class="min-h-screen flex items-center justify-center bg-slate-900 app-text">
             <div class="text-center">
                 <h1 class="text-4xl font-bold mb-4">⚠️ Initialization Error</h1>
                 <p class="text-lg opacity-60 mb-4">Failed to start the app</p>

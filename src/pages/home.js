@@ -8,6 +8,7 @@ import { analytics } from '../utils/analytics.js';
 import { trackPageView } from '../lib/api.js';
 import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
+import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -111,7 +112,7 @@ export async function renderHomePage() {
   const app = document.getElementById('app');
 
   app.innerHTML = `
-    <div class="min-h-screen bg-slate-900 text-white font-sans">
+    <div class="min-h-screen bg-slate-900 app-text font-sans">
       <!-- Header -->
       <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
@@ -143,6 +144,8 @@ export async function renderHomePage() {
                 ${getWalletIdentityLabel(state.wallet)}
               </span>
             </button>
+
+            ${renderThemeToggleButton('theme-toggle-home')}
 
             <!-- Global Share Button -->
             <button id="global-share-btn" class="glass-card relative p-2 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group overflow-hidden border border-indigo-500/30 hover:border-indigo-400">
@@ -350,13 +353,13 @@ function renderCollectionCard(collection) {
         <!-- Content -->
         <div class="p-4">
           <div class="flex justify-between items-start mb-2">
-            <h3 class="text-xl font-bold truncate">${collection.name}</h3>
+            <h3 class="text-xl font-bold text-slate-100 truncate">${collection.name}</h3>
             <span class="${statusClass} px-2 py-1 rounded text-xs font-bold uppercase whitespace-nowrap ml-2">
               ${status}
             </span>
           </div>
           
-          <p class="text-sm opacity-70 mb-4 line-clamp-2">
+          <p class="text-sm text-slate-300 mb-4 line-clamp-2">
             ${collection.description}
           </p>
 
@@ -367,10 +370,10 @@ function renderCollectionCard(collection) {
           ` : ''}
           
           <div class="flex justify-between items-center">
-            <div class="text-xs opacity-60">
+            <div class="text-xs text-slate-300/80">
               ${collection.mintPolicy.maxSupply.toLocaleString()} supply
             </div>
-            <div class="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-medium">
+            <div class="px-3 py-1 bg-indigo-500/20 text-indigo-200 rounded-full text-xs font-medium">
               ${mintTypeLabel}
             </div>
           </div>
@@ -539,6 +542,7 @@ function attachEventHandlers() {
   updateProfileWalletInfo(state.wallet);
   updateMiniAppProfileUI();
   bindBottomNavEvents();
+  bindThemeToggleEvents();
   setupOnboardingFlow();
   startHomeCountdownTicker();
 }
@@ -836,4 +840,3 @@ export function cleanup() {
     walletUpdateHandler = null;
   }
 }
-

@@ -58,9 +58,9 @@ export function renderBottomNav(activeTab = null) {
               type="button"
               data-bottom-nav
               data-path="${item.path}"
-              class="min-h-[44px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${isActive
-        ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-400/30'
-        : 'text-white/70 hover:text-white hover:bg-white/10 border border-transparent'}"
+              class="min-h-[44px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors border ${isActive
+        ? 'bottom-nav-active'
+        : 'bottom-nav-inactive'}"
               aria-label="${item.label}">
               ${item.icon}
               <span class="text-[11px] font-medium">${item.label}</span>

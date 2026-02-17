@@ -19,6 +19,7 @@ import { cache } from '../utils/cache.js';
 import { analytics } from '../utils/analytics.js';
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
+import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 
 // Current collection reference
 let currentCollection = null;
@@ -68,7 +69,7 @@ export async function renderMintPage(params) {
   const app = document.getElementById('app');
 
   app.innerHTML = `
-    <div class="min-h-screen bg-slate-900 text-white">
+    <div class="min-h-screen bg-slate-900 app-text">
       <!-- Header -->
       <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
@@ -86,13 +87,16 @@ export async function renderMintPage(params) {
             </button>
           </div>
           
-          <button id="connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform">
-            <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
-            <img id="connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
-            <span id="connect-text" class="text-sm font-medium">
-              ${getWalletIdentityLabel(state.wallet)}
-            </span>
-          </button>
+          <div class="flex items-center space-x-2">
+            ${renderThemeToggleButton('theme-toggle-mint')}
+            <button id="connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform">
+              <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
+              <img id="connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
+              <span id="connect-text" class="text-sm font-medium">
+                ${getWalletIdentityLabel(state.wallet)}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
       
@@ -282,7 +286,7 @@ export async function renderMintPage(params) {
  */
 function render404(slug) {
   document.getElementById('app').innerHTML = `
-    <div class="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+    <div class="min-h-screen bg-slate-900 app-text flex items-center justify-center">
       <div class="text-center">
         <h1 class="text-6xl font-bold mb-4">404</h1>
         <p class="text-xl opacity-60 mb-8">Collection "${slug}" not found</p>
@@ -321,6 +325,7 @@ function attachEventHandlers(collection) {
 
   // Mint button - will be set up in initMintInterface
   bindBottomNavEvents();
+  bindThemeToggleEvents();
 }
 
 /**

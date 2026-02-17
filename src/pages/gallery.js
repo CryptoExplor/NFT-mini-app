@@ -14,6 +14,7 @@ import { toast } from '../utils/toast.js';
 import { analytics } from '../utils/analytics.js';
 import { trackEvent } from '../lib/api.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
+import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 
 // HTML escape to prevent XSS from NFT metadata
 function esc(str) {
@@ -61,7 +62,7 @@ function buildGalleryHTML() {
     const address = state.wallet?.address;
 
     return `
-    <div class="min-h-screen bg-slate-900 text-white font-sans">
+    <div class="min-h-screen bg-slate-900 app-text font-sans">
         <!-- Header -->
         <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
             <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -80,6 +81,7 @@ function buildGalleryHTML() {
                         <div class="text-xs opacity-60">Balance</div>
                         <div class="font-mono font-bold text-sm text-indigo-300 gallery-balance-value">Loading...</div>
                     </div>
+                    ${renderThemeToggleButton('theme-toggle-gallery')}
                     <!-- Connect -->
                     <button id="gallery-connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform text-sm font-medium">
                         <div class="status-glow" style="background: ${isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${isConnected ? '#10B981' : '#EF4444'};"></div>
@@ -594,6 +596,7 @@ function attachGalleryEvents() {
     // Infinite scroll
     setupInfiniteScroll();
     bindBottomNavEvents();
+    bindThemeToggleEvents();
 }
 
 function updateGalleryHeader(account) {
