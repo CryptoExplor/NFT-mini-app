@@ -16,6 +16,7 @@ import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../wallet.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
+import { getMiniAppProfile, getMiniAppProfileLabel } from '../utils/profile.js';
 
 const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
 
@@ -24,6 +25,28 @@ let walletUpdateHandler = null;
 let activityInterval = null;
 let feedStatusTimeout = null;
 let collectionCardClickHandler = null;
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getViewerIdentity(walletAddress) {
+    const miniProfile = getMiniAppProfile();
+    const profileLabel = getMiniAppProfileLabel(miniProfile);
+    const walletLabel = walletAddress ? shortenAddress(walletAddress) : '';
+
+    return {
+        profileLabel: profileLabel || '',
+        primaryLabel: profileLabel || walletLabel,
+        walletLabel,
+        avatarUrl: miniProfile?.avatarUrl || ''
+    };
+}
 
 export async function renderAnalyticsPage(params) {
     const currentRender = ++renderVersion;
@@ -415,6 +438,14 @@ function renderWalletInsights(userStats, wallet) {
     const profile = userStats?.profile || {};
     const rankings = userStats?.rankings || {};
     const insights = userStats?.insights || {};
+    const viewerIdentity = getViewerIdentity(wallet.address);
+    const safePrimaryLabel = escapeHtml(viewerIdentity.primaryLabel || shortenAddress(wallet.address));
+    const safeWalletLabel = escapeHtml(viewerIdentity.walletLabel || shortenAddress(wallet.address));
+    const safeAvatarUrl = escapeHtml(viewerIdentity.avatarUrl || '');
+    const showSecondaryWallet = Boolean(viewerIdentity.profileLabel && viewerIdentity.walletLabel);
+    const avatarHtml = safeAvatarUrl
+        ? `<img src="${safeAvatarUrl}" alt="Profile avatar" class="w-4 h-4 rounded-full object-cover">`
+        : '<span class="text-[10px] opacity-60">👤</span>';
 
     return `
         <div class="glass-card p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 to-purple-500/5 relative overflow-hidden">
@@ -423,8 +454,10 @@ function renderWalletInsights(userStats, wallet) {
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h2 class="text-lg font-bold flex items-center gap-2 flex-wrap">
                     Wallet Insights
-                    <div class="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full border border-white/5">
-                        <span class="text-xs font-normal opacity-50 font-mono">${shortenAddress(wallet.address)}</span>
+                    <div class="flex items-center gap-1.5 bg-white/10 px-2 py-0.5 rounded-full border border-white/5 max-w-full">
+                        ${avatarHtml}
+                        <span class="text-xs font-normal truncate max-w-[140px]">${safePrimaryLabel}</span>
+                        ${showSecondaryWallet ? `<span class="text-[10px] opacity-50 font-mono hidden sm:inline">${safeWalletLabel}</span>` : ''}
                         <a href="https://basescan.org/address/${wallet.address}" target="_blank" rel="noopener noreferrer" class="text-xs opacity-40 hover:opacity-100 transition" title="View on Explorer">↗</a>
                     </div>
                     ${insights.badge ? `<span class="text-xs bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-200 border border-yellow-500/20 px-2 py-0.5 rounded-full shadow-sm">${insights.badge}</span>` : ''}
@@ -581,6 +614,8 @@ function renderLeaderboard(leaderboard) {
     }
 
     const medals = ['🥇', '🥈', '🥉'];
+    const viewerIdentity = getViewerIdentity(state.wallet?.address || '');
+    const safeViewerPrimaryLabel = escapeHtml(viewerIdentity.primaryLabel || '');
 
     return `
         <table class="w-full text-left border-collapse">
@@ -594,13 +629,20 @@ function renderLeaderboard(leaderboard) {
             <tbody class="text-sm">
                 ${leaderboard.map((user, i) => {
         const isMe = (user.wallet || '').toLowerCase() === (state.wallet?.address || '').toLowerCase();
+        const shortWallet = shortenAddress(user.wallet || '');
+        const safeShortWallet = escapeHtml(shortWallet);
+        const primaryIdentity = isMe && viewerIdentity.profileLabel ? safeViewerPrimaryLabel : safeShortWallet;
+        const secondaryIdentity = isMe && viewerIdentity.profileLabel
+            ? `<span class="ml-1 text-[10px] opacity-45 font-mono">${safeShortWallet}</span>`
+            : '';
         return `
                         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors ${isMe ? 'bg-indigo-500/10' : ''}">
                             <td class="py-3 pl-3 font-mono text-indigo-300">
                                 ${i < 3 ? medals[i] : `#${user.rank}`}
                             </td>
                             <td class="py-3 font-mono">
-                                ${shortenAddress(user.wallet)}
+                                ${primaryIdentity}
+                                ${secondaryIdentity}
                                 ${isMe ? '<span class="ml-2 text-[10px] bg-indigo-500/30 text-indigo-300 px-1.5 py-0.5 rounded">YOU</span>' : ''}
                             </td>
                             <td class="py-3 text-right pr-3 font-bold">
@@ -623,15 +665,23 @@ function renderActivityFeed(activity) {
         return '<div class="text-center py-8 opacity-30">No activity yet. Be the first to mint!</div>';
     }
 
+    const viewerIdentity = getViewerIdentity(state.wallet?.address || '');
+
     return activity.map(item => {
         const timeAgo = getTimeAgo(item.timestamp);
+        const wallet = String(item.wallet || '');
+        const isMe = wallet.toLowerCase() === (state.wallet?.address || '').toLowerCase();
+        const shortWallet = escapeHtml(shortenAddress(wallet));
+        const walletLabel = isMe && viewerIdentity.profileLabel
+            ? `<span>${escapeHtml(viewerIdentity.primaryLabel)}</span><span class="ml-1 text-[9px] opacity-45 font-mono">${shortWallet}</span>`
+            : shortWallet;
         return `
             <div class="flex items-center gap-3 p-2.5 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all animate-fade-in">
                 <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
                 <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate">${item.collection || 'Unknown'}</div>
                     <div class="text-[10px] opacity-50 font-mono">
-                        ${shortenAddress(item.wallet || '')}
+                        ${walletLabel}
                         <span class="mx-1">•</span>
                         ${timeAgo}
                         ${item.price > 0 ? `<span class="mx-1">•</span> ${parseFloat(item.price).toFixed(4)} ETH` : ''}

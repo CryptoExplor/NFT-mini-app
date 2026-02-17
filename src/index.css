@@ -231,6 +231,33 @@ body {
   box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
 }
 
+/* Improve tap ergonomics on touch devices */
+@media (pointer: coarse) {
+  button,
+  .analytics-tab,
+  .filter-chip,
+  .collection-item,
+  .share-btn,
+  [data-bottom-nav],
+  [data-theme-toggle],
+  input[type='text'],
+  input[type='search'],
+  input[type='date'],
+  select {
+    min-height: 44px;
+  }
+
+  .share-btn,
+  [data-theme-toggle],
+  #mobile-profile-btn,
+  #global-share-btn,
+  #gallery-back-btn,
+  #close-filter-btn,
+  #close-profile-btn {
+    min-width: 44px;
+  }
+}
+
 /* ============================================ */
 /* STATUS INDICATORS */
 /* ============================================ */

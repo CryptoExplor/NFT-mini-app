@@ -1,8 +1,8 @@
 import { createAppKit } from '@reown/appkit';
-import { base, baseSepolia } from '@reown/appkit/networks';
+import { base } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
-import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect } from '@wagmi/core';
+import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect, connect as wagmiConnect } from '@wagmi/core';
 import { EVENTS, state as globalState } from './state.js';
 import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
 
@@ -25,7 +25,8 @@ export const wagmiAdapter = new WagmiAdapter({
     projectId,
     networks,
     ssr: false,
-    dataSuffix: DATA_SUFFIX
+    dataSuffix: DATA_SUFFIX,
+    connectors: [farcasterMiniApp()]
 });
 
 // 4. Create Modal with improved configuration
@@ -55,6 +56,65 @@ export const modal = createAppKit({
 });
 
 let currentUnwatch = null;
+
+function normalizeConnectorLabel(connector) {
+    return `${connector?.id || ''} ${connector?.name || ''}`.toLowerCase();
+}
+
+function getPreferredMiniAppConnectors() {
+    const connectors = wagmiAdapter.wagmiConfig.connectors || [];
+    const host = globalState.platform?.host || 'web';
+
+    const isBaseConnector = (connector) => {
+        const label = normalizeConnectorLabel(connector);
+        return connector?.id === 'baseAccount' ||
+            label.includes('base account') ||
+            label.includes('coinbase');
+    };
+
+    const isMiniAppConnector = (connector) => {
+        const label = normalizeConnectorLabel(connector);
+        return connector?.id === 'farcaster' ||
+            connector?.id === 'farcasterMiniApp' ||
+            label.includes('farcaster') ||
+            label.includes('miniapp');
+    };
+
+    const baseConnectors = connectors.filter(isBaseConnector);
+    const miniAppConnectors = connectors.filter(isMiniAppConnector);
+    const ordered = host === 'base'
+        ? [...baseConnectors, ...miniAppConnectors]
+        : [...miniAppConnectors, ...baseConnectors];
+
+    const seen = new Set();
+    return ordered.filter((connector) => {
+        const key = `${connector?.id || ''}:${connector?.name || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+export async function connectMiniAppWalletSilently() {
+    if (!globalState.platform?.inMiniApp) return false;
+
+    const connectors = getPreferredMiniAppConnectors();
+    if (!connectors.length) return false;
+
+    for (const connector of connectors) {
+        try {
+            const result = await wagmiConnect(wagmiAdapter.wagmiConfig, { connector });
+            if (result?.accounts?.[0]) {
+                console.log(`✅ Connected via ${connector.name || connector.id || 'mini app connector'}`);
+                return true;
+            }
+        } catch (error) {
+            console.debug(`Mini app connect skipped for ${connector.name || connector.id || 'unknown connector'}:`, error?.message || error);
+        }
+    }
+
+    return false;
+}
 
 export async function initWallet() {
     console.log('🔌 Initializing wallet connection...');
@@ -141,6 +201,8 @@ function handleAccountChange(account) {
 }
 
 export async function connectWallet() {
+    const connected = await connectMiniAppWalletSilently();
+    if (connected) return;
     await modal.open();
 }
 

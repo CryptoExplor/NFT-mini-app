@@ -10,7 +10,7 @@ import './index.css';
 import './polyfills.js';
 
 // Core imports
-import { initWallet, wagmiAdapter } from './wallet.js';
+import { initWallet, connectMiniAppWalletSilently } from './wallet.js';
 import { state, EVENTS } from './state.js';
 import { initFarcasterSDK } from './farcaster.js';
 import { router } from './lib/router.js';
@@ -109,21 +109,10 @@ async function init() {
 async function autoConnectFarcaster() {
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const farcasterConnector = wagmiAdapter.wagmiConfig.connectors.find(
-        c => c.id === 'farcaster' ||
-            c.id === 'farcasterMiniApp' ||
-            c.name?.toLowerCase().includes('farcaster')
-    );
-
-    if (farcasterConnector) {
-        const { connect } = await import('@wagmi/core');
-        const result = await connect(wagmiAdapter.wagmiConfig, {
-            connector: farcasterConnector
-        });
-
-        if (result.accounts?.[0]) {
-            console.log('✅ Auto-connected via Farcaster');
-        }
+    const connected = await connectMiniAppWalletSilently();
+    if (connected) {
+        const label = state.platform?.host === 'base' ? 'Base Account' : 'Mini App wallet';
+        console.log(`✅ Auto-connected via ${label}`);
     }
 }
 

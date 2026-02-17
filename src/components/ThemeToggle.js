@@ -35,7 +35,7 @@ export function renderThemeToggleButton(id = 'theme-toggle') {
       id="${id}"
       type="button"
       data-theme-toggle
-      class="glass-card w-10 h-10 min-h-[44px] rounded-full flex items-center justify-center transition-colors hover:bg-white/10"
+      class="glass-card w-11 h-11 min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center transition-colors hover:bg-white/10"
       aria-label="${label}"
       title="${label}">
       <span data-theme-toggle-icon>

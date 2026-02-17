@@ -43,7 +43,10 @@ export function getMiniAppProfile() {
 
 export function getMiniAppProfileLabel(profile = getMiniAppProfile()) {
   if (!profile) return '';
-  if (profile.username) return formatHandle(profile.username);
+  if (profile.username) {
+    if (state.platform?.host === 'base') return profile.username;
+    return formatHandle(profile.username);
+  }
   if (profile.displayName) return profile.displayName;
   return '';
 }
