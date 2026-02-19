@@ -3,7 +3,7 @@ import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
 
 const APP_ORIGIN = 'https://base-mintapp.vercel.app';
 const WARPCAST_COMPOSE_URL = 'https://warpcast.com/~/compose';
-const COLLECTION_SHARE_FALLBACK_IMAGE = '/cover.gif';
+const COLLECTION_SHARE_FALLBACK_IMAGE = '/image.png';
 
 function getAppOrigin() {
     if (typeof window !== 'undefined' && typeof window.location?.origin === 'string' && window.location.origin.startsWith('http')) {
