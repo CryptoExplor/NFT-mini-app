@@ -49,8 +49,9 @@
     "terser": "^5.27.0",
     "vercel": "latest",
     "vite": "^5.4.11",
-    "vite-bundle-visualizer": "^1.2.0",
+    "vite-bundle-visualizer": "^1.2.1",
     "vite-plugin-image-optimizer": "^1.1.9"
   }
 
 }
+
