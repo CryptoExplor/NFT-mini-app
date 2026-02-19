@@ -1,9 +1,9 @@
 import { getCollectionBySlug } from '../src/lib/loadCollections.js';
 
 const APP_NAME = 'Base Mint App';
-const DEFAULT_DESCRIPTION = 'Mint and collect Onchain NFTs on Base';
-const DEFAULT_IMAGE = '/cover.gif';
-const DEFAULT_SHARE_PREVIEW_IMAGE = '/cover.gif';
+const DEFAULT_DESCRIPTION = 'Multi-collection minting in a Base mini app.';
+const DEFAULT_IMAGE = '/image.png';
+const DEFAULT_SHARE_PREVIEW_IMAGE = '/image1.png';
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     const slug = collection?.slug || null;
     const pageUrl = (slug ? absoluteUrl(`/share/${slug}`, origin) : absoluteUrl('/share', origin)) || 'https://base-mintapp.vercel.app/share';
     const targetUrl = (slug ? absoluteUrl(`/mint/${slug}`, origin) : absoluteUrl('/', origin)) || 'https://base-mintapp.vercel.app/';
-    const miniAppImageUrl = absoluteUrl(collection?.shareImageUrl || collection?.imageUrl || DEFAULT_IMAGE, origin) || 'https://base-mintapp.vercel.app/cover.gif';
+    const miniAppImageUrl = absoluteUrl(collection?.shareImageUrl || collection?.imageUrl || DEFAULT_IMAGE, origin) || 'https://base-mintapp.vercel.app/image.png';
     const previewImageUrl = absoluteUrl(
         collection
             ? (collection.shareImageUrl || collection.imageUrl || DEFAULT_IMAGE)
