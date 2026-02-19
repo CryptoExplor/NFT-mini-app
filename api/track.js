@@ -454,6 +454,12 @@ async function checkRateLimit(key, action) {
     const count = await kv.incr(limitKey);
     if (count === 1) {
         await kv.expire(limitKey, 60); // 1 min window
+    } else {
+        // Safety: if key exists without TTL (crash between INCR and EXPIRE), fix it
+        const ttl = await kv.ttl(limitKey);
+        if (ttl === -1) {
+            await kv.expire(limitKey, 60);
+        }
     }
 
     const limits = {

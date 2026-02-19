@@ -1,6 +1,6 @@
 /**
- * NFT Multi-Collection Mint App - OPTIMIZED
- * Main entry point with parallel initialization
+ * NFT Multi-Collection Mint App - PERFORMANCE OPTIMIZED
+ * Main entry point with lazy-loaded wallet & deferred heavy dependencies
  */
 
 // Import CSS first
@@ -9,31 +9,44 @@ import './index.css';
 // Import polyfills
 import './polyfills.js';
 
-// Core imports
-import { initWallet, connectMiniAppWalletSilently } from './wallet.js';
+// Lightweight core imports only (no heavy vendor deps)
 import { state, EVENTS } from './state.js';
-import { initFarcasterSDK } from './farcaster.js';
 import { router } from './lib/router.js';
 import { toast } from './utils/toast.js';
 import { $ } from './utils/dom.js';
-import { sdk as farcasterSdk } from '@farcaster/miniapp-sdk';
 import { initTheme } from './utils/theme.js';
+// Farcaster SDK is kept as static import (~100KB) so ready() fires instantly.
+// Without this, the app stays stuck on the Farcaster splash screen.
+import { sdk as farcasterSdk } from '@farcaster/miniapp-sdk';
+import { initFarcasterSDK } from './farcaster.js';
 
 // Apply theme as early as possible to avoid flash on first paint.
 initTheme();
+
+// ============================================
+// LAZY MODULE LOADERS
+// ============================================
+
+// wallet.js pulls in ~1.6MB of vendor JS (appkit, viem, wagmi).
+// We load it lazily so the page renders before those deps are parsed.
+let _walletModule = null;
+async function getWalletModule() {
+    if (!_walletModule) _walletModule = await import('./wallet.js');
+    return _walletModule;
+}
 
 // ============================================
 // OPTIMIZED INITIALIZATION
 // ============================================
 
 async function init() {
-    console.log('🚀 Initializing NFT Mint App (Optimized)...');
+    console.log('🚀 Initializing NFT Mint App (Perf Optimized)...');
 
     const startTime = performance.now();
 
-    // ⚡ STEP 0: Call ready() IMMEDIATELY — before ANY async work
+    // ⚡ STEP 0: Call ready() IMMEDIATELY — before ANY async work.
     // This dismisses the Farcaster mobile splash screen ASAP.
-    // If this doesn't fire, the app is stuck on splash forever.
+    // Uses the statically imported SDK — no dynamic import delay.
     try {
         await farcasterSdk.actions.ready({ disableNativeGestures: true });
         console.log('✅ Farcaster ready() fired');
@@ -42,14 +55,36 @@ async function init() {
         console.log('ℹ️ Farcaster ready() skipped (not in frame)');
     }
 
-    // Step 1: Start all independent tasks in PARALLEL
-    const [farcasterResult, toastReady] = await Promise.all([
-        initFarcasterSDK().catch(e => {
+    // Step 1: Initialize Farcaster context in background (lightweight)
+    const farcasterPromise = initFarcasterSDK()
+        .catch(e => {
             console.warn('Farcaster init failed:', e);
             return { sdk: null, context: null, inMiniApp: false, host: 'web', clientFid: null };
-        }),
-        Promise.resolve(toast.init())
-    ]);
+        });
+
+    // Step 2: Init toast (sync, tiny)
+    toast.init();
+
+    // Step 3: Setup routes (synchronous, no waiting)
+    setupRoutes();
+
+    // Step 4: Render the page IMMEDIATELY — user sees content NOW
+    await router.handleRoute();
+
+    // Step 5: Hide loading overlay — content is visible
+    hideLoading();
+
+    // Performance logging (before wallet loads)
+    const renderTime = performance.now() - startTime;
+    console.log(`🎉 Page rendered in ${renderTime.toFixed(0)}ms`);
+
+    // ============================================
+    // DEFERRED: Load wallet & Farcaster in background
+    // These are non-blocking — user already sees the page.
+    // ============================================
+
+    // Wait for Farcaster context (usually fast, ~50ms)
+    const farcasterResult = await farcasterPromise;
 
     if (farcasterResult.inMiniApp && farcasterResult.context) {
         console.log(`📱 Running in ${farcasterResult.host === 'base' ? 'Base App' : 'Farcaster Mini App'}`);
@@ -59,9 +94,6 @@ async function init() {
             host: farcasterResult.host || 'unknown-miniapp',
             clientFid: farcasterResult.clientFid ?? null
         };
-
-        // Try auto-connect (non-blocking)
-        autoConnectFarcaster().catch(e => console.warn('Auto-connect failed:', e));
     } else {
         console.log('🌐 Running in browser');
         state.platform = {
@@ -76,47 +108,33 @@ async function init() {
         document.documentElement.dataset.inMiniapp = String(state.platform.inMiniApp);
     }
 
-    // Step 2: Setup routes (synchronous, no waiting)
-    setupRoutes();
+    // Load wallet module and initialize (background, non-blocking for UI)
+    try {
+        const walletMod = await getWalletModule();
+        await walletMod.initWallet();
 
-    // Step 3: Initialize wallet + render page IN PARALLEL
-    // This shows the page immediately while wallet connects in background
-    await Promise.all([
-        initWallet(),
-        router.handleRoute() // User sees content immediately!
-    ]);
+        // Auto-connect in mini-app after wallet is ready
+        if (farcasterResult.inMiniApp) {
+            walletMod.connectMiniAppWalletSilently().catch(e => console.warn('Auto-connect failed:', e));
+        }
+    } catch (e) {
+        console.warn('Wallet init deferred error:', e);
+    }
 
-    // Step 4: Add to mini app (non-blocking, ready() already called above)
+    // Add to mini app (non-blocking)
     if (farcasterResult.sdk) {
         farcasterResult.sdk.actions.addMiniApp().catch(e => console.warn('addMiniApp:', e));
     }
 
-    // Step 5: Hide loading overlay
-    hideLoading();
-
-    // Performance logging
-    const loadTime = performance.now() - startTime;
-    console.log(`🎉 App initialized in ${loadTime.toFixed(0)}ms`);
-
-    // Track performance
-    trackPerformance(loadTime);
+    // Track total performance including wallet
+    const totalTime = performance.now() - startTime;
+    console.log(`📊 Full init (incl. wallet) in ${totalTime.toFixed(0)}ms`);
+    trackPerformance(totalTime);
 }
 
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-async function autoConnectFarcaster() {
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const connected = await connectMiniAppWalletSilently();
-    if (connected) {
-        const label = state.platform?.host === 'base' ? 'Base Account' : 'Mini App wallet';
-        console.log(`✅ Auto-connected via ${label}`);
-    }
-}
-
-// notifyFarcasterReady removed — ready() is now called immediately after SDK init
 
 function setupRoutes() {
     let activePageCleanup = null;
@@ -264,4 +282,3 @@ init().catch(error => {
         </div>
     `;
 });
-

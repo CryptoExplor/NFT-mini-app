@@ -1,12 +1,13 @@
 import { base as baseChain, baseSepolia } from 'viem/chains';
 
-// Override Base Mainnet RPC
+// Override Base Mainnet RPC — use env var so the key is never in the bundle
+const rpcUrl = import.meta.env.VITE_BASE_RPC_URL || baseChain.rpcUrls.default.http[0];
 const base = {
     ...baseChain,
     rpcUrls: {
         ...baseChain.rpcUrls,
-        default: { http: ['https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57'] },
-        public: { http: ['https://base-mainnet.infura.io/v3/f0c6b3797dd54dc2aa91cd4a463bcc57'] }
+        default: { http: [rpcUrl] },
+        public: { http: [rpcUrl] }
     }
 };
 

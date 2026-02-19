@@ -55,7 +55,7 @@ export function getWalletIdentityLabel(account = state.wallet) {
   const profileLabel = getMiniAppProfileLabel();
 
   if (account?.isConnected) {
-    return profileLabel || shortenAddress(account.address);
+    return profileLabel || 'User';
   }
 
   if (profileLabel) return `${profileLabel} - Connect`;

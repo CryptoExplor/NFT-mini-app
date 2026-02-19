@@ -6,6 +6,10 @@ import { jwtVerify } from 'jose';
  */
 export async function verifyJWT(token) {
     try {
+        if (!process.env.JWT_SECRET) {
+            console.error('JWT_SECRET environment variable is not configured — refusing to verify tokens');
+            return null;
+        }
         const secret = new TextEncoder().encode(process.env.JWT_SECRET);
         const { payload } = await jwtVerify(token, secret);
         return {

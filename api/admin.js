@@ -13,8 +13,8 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    // Allow dev access without auth
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+    // Allow dev access without auth (ONLY explicit development mode)
+    if (process.env.NODE_ENV === 'development') {
         // Continue...
     } else {
         // Production requires authenticated admin JWT

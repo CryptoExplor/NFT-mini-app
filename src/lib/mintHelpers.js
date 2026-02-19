@@ -10,8 +10,67 @@ import { wagmiAdapter, DATA_SUFFIX } from '../wallet.js';
 import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
-import { encodePacked, keccak256 } from 'viem';
+import { encodePacked, keccak256, encodeFunctionData } from 'viem';
 import { cache } from '../utils/cache.js';
+
+// ============================================
+// EIP-5792 BATCH TRANSACTION SUPPORT
+// ============================================
+
+/**
+ * Check if the connected wallet supports EIP-5792 (wallet_sendCalls).
+ * Caches the result for the current session.
+ */
+let _batchCapability = null;
+async function supportsBatchCalls() {
+    if (_batchCapability !== null) return _batchCapability;
+    try {
+        const provider = await wagmiAdapter?.wagmiConfig?.connector?.getProvider?.();
+        if (!provider?.request) {
+            _batchCapability = false;
+            return false;
+        }
+
+        const capabilities = await provider.request({
+            method: 'wallet_getCapabilities',
+        });
+
+        // Check if any chain supports atomicBatch
+        const chainCaps = capabilities?.[`0x${(8453).toString(16)}`] || capabilities?.['0x2105'] || {};
+        _batchCapability = !!chainCaps?.atomicBatch?.supported;
+        console.log(`EIP-5792 batch support: ${_batchCapability}`);
+        return _batchCapability;
+    } catch {
+        _batchCapability = false;
+        return false;
+    }
+}
+
+/**
+ * Send batched calls via EIP-5792 wallet_sendCalls.
+ * @param {Array<{to: string, data: string, value?: string}>} calls
+ * @returns {string} Bundle ID or transaction hash
+ */
+async function sendBatchedCalls(calls) {
+    const provider = await wagmiAdapter.wagmiConfig.connector.getProvider();
+    const chainId = `0x${(8453).toString(16)}`;
+
+    const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [{
+            version: '1.0',
+            chainId,
+            from: state.wallet.address,
+            calls: calls.map(c => ({
+                to: c.to,
+                data: c.data,
+                value: c.value || '0x0',
+            })),
+        }],
+    });
+
+    return result;
+}
 
 // ============================================
 // DATA FETCHING
@@ -317,6 +376,7 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
 
 /**
  * Burn to mint
+ * Supports EIP-5792 batch transactions when available.
  */
 async function mintBurn(config, wagmiConfig, tokenId, stage) {
     const decimals = stage.decimals || 18;
@@ -376,17 +436,57 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
 
     console.log(`Current allowance: ${allowance}, Needed: ${amountToBurn}`);
 
-    // 3. Approve if needed
+    // 3. If approval needed, try EIP-5792 batching (approve + mint in one step)
     if (allowance < amountToBurn) {
-        console.log('Requesting approval...');
-        // Update UI to show "Approving..." if possible, but we are inside the function
-        // You might want to pass a callback for status updates in a future refactor
+        const canBatch = await supportsBatchCalls();
 
+        if (canBatch) {
+            console.log('⚡ Using EIP-5792 batch: approve + mint in single call');
+
+            // Encode approve calldata
+            const approveData = encodeFunctionData({
+                abi: erc20Abi,
+                functionName: 'approve',
+                args: [spenderAddress, amountToBurn],
+            });
+
+            // Try each possible mint function name
+            const functionNames = ['mint', 'burnMint'];
+            for (const funcName of functionNames) {
+                try {
+                    const mintData = encodeFunctionData({
+                        abi: config.abi,
+                        functionName: funcName,
+                        args: [tokenId],
+                    });
+
+                    // Batch approve + mint into one wallet_sendCalls
+                    const bundleId = await sendBatchedCalls([
+                        { to: tokenAddress, data: approveData },
+                        { to: config.address, data: mintData },
+                    ]);
+
+                    console.log(`✅ Batched approve+mint sent, bundle: ${bundleId}`);
+                    return bundleId;
+                } catch (e) {
+                    if (e.name === 'UserRejectedRequestError' || e.message?.includes('User rejected')) {
+                        throw e;
+                    }
+                    console.log(`Batched ${funcName} failed:`, e);
+                }
+            }
+
+            // If batch failed for all functions, fall through to sequential
+            console.warn('Batch failed, falling back to sequential approve → mint');
+        }
+
+        // Sequential fallback: approve first, then mint
+        console.log('Requesting approval...');
         const approveHash = await writeContract(wagmiConfig, {
             address: tokenAddress,
             abi: erc20Abi,
             functionName: 'approve',
-            args: [spenderAddress, amountToBurn], // Approve exact amount or MaxUint256
+            args: [spenderAddress, amountToBurn],
             chainId: config.chainId,
             dataSuffix: DATA_SUFFIX
         });
@@ -396,9 +496,7 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
         console.log('Approval confirmed!');
     }
 
-    // 4. Execute Mint
-    // Try minting function. For burn-to-mint, it's usually just 'mint' or 'burnMint'
-    // The contract handles the transferFrom and burn
+    // 4. Execute Mint (sequential — either allowance was sufficient or approve just confirmed)
     const functionNames = ['mint', 'burnMint'];
 
     for (const funcName of functionNames) {
@@ -408,12 +506,15 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
                 address: config.address,
                 abi: config.abi,
                 functionName: funcName,
-                args: [tokenId], // Some burn mints might assume tokenId, others might just be amount. Assuming tokenId based on previous logic.
+                args: [tokenId],
                 chainId: config.chainId,
                 dataSuffix: DATA_SUFFIX
             });
             return hash;
         } catch (e) {
+            if (e.name === 'UserRejectedRequestError' || e.message?.includes('User rejected')) {
+                throw e;
+            }
             console.log(`${funcName} failed:`, e);
         }
     }
@@ -437,7 +538,7 @@ export function getMintButtonText(stage) {
         case 'FREE':
             return 'Free Mint';
         case 'PAID':
-            return `Mint (${stage.price / 1e18} ETH)`;
+            return `Mint (${Number(BigInt(stage.price)) / 1e18} ETH)`;
         case 'BURN_ERC20':
             return 'Burn to Mint';
         default:
@@ -469,11 +570,11 @@ export function getMintTypeLabel(mintPolicy) {
 export async function verifyAllowlist(address, proof, merkleRoot) {
     if (!proof || !merkleRoot) return false;
 
-    // In a real app, you'd use a library like merkletreejs
-    // For this implementation, we'll use viem's keccak256
+    // WARNING: This is a mock implementation that always returns true.
+    // In production, use a library like merkletreejs to verify Merkle proofs.
+    console.warn('[verifyAllowlist] Using mock implementation — always returns true. Implement proper Merkle proof verification for production.');
     const leaf = keccak256(address);
-    // This is a simplified check, usually involves MerkleTree.verify
-    return true; // Mock return for now
+    return true;
 }
 
 /**

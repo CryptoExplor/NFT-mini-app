@@ -1,14 +1,31 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
 import { state, EVENTS } from '../state.js';
-import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
-import { getBalance } from '@wagmi/core';
-import { shareCollection, shareAppOnFarcaster } from '../utils/social.js';
+// wallet.js and @wagmi/core are lazy-loaded to avoid pulling 1.6MB+ of vendor JS into the home page chunk.
+// They are only needed on wallet button clicks and balance fetches.
+import { shareCollection, shareAppToFeed } from '../utils/social.js';
 import { analytics } from '../utils/analytics.js';
 import { trackPageView } from '../lib/api.js';
 import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
+
+// Lazy wallet module loader
+let _walletMod = null;
+async function getWalletModule() {
+  if (!_walletMod) _walletMod = await import('../wallet.js');
+  return _walletMod;
+}
+
+async function connectWallet() {
+  const mod = await getWalletModule();
+  return mod.connectWallet();
+}
+
+async function disconnectWallet() {
+  const mod = await getWalletModule();
+  return mod.disconnectWallet();
+}
 
 // Store event handler reference for cleanup
 let walletUpdateHandler = null;
@@ -529,7 +546,7 @@ function attachEventHandlers() {
   const globalShareBtn = document.getElementById('global-share-btn');
   if (globalShareBtn) {
     globalShareBtn.addEventListener('click', async () => {
-      await shareAppOnFarcaster();
+      await shareAppToFeed();
     });
   }
 
@@ -796,9 +813,15 @@ async function updateWalletBalance(account) {
   balanceValue.textContent = 'Loading...';
 
   try {
+    // Lazy-load wagmi getBalance + adapter (only on demand)
+    const [{ getBalance }, walletMod] = await Promise.all([
+      import('@wagmi/core'),
+      getWalletModule()
+    ]);
+
     // Use chainId from account, or default to base (8453)
     const chainId = account.chainId || 8453;
-    const balance = await getBalance(wagmiAdapter.wagmiConfig, {
+    const balance = await getBalance(walletMod.wagmiAdapter.wagmiConfig, {
       address: account.address,
       chainId: chainId
     });

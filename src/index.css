@@ -214,6 +214,27 @@ body {
   background: rgba(15, 23, 42, 0.06);
 }
 
+/* ---------- Mint success screen (light) ---------- */
+.mint-divider {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mint-share-text {
+  color: #a5b4fc; /* indigo-300 */
+}
+
+:root[data-theme='light'] .mint-divider {
+  background: rgba(15, 23, 42, 0.15);
+}
+
+:root[data-theme='light'] .mint-share-text {
+  color: #4338ca; /* indigo-700 */
+}
+
+:root[data-theme='light'] .text-emerald-300 {
+  color: #047857; /* emerald-700 — visible on light bg */
+}
+
 /* ============================================ */
 /* BUTTONS */
 /* ============================================ */

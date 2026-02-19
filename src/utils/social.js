@@ -3,7 +3,7 @@ import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
 
 const APP_ORIGIN = 'https://base-mintapp.vercel.app';
 const WARPCAST_COMPOSE_URL = 'https://warpcast.com/~/compose';
-const COLLECTION_SHARE_FALLBACK_IMAGE = '/image.png';
+const COLLECTION_SHARE_FALLBACK_IMAGE = '/cover.gif';
 
 function getAppOrigin() {
     if (typeof window !== 'undefined' && typeof window.location?.origin === 'string' && window.location.origin.startsWith('http')) {
@@ -240,9 +240,9 @@ export async function shareCollection(collection) {
 }
 
 /**
- * Specifically share to Farcaster
+ * Share to feed (client-agnostic)
  */
-export async function shareToFarcaster(collection, customText = null) {
+export async function shareToFeed(collection, customText = null) {
     const url = getPlatformShareUrl('farcaster', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
     const embeds = getCollectionEmbeds(collection);
@@ -277,11 +277,11 @@ export function shareToTwitter(collection, customText = null) {
 }
 
 /**
- * Share the main app to Farcaster
+ * Share the main app to feed (client-agnostic)
  */
-export async function shareAppOnFarcaster() {
+export async function shareAppToFeed() {
     const url = getMainAppShareUrl();
-    const text = 'Check out this minting app on Base!';
+    const text = 'Check out Base Mint App — Mint and collect Onchain NFTs on Base!';
     const embeds = getMainAppEmbeds();
 
     if (await tryComposeCast(text, embeds)) {

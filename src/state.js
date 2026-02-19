@@ -45,10 +45,13 @@ export const EVENTS = {
 };
 
 export function updateState(path, value) {
-    // Simple deep set
+    // Simple deep set with auto-creation of missing intermediates
     const keys = path.split('.');
     let current = state;
     for (let i = 0; i < keys.length - 1; i++) {
+        if (current[keys[i]] === undefined || current[keys[i]] === null) {
+            current[keys[i]] = {};
+        }
         current = current[keys[i]];
     }
     current[keys[keys.length - 1]] = value;

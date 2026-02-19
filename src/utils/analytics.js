@@ -12,13 +12,18 @@ class AnalyticsSystem {
     }
 
     _load() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            try {
-                return JSON.parse(stored);
-            } catch (e) {
-                console.error('Failed to parse analytics', e);
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                try {
+                    return JSON.parse(stored);
+                } catch (e) {
+                    console.error('Failed to parse analytics', e);
+                }
             }
+        } catch (e) {
+            // localStorage may be unavailable (private browsing, sandboxed iframe)
+            console.warn('localStorage unavailable for analytics:', e.message);
         }
         return {
             views: {},      // { slug: count }
@@ -30,7 +35,12 @@ class AnalyticsSystem {
     }
 
     _save() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+        } catch (e) {
+            // localStorage may be unavailable or quota exceeded
+            console.warn('Failed to save analytics:', e.message);
+        }
     }
 
     /**

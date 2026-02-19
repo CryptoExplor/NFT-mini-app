@@ -38,7 +38,7 @@ function escapeHtml(value) {
 function getViewerIdentity(walletAddress) {
     const miniProfile = getMiniAppProfile();
     const profileLabel = getMiniAppProfileLabel(miniProfile);
-    const walletLabel = walletAddress ? shortenAddress(walletAddress) : '';
+    const walletLabel = walletAddress ? 'User' : '';
 
     return {
         profileLabel: profileLabel || '',
@@ -629,12 +629,10 @@ function renderLeaderboard(leaderboard) {
             <tbody class="text-sm">
                 ${leaderboard.map((user, i) => {
         const isMe = (user.wallet || '').toLowerCase() === (state.wallet?.address || '').toLowerCase();
-        const shortWallet = shortenAddress(user.wallet || '');
+        const shortWallet = 'User';
         const safeShortWallet = escapeHtml(shortWallet);
         const primaryIdentity = isMe && viewerIdentity.profileLabel ? safeViewerPrimaryLabel : safeShortWallet;
-        const secondaryIdentity = isMe && viewerIdentity.profileLabel
-            ? `<span class="ml-1 text-[10px] opacity-45 font-mono">${safeShortWallet}</span>`
-            : '';
+        const secondaryIdentity = '';
         return `
                         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors ${isMe ? 'bg-indigo-500/10' : ''}">
                             <td class="py-3 pl-3 font-mono text-indigo-300">
@@ -671,10 +669,9 @@ function renderActivityFeed(activity) {
         const timeAgo = getTimeAgo(item.timestamp);
         const wallet = String(item.wallet || '');
         const isMe = wallet.toLowerCase() === (state.wallet?.address || '').toLowerCase();
-        const shortWallet = escapeHtml(shortenAddress(wallet));
         const walletLabel = isMe && viewerIdentity.profileLabel
-            ? `<span>${escapeHtml(viewerIdentity.primaryLabel)}</span><span class="ml-1 text-[9px] opacity-45 font-mono">${shortWallet}</span>`
-            : shortWallet;
+            ? `<span>${escapeHtml(viewerIdentity.primaryLabel)}</span>`
+            : 'User';
         return `
             <div class="flex items-center gap-3 p-2.5 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all animate-fade-in">
                 <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
@@ -976,7 +973,7 @@ async function loadAdminOverview() {
         <div class="bg-white/5 rounded-xl p-3">
             <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
             <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
-                ${lb.map(u => `<div class="flex justify-between"><span>${shortenAddress(u.wallet)}</span><span class="font-bold">${u.score}</span></div>`).join('')}
+                ${lb.map(u => `<div class="flex justify-between"><span>User</span><span class="font-bold">${u.score}</span></div>`).join('')}
             </div>
         </div>
     `;
@@ -1027,7 +1024,7 @@ async function handleAdminDateAction(action, title) {
                 <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date}</div>
                 <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
                 <div class="text-xs font-mono opacity-60 max-h-32 overflow-y-auto">
-                    ${(data.wallets || []).map(w => shortenAddress(w)).join(', ') || 'None'}
+                    ${(data.wallets || []).length || 'None'}
                 </div>
             </div>
         `;

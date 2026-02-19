@@ -32,10 +32,14 @@ export const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * @param {bigint} val 
  */
 export function formatEther(val) {
-    // Simple implementation without importing viem here to keep bundle small if needed, 
-    // but cleaner to just let the main app handle huge number formatting via viem/ethers logic.
-    // For now, we will assume passing BigInt.
-    return (Number(val) / 1e18).toString();
+    // Precision-safe BigInt → ETH string conversion (avoids Number() overflow)
+    const bi = BigInt(val);
+    const divisor = 10n ** 18n;
+    const whole = bi / divisor;
+    const remainder = bi % divisor;
+    if (remainder === 0n) return whole.toString();
+    const fracStr = remainder.toString().padStart(18, '0').replace(/0+$/, '');
+    return `${whole}.${fracStr}`;
 }
 
 /**

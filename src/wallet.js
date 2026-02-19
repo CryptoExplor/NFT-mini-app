@@ -1,5 +1,3 @@
-import { createAppKit } from '@reown/appkit';
-import { base } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
 import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect, connect as wagmiConnect } from '@wagmi/core';
@@ -29,33 +27,45 @@ export const wagmiAdapter = new WagmiAdapter({
     connectors: [farcasterMiniApp()]
 });
 
-// 4. Create Modal with improved configuration
-export const modal = createAppKit({
-    adapters: [wagmiAdapter],
-    networks: [base],
-    projectId,
-    themeMode: 'dark',
-    features: {
-        analytics: true,
-        injected: true, // Enable injected wallet detection
-        email: false,
-        socials: []
-    },
-    themeVariables: {
-        '--w3m-accent': '#6366F1',
-        '--w3m-border-radius-master': '1px'
-    },
-    // Enhanced metadata for better detection
-    metadata: {
-        name: 'Base Mint App',
-        description: 'Mint NFTs on Base',
-        url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
-        icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
-    },
-    allWallets: 'SHOW' // Show all available wallets
-});
-
 let currentUnwatch = null;
+let modalInstancePromise = null;
+
+async function getWalletModal() {
+    if (!modalInstancePromise) {
+        modalInstancePromise = (async () => {
+            const [{ createAppKit }, { base }] = await Promise.all([
+                import('@reown/appkit'),
+                import('@reown/appkit/networks')
+            ]);
+
+            return createAppKit({
+                adapters: [wagmiAdapter],
+                networks: [base],
+                projectId,
+                themeMode: 'dark',
+                features: {
+                    analytics: true,
+                    injected: true,
+                    email: false,
+                    socials: []
+                },
+                themeVariables: {
+                    '--w3m-accent': '#6366F1',
+                    '--w3m-border-radius-master': '1px'
+                },
+                metadata: {
+                    name: 'Base Mint App',
+                    description: 'Mint NFTs on Base',
+                    url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
+                    icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
+                },
+                allWallets: 'SHOW'
+            });
+        })();
+    }
+
+    return modalInstancePromise;
+}
 
 function normalizeConnectorLabel(connector) {
     return `${connector?.id || ''} ${connector?.name || ''}`.toLowerCase();
@@ -203,6 +213,7 @@ function handleAccountChange(account) {
 export async function connectWallet() {
     const connected = await connectMiniAppWalletSilently();
     if (connected) return;
+    const modal = await getWalletModal();
     await modal.open();
 }
 

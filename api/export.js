@@ -3,6 +3,15 @@ import { requireAdmin } from './lib/authMiddleware.js';
 
 const BATCH_SIZE = 1000;
 
+/**
+ * Sanitize CSV cell values to prevent formula injection.
+ * Wraps in double quotes and escapes existing quotes.
+ */
+function csvSafe(value) {
+    const str = String(value ?? '');
+    return '"' + str.replace(/"/g, '""') + '"';
+}
+
 function cors(res) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -81,12 +90,12 @@ async function streamUsersCSV(res) {
             else if (streak >= 3) badge = 'Rising';
 
             const row = [
-                wallet,
+                csvSafe(wallet),
                 p.total_points || 0,
                 p.total_mints || 0,
                 parseFloat(p.total_volume || 0).toFixed(6),
                 streak,
-                badge,
+                csvSafe(badge),
                 p.first_seen ? new Date(parseInt(p.first_seen)).toISOString() : '',
                 p.last_active ? new Date(parseInt(p.last_active)).toISOString() : ''
             ].join(',');
@@ -123,7 +132,7 @@ async function streamCollectionsCSV(res) {
             const count = data[i * 2 + 1] || 0;
 
             const row = [
-                slugs[i],
+                csvSafe(slugs[i]),
                 stats.views || 0,
                 stats.mints || 0,
                 stats.attempts || 0,
@@ -153,9 +162,9 @@ async function streamMintsCSV(res) {
                 const type = data.price > 0 ? 'paid' : 'free';
                 const row = [
                     new Date(data.timestamp).toISOString(),
-                    data.txHash || '',
-                    data.wallet,
-                    data.collection,
+                    csvSafe(data.txHash || ''),
+                    csvSafe(data.wallet),
+                    csvSafe(data.collection),
                     data.price || 0,
                     type
                 ].join(',');

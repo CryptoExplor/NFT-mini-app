@@ -623,19 +623,19 @@ async function handleMint(collection, stage) {
           <a href="${collection.openseaUrl}" target="_blank" rel="noopener noreferrer" class="text-emerald-300 underline text-sm">View Collection on OpenSea</a>
         ` : ''}
         
-        <div class="w-full h-px bg-white/10 my-2"></div>
+        <div class="w-full h-px mint-divider my-2"></div>
         
-        <p class="text-indigo-300 font-bold">Share your mint! 🚀</p>
+        <p class="mint-share-text font-bold">Share your mint! 🚀</p>
         
         <div class="flex space-x-3">
-          <button id="share-mint-success" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
+          <button id="share-mint-success" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
               <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 1 1 0 3.186m9.566-3.186a2.25 2.25 0 1 0 0 3.186m-7.566-1.593h5.566" />
             </svg>
             <span class="text-xs font-bold">Share Mint</span>
           </button>
           
-          <button id="share-twitter-success" class="bg-black hover:bg-slate-900 border border-white/10 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
+          <button id="share-twitter-success" class="bg-gray-900 hover:bg-gray-800 text-white border border-gray-700 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all transform hover:scale-105">
              <span class="text-lg">𝕏</span>
              <span class="text-xs font-bold">Share on X</span>
           </button>

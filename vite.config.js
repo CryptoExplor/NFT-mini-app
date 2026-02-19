@@ -7,33 +7,23 @@ export default defineConfig({
         target: 'esnext',
         outDir: 'dist',
 
-        // Minification
-        minify: 'terser',
-        terserOptions: {
-            compress: {
-                drop_console: true,      // Remove console.logs in production
-                drop_debugger: true,
-                pure_funcs: ['console.log', 'console.info']
-            },
-            format: {
-                comments: false          // Remove comments
-            }
-        },
+        // esbuild minification — much faster than Terser, comparable output
+        minify: 'esbuild',
 
         // Code splitting configuration
         rollupOptions: {
             output: {
                 // Manual chunks for better caching
                 manualChunks: {
-                    // Vendor chunks (rarely change)
+                    // Vendor chunks (rarely change, cached long-term)
                     'vendor-wagmi': ['@wagmi/core'],
                     'vendor-viem': ['viem'],
                     'vendor-appkit': ['@reown/appkit', '@reown/appkit-adapter-wagmi'],
+                    'vendor-farcaster': ['@farcaster/miniapp-sdk'],
 
-                    // Feature chunks (lazy loaded)
+                    // Feature chunks (lazy loaded on demand)
                     'collections': ['./src/lib/loadCollections.js'],
                     'mint-helpers': ['./src/lib/mintHelpers.js'],
-                    'router': ['./src/lib/router.js'],
                 },
 
                 // Better file naming
@@ -103,9 +93,11 @@ export default defineConfig({
         }
     },
 
-    // Build performance
+    // Build performance — esbuild options
     esbuild: {
-        logOverride: { 'this-is-undefined-in-esm': 'silent' }
+        logOverride: { 'this-is-undefined-in-esm': 'silent' },
+        // Strip console.log and console.info in production builds
+        drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
     },
 
     // Preview server (for testing build)

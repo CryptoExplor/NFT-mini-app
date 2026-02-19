@@ -1,5 +1,15 @@
 import { kv } from '@vercel/kv';
-import { loadCollections } from '../src/lib/loadCollections.js';
+
+// NOTE: loadCollections uses import.meta.env (Vite-only) which doesn't exist in
+// Vercel serverless Node.js runtime. We wrap it in a try/catch to degrade gracefully.
+let loadCollections;
+try {
+    const mod = await import('../src/lib/loadCollections.js');
+    loadCollections = mod.loadCollections;
+} catch (e) {
+    console.warn('[leaderboard] Could not load loadCollections — import.meta.env is unavailable in this runtime. Falling back to KV-only slugs.');
+    loadCollections = () => [];
+}
 
 function cors(res) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');

@@ -52,10 +52,17 @@ class ToastManager {
         else if (type === 'warning') toast.style.borderLeft = '4px solid #F59E0B';
         else toast.style.borderLeft = '4px solid #6366F1';
 
-        toast.innerHTML = `
-      <span class="toast-icon" style="font-size: 1.2em">${this.getIcon(type)}</span>
-      <span class="toast-message">${message}</span>
-    `;
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'toast-icon';
+        iconSpan.style.fontSize = '1.2em';
+        iconSpan.textContent = this.getIcon(type);
+
+        const msgSpan = document.createElement('span');
+        msgSpan.className = 'toast-message';
+        msgSpan.textContent = message;
+
+        toast.appendChild(iconSpan);
+        toast.appendChild(msgSpan);
 
         this.container.appendChild(toast);
 
