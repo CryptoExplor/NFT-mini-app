@@ -26,6 +26,8 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
+        // Cache at edge for 60s — leaderboard data changes slowly
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
         const { type = 'mints', period = 'all_time', limit = 10, collection = null } = req.query;
         const typeKey = VALID_TYPES.has(type) ? type : 'mints';
         const safeLimit = Math.max(1, Math.min(parseInt(limit, 10) || 10, 100));
@@ -252,13 +254,10 @@ function shortenAddr(addr) {
 async function getTopCollections() {
     try {
         const configuredSlugs = getConfiguredCollectionSlugs();
-        const keys = await scanAllKeys('collection:*:stats');
-        const statsSlugs = keys
-            .map((k) => k.split(':')[1])
-            .filter(Boolean);
-        const slugs = configuredSlugs.size > 0
-            ? [...configuredSlugs]
-            : [...new Set(statsSlugs)];
+        // OPTIMIZED: Use static configured slugs directly instead of
+        // expensive kv.scan('collection:*:stats') which does multiple
+        // round-trip cursor iterations (was biggest single KV waste).
+        const slugs = [...configuredSlugs];
 
         if (slugs.length === 0) return [];
 
@@ -275,7 +274,6 @@ async function getTopCollections() {
             const mints = parseInt(stats.mints, 10) || 0;
             const attempts = parseInt(stats.attempts, 10) || 0;
             const volume = parseFloat(stats.volume) || 0;
-            if (!configuredSlugs.has(slugs[i]) && views === 0 && mints === 0 && attempts === 0 && volume === 0) continue;
             collections.push({
                 slug: slugs[i],
                 views,
@@ -294,18 +292,7 @@ async function getTopCollections() {
     }
 }
 
-async function scanAllKeys(match) {
-    const keys = [];
-    let cursor = '0';
-    do {
-        const [nextCursor, batch] = await kv.scan(cursor, { match, count: 1000 });
-        cursor = String(nextCursor);
-        if (Array.isArray(batch) && batch.length > 0) {
-            keys.push(...batch);
-        }
-    } while (cursor !== '0');
-    return keys;
-}
+
 
 function getConfiguredCollectionSlugs() {
     try {

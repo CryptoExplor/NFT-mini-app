@@ -1,5 +1,28 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// ── Client-side event dedup/throttle ───────────────────────────
+// Prevents the same event from firing more than once per DEDUP_TTL.
+// Critical events (mints, wallet connect) are NEVER deduplicated.
+const DEDUP_TTL = 30_000; // 30 seconds
+const _recentEvents = new Map();
+const NEVER_DEDUP = new Set(['mint_success', 'mint_failure', 'mint_attempt', 'tx_sent', 'wallet_connect']);
+
+function shouldThrottle(type, data) {
+    if (NEVER_DEDUP.has(type)) return false;
+    const key = `${type}:${data.page || data.collection || ''}`;
+    const now = Date.now();
+    const lastSent = _recentEvents.get(key);
+    if (lastSent && (now - lastSent) < DEDUP_TTL) return true;
+    _recentEvents.set(key, now);
+    // Cleanup old entries periodically (keep map small)
+    if (_recentEvents.size > 50) {
+        for (const [k, t] of _recentEvents) {
+            if (now - t > DEDUP_TTL) _recentEvents.delete(k);
+        }
+    }
+    return false;
+}
+
 /**
  * Track a structured event to backend analytics
  * @param {string} type - Event type (page_view, mint_success, etc.)
@@ -7,6 +30,9 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
  */
 export async function trackEvent(type, data = {}) {
     try {
+        // Client-side dedup: skip if same event fired recently
+        if (shouldThrottle(type, data)) return;
+
         // Enrich with client-side metadata
         const enriched = {
             type,
