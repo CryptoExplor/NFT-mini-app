@@ -53,6 +53,23 @@ export default async function handler(req, res) {
         const collections = await getTopCollections();
 
         const formattedLeaderboard = formatLeaderboard(rawLeaderboard);
+
+        // Resolve display names for leaderboard wallets (1 pipeline, N reads)
+        if (formattedLeaderboard.length > 0) {
+            const namePipe = kv.pipeline();
+            for (const entry of formattedLeaderboard) {
+                namePipe.hget(`user:${entry.wallet}:profile`, 'display_name');
+            }
+            const names = await namePipe.exec();
+            for (let i = 0; i < formattedLeaderboard.length; i++) {
+                const w = formattedLeaderboard[i].wallet;
+                formattedLeaderboard[i].displayName = names[i] || null;
+                formattedLeaderboard[i].shortAddress = w && w.length >= 10
+                    ? `${w.slice(0, 6)}...${w.slice(-4)}`
+                    : w || 'Unknown';
+            }
+        }
+
         const parsedActivity = parseList(recentActivity);
         const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
         const funnelSteps = buildFunnel(funnelData || {});

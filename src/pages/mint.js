@@ -16,7 +16,7 @@ import { trackMint, trackMintClick, trackMintAttempt, trackTxSent, trackMintFail
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
-import { analytics } from '../utils/analytics.js';
+
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
@@ -61,8 +61,7 @@ export async function renderMintPage(params) {
     return;
   }
 
-  // Track view
-  analytics.trackView(slug);
+
 
   currentCollection = collection;
 
@@ -597,13 +596,13 @@ async function handleMint(collection, stage) {
     mintStatus.textContent = 'Confirm transaction in your wallet';
 
     // Track attempt
-    analytics.trackMintAttempt(collection.slug);
+
     trackMintAttempt(state.wallet.address, collection.slug);
 
     const hash = await mint(collection, stage);
 
     // Track success
-    analytics.trackMintSuccess(collection.slug, hash);
+
 
     toast.show('Successfully minted NFT! 🎉', 'success');
 
@@ -673,7 +672,7 @@ async function handleMint(collection, stage) {
     console.error('Mint error:', error);
 
     // Track failure
-    analytics.trackMintFailure(collection.slug, error);
+
     trackMintFailure(state.wallet.address, collection.slug, error?.message || 'unknown');
 
     const friendlyMessage = handleMintError(error);

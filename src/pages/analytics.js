@@ -629,9 +629,9 @@ function renderLeaderboard(leaderboard) {
             <tbody class="text-sm">
                 ${leaderboard.map((user, i) => {
         const isMe = (user.wallet || '').toLowerCase() === (state.wallet?.address || '').toLowerCase();
-        const shortWallet = 'User';
-        const safeShortWallet = escapeHtml(shortWallet);
-        const primaryIdentity = isMe && viewerIdentity.profileLabel ? safeViewerPrimaryLabel : safeShortWallet;
+        const label = user.displayName || user.shortAddress || shortenAddress(user.wallet);
+        const safeLabel = escapeHtml(label);
+        const primaryIdentity = isMe && viewerIdentity.profileLabel ? safeViewerPrimaryLabel : safeLabel;
         const secondaryIdentity = '';
         return `
                         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors ${isMe ? 'bg-indigo-500/10' : ''}">
@@ -669,9 +669,10 @@ function renderActivityFeed(activity) {
         const timeAgo = getTimeAgo(item.timestamp);
         const wallet = String(item.wallet || '');
         const isMe = wallet.toLowerCase() === (state.wallet?.address || '').toLowerCase();
+        const shortWallet = wallet.length >= 10 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : 'Unknown';
         const walletLabel = isMe && viewerIdentity.profileLabel
             ? `<span>${escapeHtml(viewerIdentity.primaryLabel)}</span>`
-            : 'User';
+            : escapeHtml(shortWallet);
         return `
             <div class="flex items-center gap-3 p-2.5 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all animate-fade-in">
                 <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
@@ -973,7 +974,7 @@ async function loadAdminOverview() {
         <div class="bg-white/5 rounded-xl p-3">
             <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
             <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
-                ${lb.map(u => `<div class="flex justify-between"><span>User</span><span class="font-bold">${u.score}</span></div>`).join('')}
+                ${lb.map(u => `<div class="flex justify-between"><span>${u.displayName || u.shortAddress || (u.wallet ? u.wallet.slice(0, 6) + '...' + u.wallet.slice(-4) : 'User')}</span><span class="font-bold">${u.score}</span></div>`).join('')}
             </div>
         </div>
     `;

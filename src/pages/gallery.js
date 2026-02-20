@@ -11,7 +11,7 @@ import { showNFTDetailModal } from '../components/NFTDetailModal.js';
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { getBalance } from '@wagmi/core';
 import { toast } from '../utils/toast.js';
-import { analytics } from '../utils/analytics.js';
+
 import { trackEvent } from '../lib/api.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
@@ -39,7 +39,7 @@ let delegatedClickHandler = null;
  * Render the gallery page
  */
 export async function renderGalleryPage() {
-    analytics.trackView('gallery');
+
     trackEvent('gallery_view', { wallet: state.wallet?.address || null });
 
     const app = document.getElementById('app');

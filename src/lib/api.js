@@ -78,8 +78,8 @@ export function trackCollectionView(collection, wallet = null) {
 /**
  * Track wallet connection
  */
-export function trackWalletConnect(wallet) {
-    trackEvent('wallet_connect', { wallet });
+export function trackWalletConnect(wallet, metadata = null) {
+    trackEvent('wallet_connect', { wallet, metadata });
 }
 
 /**

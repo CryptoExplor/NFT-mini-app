@@ -4,7 +4,7 @@ import { state, EVENTS } from '../state.js';
 // wallet.js and @wagmi/core are lazy-loaded to avoid pulling 1.6MB+ of vendor JS into the home page chunk.
 // They are only needed on wallet button clicks and balance fetches.
 import { shareCollection, shareAppToFeed } from '../utils/social.js';
-import { analytics } from '../utils/analytics.js';
+
 import { trackPageView } from '../lib/api.js';
 import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
@@ -108,7 +108,7 @@ function startHomeCountdownTicker() {
  * Render the homepage with collection grid
  */
 export async function renderHomePage() {
-  analytics.trackView('home');
+
   trackPageView('home', state.wallet?.address || null);
   clearHomeCountdownTicker();
   let collections = loadCollections();

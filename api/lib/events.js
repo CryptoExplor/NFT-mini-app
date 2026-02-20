@@ -96,8 +96,15 @@ export function handleGalleryView(pipe) {
 
 /** wallet_connect — 1-5 commands + 1 pre-read (sadd doubles as check) */
 export async function handleWalletConnect(pipe, event, { kv, weekNum }) {
-    const { wallet } = event;
+    const { wallet, metadata } = event;
     if (!wallet) return;
+
+    // Save display name from Farcaster/Base profile if provided
+    // This writes on EVERY wallet_connect (not just new), so profile names stay current
+    const displayName = metadata?.displayName || metadata?.username || null;
+    if (displayName && typeof displayName === 'string') {
+        pipe.hset(`user:${wallet}:profile`, { display_name: displayName.slice(0, 50) });
+    }
 
     // sadd returns 1 if new — this is both check + write (1 command, not 2)
     const isNew = await kv.sadd('wallets:connected', wallet);

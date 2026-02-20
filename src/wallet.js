@@ -195,8 +195,16 @@ function handleAccountChange(account) {
         const trackedKey = `wallet_tracked_${account.address.toLowerCase()}`;
         if (!sessionStorage.getItem(trackedKey)) {
             sessionStorage.setItem(trackedKey, '1');
-            import('./lib/api.js').then(({ trackWalletConnect }) => {
-                trackWalletConnect(account.address);
+            import('./lib/api.js').then(async ({ trackWalletConnect }) => {
+                let profile = null;
+                try {
+                    const { getMiniAppProfile } = await import('./utils/profile.js');
+                    profile = getMiniAppProfile();
+                } catch (_) {}
+                trackWalletConnect(account.address, profile ? {
+                    displayName: profile.displayName || profile.username || null,
+                    username: profile.username || null
+                } : null);
             }).catch(() => { });
         }
     }
