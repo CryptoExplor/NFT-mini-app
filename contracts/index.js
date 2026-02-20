@@ -7,6 +7,8 @@ import ERC721Standard from './abis/ERC721Standard.js';
 import sigil from './abis/sigil.js';
 import baseInvaders from './abis/base-invaders.js';
 import BASEHEADS_404 from './abis/BASEHEADS_404.js';
+import MiniWorlds from './abis/MiniWorlds.js';
+import NeonShapes from './abis/NeonShapes.js';
 import QuantumQuills from './abis/QuantumQuills.js';
 import VoidPFPs from './abis/void-pfps.js';
 import BaseMoods from './abis/basemoods.js';
@@ -21,6 +23,8 @@ const ABIS = {
     'sigil': sigil,
     'base-invaders': baseInvaders,
     'BASEHEADS_404': BASEHEADS_404,
+    'MiniWorlds': MiniWorlds,
+    'NeonShapes': NeonShapes,
     'QuantumQuills': QuantumQuills,
     'void-pfps': VoidPFPs,
     'basemoods': BaseMoods,
