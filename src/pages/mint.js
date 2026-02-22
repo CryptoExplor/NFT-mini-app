@@ -16,6 +16,8 @@ import { trackMint, trackMintClick, trackMintAttempt, trackTxSent, trackMintFail
 import { renderTransactionHistory } from '../components/TransactionHistory.js';
 import { shareCollection, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
+import { getCollectionActions, getActionInputDefs, getActionConfigInputDefs, executeContractAction } from '../lib/contractActions.js';
+import { fetchOwnedTokenIdsForContract, getOpenSeaChainFromChainId } from '../lib/opensea.js';
 
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
@@ -23,7 +25,10 @@ import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/Th
 
 // Current collection reference
 let currentCollection = null;
+let currentCollectionActions = [];
 let mintCountdownInterval = null;
+let ownedTokenIdsRequestNonce = 0;
+let ownedTokenIdsLoading = false;
 
 function clearMintCountdownTicker() {
   if (mintCountdownInterval) {
@@ -42,6 +47,137 @@ function formatMintCountdown(ms) {
 
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getActionButtonText(action) {
+  if (action.buttonLabel) return action.buttonLabel;
+  if (action.type === 'TRANSFER') return 'Transfer';
+  if (action.type === 'SEND_TO_DEAD') return 'Send to Dead';
+  return 'Run Action';
+}
+
+function renderActionInput(action, input) {
+  const inputKey = `${action.id}:${input.key}`;
+  const label = escapeHtml(input.label || input.key);
+  const placeholder = escapeHtml(input.placeholder || '');
+  const normalizedType = String(input.type || '').toLowerCase();
+
+  if (normalizedType === 'bool') {
+    return `
+      <label class="block">
+        <span class="text-xs opacity-60 mb-1 block">${label}</span>
+        <select
+          data-action-input="${inputKey}"
+          class="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500/50"
+        >
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      </label>
+    `;
+  }
+
+  const isIntegerNumeric = normalizedType.startsWith('uint') || normalizedType.startsWith('int');
+  const isDecimalNumeric = normalizedType === 'eth' || normalizedType === 'decimal';
+  const inputMode = isIntegerNumeric ? 'numeric' : isDecimalNumeric ? 'decimal' : 'text';
+
+  return `
+    <label class="block">
+      <span class="text-xs opacity-60 mb-1 block">${label}</span>
+      <input
+        type="text"
+        inputmode="${inputMode}"
+        placeholder="${placeholder}"
+        data-action-input="${inputKey}"
+        class="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500/50"
+      />
+    </label>
+  `;
+}
+
+function actionNeedsTokenId(action) {
+  return (action.args || []).some((arg) => String(arg.key || '').toLowerCase() === 'tokenid');
+}
+
+function collectionNeedsTokenId(actions) {
+  return actions.some((action) => actionNeedsTokenId(action));
+}
+
+function getMergedActionInputDefs(action) {
+  const merged = [...getActionInputDefs(action), ...getActionConfigInputDefs(action)];
+  const seen = new Set();
+  return merged.filter((input) => {
+    const key = String(input?.key || '').toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function renderContractActionsSection(actions) {
+  if (!actions.length) return '';
+  const showTokenIds = collectionNeedsTokenId(actions);
+
+  return `
+    <div class="glass-card p-8 rounded-2xl mt-8">
+      <h2 class="text-2xl font-bold mb-2">Contract Actions</h2>
+      <p class="text-sm opacity-60 mb-6">Collection-specific interactions for holders.</p>
+      ${showTokenIds ? `
+        <div id="owned-token-ids-panel" class="mb-6 p-4 bg-emerald-500/10 border border-emerald-400/30 rounded-xl">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="text-sm font-semibold text-emerald-200">Your Token IDs</div>
+            <button
+              type="button"
+              id="refresh-token-ids-btn"
+              class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Refresh
+            </button>
+          </div>
+          <div id="owned-token-ids-content" class="text-xs opacity-70">
+            Connect wallet to load token IDs.
+          </div>
+        </div>
+      ` : ''}
+      <div class="space-y-4">
+        ${actions.map((action) => {
+    const inputDefs = getMergedActionInputDefs(action);
+    return `
+            <div class="p-4 bg-white/5 rounded-xl border border-white/10" data-contract-action="${action.id}">
+              <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                <div>
+                  <div class="text-base font-semibold">${escapeHtml(action.label)}</div>
+                  ${action.description ? `<div class="text-xs opacity-60 mt-1">${escapeHtml(action.description)}</div>` : ''}
+                </div>
+                <button
+                  type="button"
+                  data-action-exec="${action.id}"
+                  class="self-start md:self-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  ${escapeHtml(getActionButtonText(action))}
+                </button>
+              </div>
+              <div class="grid md:grid-cols-2 gap-3">
+                ${inputDefs.length
+        ? inputDefs.map((input) => renderActionInput(action, input)).join('')
+        : '<div class="text-xs opacity-50">No additional input required.</div>'}
+              </div>
+              <p class="text-xs mt-3 opacity-60" data-action-status="${action.id}"></p>
+            </div>
+          `;
+  }).join('')}
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -64,6 +200,7 @@ export async function renderMintPage(params) {
 
 
   currentCollection = collection;
+  currentCollectionActions = getCollectionActions(collection);
 
   const app = document.getElementById('app');
 
@@ -238,6 +375,8 @@ export async function renderMintPage(params) {
           <div id="tx-history-container">
             ${renderTransactionHistory()}
           </div>
+
+          ${renderContractActionsSection(currentCollectionActions)}
           
           <!-- Contract Info -->
           <div class="mt-8 text-center text-sm opacity-40">
@@ -270,11 +409,12 @@ export async function renderMintPage(params) {
   `;
 
   // Attach event handlers
-  attachEventHandlers(collection);
+  attachEventHandlers(collection, currentCollectionActions);
   updateMintHeaderIdentity(state.wallet);
 
   // Initialize mint interface
   await initMintInterface(collection);
+  void loadOwnedTokenIds(collection);
 
   // Listen for wallet updates
   document.addEventListener(EVENTS.WALLET_UPDATE, handleWalletUpdate);
@@ -304,7 +444,7 @@ function render404(slug) {
 /**
  * Attach event handlers
  */
-function attachEventHandlers(collection) {
+function attachEventHandlers(collection, actions = []) {
   // Back button
   document.getElementById('back-btn')?.addEventListener('click', () => {
     router.navigate('/');
@@ -323,8 +463,268 @@ function attachEventHandlers(collection) {
   });
 
   // Mint button - will be set up in initMintInterface
+  bindContractActionHandlers(collection, actions);
+  document.getElementById('refresh-token-ids-btn')?.addEventListener('click', () => {
+    if (ownedTokenIdsLoading) return;
+    void loadOwnedTokenIds(collection, { force: true });
+  });
   bindBottomNavEvents();
   bindThemeToggleEvents();
+}
+
+function getActionInputValues(action) {
+  const inputValues = {};
+  const inputDefs = getMergedActionInputDefs(action);
+
+  for (const input of inputDefs) {
+    const selector = `[data-action-input="${action.id}:${input.key}"]`;
+    const element = document.querySelector(selector);
+    inputValues[input.key] = element?.value?.trim() || '';
+  }
+
+  return inputValues;
+}
+
+function setOwnedTokenIdsLoading(isLoading) {
+  ownedTokenIdsLoading = isLoading === true;
+  const refreshBtn = document.getElementById('refresh-token-ids-btn');
+  if (!refreshBtn) return;
+
+  refreshBtn.disabled = ownedTokenIdsLoading;
+  refreshBtn.classList.toggle('opacity-60', ownedTokenIdsLoading);
+  refreshBtn.classList.toggle('cursor-not-allowed', ownedTokenIdsLoading);
+  refreshBtn.innerHTML = ownedTokenIdsLoading
+    ? `
+      <span class="inline-flex items-center gap-1">
+        <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="3"></circle>
+          <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+        </svg>
+        Refreshing
+      </span>
+    `
+    : 'Refresh';
+}
+
+function bindContractActionHandlers(collection, actions) {
+  if (!actions.length) return;
+
+  for (const action of actions) {
+    const button = document.querySelector(`[data-action-exec="${action.id}"]`);
+    const statusEl = document.querySelector(`[data-action-status="${action.id}"]`);
+    if (!button) continue;
+
+    button.addEventListener('click', async () => {
+      const originalLabel = button.textContent;
+
+      if (statusEl) {
+        statusEl.classList.remove('text-red-300', 'text-green-300');
+      }
+
+      try {
+        if (!state.wallet?.isConnected || !state.wallet?.address) {
+          if (statusEl) statusEl.textContent = 'Connect wallet to continue';
+          await connectWallet();
+        }
+
+        if (!state.wallet?.isConnected || !state.wallet?.address) {
+          if (statusEl) {
+            statusEl.classList.add('text-red-300');
+            statusEl.textContent = 'Wallet connection is required';
+          }
+          return;
+        }
+
+        if (state.wallet.chainId !== collection.chainId) {
+          if (statusEl) statusEl.textContent = `Switching to ${getChainName(collection.chainId)}...`;
+          await switchChain(wagmiAdapter.wagmiConfig, { chainId: collection.chainId });
+        }
+
+        const inputValues = getActionInputValues(action);
+
+        button.disabled = true;
+        button.textContent = 'Confirm in Wallet';
+        if (statusEl) statusEl.textContent = 'Confirm transaction in your wallet';
+
+        const hash = await executeContractAction(collection, action, inputValues, state.wallet.address);
+        const explorerBase = getExplorerUrl(collection.chainId);
+        const successText = action.successMessage || `${action.label} completed`;
+
+        if (statusEl) {
+          statusEl.classList.add('text-green-300');
+          statusEl.innerHTML = `
+            ${escapeHtml(successText)}.
+            <a
+              href="${explorerBase}/tx/${hash}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="underline text-indigo-300 ml-1"
+            >
+              View transaction
+            </a>
+          `;
+        }
+
+        toast.show(successText, 'success');
+
+        cache.delete(`col_data_${collection.slug}_${state.wallet.address}`);
+        void loadOwnedTokenIds(collection, { force: true });
+
+      } catch (error) {
+        const friendlyMessage = handleMintError(error);
+        if (statusEl) {
+          statusEl.classList.add('text-red-300');
+          statusEl.textContent = friendlyMessage;
+        }
+        toast.show(friendlyMessage, 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+    });
+  }
+}
+
+function getOpenSeaCollectionSlug(collection) {
+  const rawUrl = String(collection?.openseaUrl || '').trim();
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const collectionIndex = segments.findIndex((seg) => seg.toLowerCase() === 'collection');
+    if (collectionIndex >= 0 && segments[collectionIndex + 1]) {
+      return segments[collectionIndex + 1];
+    }
+    if (segments.length) {
+      return segments[segments.length - 1];
+    }
+  } catch {
+    // Ignore malformed URL and fallback to null.
+  }
+
+  return null;
+}
+
+function setOwnedTokenIdsMessage(message, tone = 'neutral') {
+  const content = document.getElementById('owned-token-ids-content');
+  if (!content) return;
+
+  const toneClass = tone === 'error'
+    ? 'text-red-300'
+    : tone === 'success'
+      ? 'text-emerald-200'
+      : 'opacity-70';
+
+  content.innerHTML = `<span class="${toneClass}">${escapeHtml(message)}</span>`;
+}
+
+function applyTokenIdToActionInputs(tokenId) {
+  const tokenInputs = [...document.querySelectorAll('[data-action-input]')].filter((input) =>
+    String(input.getAttribute('data-action-input') || '').toLowerCase().endsWith(':tokenid')
+  );
+  if (!tokenInputs.length) return;
+
+  const active = document.activeElement;
+  const preferred = tokenInputs.find((input) => input === active);
+  const empty = tokenInputs.find((input) => !String(input.value || '').trim());
+  const target = preferred || empty || tokenInputs[0];
+  if (!target) return;
+
+  target.value = String(tokenId);
+  target.dispatchEvent(new Event('input', { bubbles: true }));
+  target.focus();
+}
+
+function renderOwnedTokenIdChips(tokenIds) {
+  const content = document.getElementById('owned-token-ids-content');
+  if (!content) return;
+
+  const chips = tokenIds.slice(0, 80).map((tokenId) => `
+    <button
+      type="button"
+      data-owned-token-id="${escapeHtml(tokenId)}"
+      class="px-2 py-1 rounded bg-white/10 hover:bg-indigo-500/30 border border-white/10 hover:border-indigo-400 transition-colors font-mono text-[11px]"
+    >
+      #${escapeHtml(tokenId)}
+    </button>
+  `).join('');
+
+  const overflow = tokenIds.length > 80
+    ? `<span class="text-[11px] opacity-60 px-2 py-1">+${tokenIds.length - 80} more</span>`
+    : '';
+
+  content.innerHTML = `
+    <div class="mb-2 opacity-70">Tap a token ID to autofill action inputs.</div>
+    <div class="flex flex-wrap gap-2">${chips}${overflow}</div>
+  `;
+
+  content.querySelectorAll('[data-owned-token-id]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tokenId = button.getAttribute('data-owned-token-id');
+      if (!tokenId) return;
+      applyTokenIdToActionInputs(tokenId);
+    });
+  });
+}
+
+async function loadOwnedTokenIds(collection, options = {}) {
+  const panel = document.getElementById('owned-token-ids-panel');
+  const content = document.getElementById('owned-token-ids-content');
+  if (!panel || !content) return;
+
+  if (!state.wallet?.isConnected || !state.wallet?.address) {
+    setOwnedTokenIdsLoading(false);
+    setOwnedTokenIdsMessage('Connect wallet to load token IDs.', 'neutral');
+    return;
+  }
+
+  const chain = getOpenSeaChainFromChainId(collection.chainId);
+  const requestNonce = ++ownedTokenIdsRequestNonce;
+  setOwnedTokenIdsLoading(true);
+  setOwnedTokenIdsMessage('Loading token IDs...', 'neutral');
+
+  try {
+    const collectionSlug = getOpenSeaCollectionSlug(collection);
+    let tokenIds = await fetchOwnedTokenIdsForContract(state.wallet.address, {
+      chain: chain || null,
+      chainId: collection.chainId,
+      contractAddress: collection.contractAddress,
+      collection: collectionSlug,
+      maxPages: 8,
+      limit: 50,
+      force: options.force === true
+    });
+
+    if (!tokenIds.length && collectionSlug && chain) {
+      tokenIds = await fetchOwnedTokenIdsForContract(state.wallet.address, {
+        chain,
+        chainId: collection.chainId,
+        contractAddress: collection.contractAddress,
+        collection: null,
+        maxPages: 8,
+        limit: 50,
+        force: options.force === true
+      });
+    }
+
+    if (requestNonce !== ownedTokenIdsRequestNonce) return;
+
+    if (!tokenIds.length) {
+      setOwnedTokenIdsMessage('No token IDs found for this collection in your connected wallet.', 'neutral');
+      return;
+    }
+
+    renderOwnedTokenIdChips(tokenIds);
+  } catch (error) {
+    if (requestNonce !== ownedTokenIdsRequestNonce) return;
+    console.warn('Failed to load held token IDs:', error);
+    setOwnedTokenIdsMessage('Unable to load token IDs right now.', 'error');
+  } finally {
+    if (requestNonce === ownedTokenIdsRequestNonce) {
+      setOwnedTokenIdsLoading(false);
+    }
+  }
 }
 
 /**
@@ -463,7 +863,7 @@ async function initMintInterface(collection) {
 
     // Update stage info
     stageName.textContent = stage.name || stage.type;
-    mintText.textContent = getMintButtonText(stage);
+    mintText.textContent = await getMintButtonText(stage);
     mintBtn.disabled = false;
 
     // Update Transaction Preview
@@ -666,6 +1066,7 @@ async function handleMint(collection, stage) {
     // Refresh after success
     setTimeout(() => {
       initMintInterface(collection);
+      void loadOwnedTokenIds(collection, { force: true });
     }, 3000);
 
   } catch (error) {
@@ -704,6 +1105,7 @@ async function handleWalletUpdate(e) {
   // Refresh mint interface
   if (currentCollection) {
     await initMintInterface(currentCollection);
+    void loadOwnedTokenIds(currentCollection);
   }
 }
 
@@ -729,5 +1131,8 @@ export function cleanup() {
   document.removeEventListener(EVENTS.WALLET_UPDATE, handleWalletUpdate);
   clearMintCountdownTicker();
   currentCollection = null;
+  currentCollectionActions = [];
+  ownedTokenIdsRequestNonce++;
+  ownedTokenIdsLoading = false;
 }
 

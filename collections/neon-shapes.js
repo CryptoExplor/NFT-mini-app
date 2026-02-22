@@ -67,7 +67,7 @@ export default {
         ]
     },
 
-    openseaUrl: null,
+    openseaUrl: "https://opensea.io/collection/neonshapes-",
     website: null,
     twitter: null,
     discord: null

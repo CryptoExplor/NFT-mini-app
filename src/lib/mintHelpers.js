@@ -19,57 +19,213 @@ import { cache } from '../utils/cache.js';
 
 /**
  * Check if the connected wallet supports EIP-5792 (wallet_sendCalls).
- * Caches the result for the current session.
+ * Caches capability per chain ID for the current session.
  */
-let _batchCapability = null;
-async function supportsBatchCalls() {
-    if (_batchCapability !== null) return _batchCapability;
-    try {
-        const provider = await wagmiAdapter?.wagmiConfig?.connector?.getProvider?.();
-        if (!provider?.request) {
-            _batchCapability = false;
-            return false;
-        }
+const _batchCapabilityByChain = new Map();
 
+function toHexChainId(chainId) {
+    return `0x${Number(chainId).toString(16)}`;
+}
+
+async function getWalletProvider(wagmiConfig) {
+    const connector = wagmiConfig?.connector;
+    const provider = await connector?.getProvider?.();
+    if (!provider?.request) {
+        throw new Error('Wallet provider does not support request()');
+    }
+    return provider;
+}
+
+function hasAtomicBatchSupport(capabilityEntry) {
+    if (!capabilityEntry || typeof capabilityEntry !== 'object') return false;
+    if (capabilityEntry?.atomicBatch?.supported === true) return true;
+    if (capabilityEntry?.atomicBatch === true) return true;
+    return false;
+}
+
+async function supportsBatchCalls(wagmiConfig, chainId) {
+    const cacheKey = String(chainId);
+    if (_batchCapabilityByChain.has(cacheKey)) {
+        return _batchCapabilityByChain.get(cacheKey);
+    }
+
+    try {
+        const provider = await getWalletProvider(wagmiConfig);
         const capabilities = await provider.request({
-            method: 'wallet_getCapabilities',
+            method: 'wallet_getCapabilities'
         });
 
-        // Check if any chain supports atomicBatch
-        const chainCaps = capabilities?.[`0x${(8453).toString(16)}`] || capabilities?.['0x2105'] || {};
-        _batchCapability = !!chainCaps?.atomicBatch?.supported;
-        console.log(`EIP-5792 batch support: ${_batchCapability}`);
-        return _batchCapability;
+        const hexChainId = toHexChainId(chainId);
+        const chainCaps = capabilities?.[hexChainId];
+        let supported = hasAtomicBatchSupport(chainCaps);
+
+        // Some wallets return capabilities keyed differently; accept any supported chain as fallback.
+        if (!supported && capabilities && typeof capabilities === 'object') {
+            for (const entry of Object.values(capabilities)) {
+                if (hasAtomicBatchSupport(entry)) {
+                    supported = true;
+                    break;
+                }
+            }
+        }
+
+        _batchCapabilityByChain.set(cacheKey, supported);
+        console.log(`EIP-5792 batch support (${hexChainId}): ${supported}`);
+        return supported;
     } catch {
-        _batchCapability = false;
+        _batchCapabilityByChain.set(cacheKey, false);
         return false;
     }
 }
 
-/**
- * Send batched calls via EIP-5792 wallet_sendCalls.
- * @param {Array<{to: string, data: string, value?: string}>} calls
- * @returns {string} Bundle ID or transaction hash
- */
-async function sendBatchedCalls(calls) {
-    const provider = await wagmiAdapter.wagmiConfig.connector.getProvider();
-    const chainId = `0x${(8453).toString(16)}`;
+function isTxHash(value) {
+    return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value);
+}
 
-    const result = await provider.request({
+function extractTxHashFromValue(value, visited = new Set()) {
+    if (isTxHash(value)) return value;
+    if (!value || typeof value !== 'object') return null;
+    if (visited.has(value)) return null;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+        for (const entry of value) {
+            const found = extractTxHashFromValue(entry, visited);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    const preferredKeys = [
+        'transactionHash',
+        'txHash',
+        'hash',
+        'receipt',
+        'receipts',
+        'result'
+    ];
+
+    for (const key of preferredKeys) {
+        if (key in value) {
+            const found = extractTxHashFromValue(value[key], visited);
+            if (found) return found;
+        }
+    }
+
+    for (const nested of Object.values(value)) {
+        const found = extractTxHashFromValue(nested, visited);
+        if (found) return found;
+    }
+
+    return null;
+}
+
+function extractBundleId(sendCallsResult) {
+    if (typeof sendCallsResult === 'string') return sendCallsResult;
+    if (!sendCallsResult || typeof sendCallsResult !== 'object') return null;
+    return (
+        sendCallsResult.id ||
+        sendCallsResult.bundleId ||
+        sendCallsResult.callBundleId ||
+        sendCallsResult.result?.id ||
+        sendCallsResult.result?.bundleId ||
+        null
+    );
+}
+
+function parseBatchStatus(rawStatus) {
+    if (typeof rawStatus === 'string') {
+        return rawStatus.toLowerCase();
+    }
+    if (typeof rawStatus === 'number') {
+        if (rawStatus >= 400) return 'failed';
+        if (rawStatus >= 200) return 'confirmed';
+        return 'pending';
+    }
+    return 'pending';
+}
+
+async function waitForBatchedTxHash(provider, bundleId, options = {}) {
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 120000;
+    const pollMs = Number.isFinite(Number(options.pollMs)) ? Number(options.pollMs) : 1500;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+        let statusResult;
+        try {
+            statusResult = await provider.request({
+                method: 'wallet_getCallsStatus',
+                params: [bundleId]
+            });
+        } catch (error) {
+            if (isTxHash(bundleId)) {
+                return bundleId;
+            }
+            throw new Error(`wallet_getCallsStatus unavailable for bundle ${bundleId}: ${error?.message || error}`);
+        }
+
+        const hash = extractTxHashFromValue(statusResult);
+        if (hash) return hash;
+
+        const status = parseBatchStatus(
+            statusResult?.status !== undefined
+                ? statusResult.status
+                : statusResult?.result?.status
+        );
+
+        if (
+            status.includes('failed') ||
+            status.includes('revert') ||
+            status.includes('reject') ||
+            status.includes('error') ||
+            status.includes('cancel')
+        ) {
+            throw new Error(`Batched calls failed (bundle ${bundleId})`);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    if (isTxHash(bundleId)) return bundleId;
+    throw new Error(`Timed out waiting for batched calls result (${bundleId})`);
+}
+
+/**
+ * Send batched calls via EIP-5792 wallet_sendCalls and resolve to a transaction hash.
+ * @param {Array<{to: string, data: string, value?: string}>} calls
+ * @param {Object} options
+ * @param {number} options.chainId
+ * @param {string} options.fromAddress
+ * @param {Object} options.wagmiConfig
+ * @returns {Promise<string>} Transaction hash
+ */
+async function sendBatchedCalls(calls, options = {}) {
+    const { chainId, fromAddress, wagmiConfig } = options;
+    const provider = await getWalletProvider(wagmiConfig);
+
+    const sendResult = await provider.request({
         method: 'wallet_sendCalls',
         params: [{
             version: '1.0',
-            chainId,
-            from: state.wallet.address,
-            calls: calls.map(c => ({
-                to: c.to,
-                data: c.data,
-                value: c.value || '0x0',
-            })),
-        }],
+            chainId: toHexChainId(chainId),
+            from: fromAddress,
+            calls: calls.map((call) => ({
+                to: call.to,
+                data: call.data,
+                value: call.value || '0x0'
+            }))
+        }]
     });
 
-    return result;
+    const immediateHash = extractTxHashFromValue(sendResult);
+    if (immediateHash) return immediateHash;
+
+    const bundleId = extractBundleId(sendResult);
+    if (!bundleId) {
+        throw new Error('wallet_sendCalls did not return a bundle id or transaction hash');
+    }
+
+    return waitForBatchedTxHash(provider, bundleId);
 }
 
 // ============================================
@@ -438,10 +594,10 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
 
     // 3. If approval needed, try EIP-5792 batching (approve + mint in one step)
     if (allowance < amountToBurn) {
-        const canBatch = await supportsBatchCalls();
+        const canBatch = await supportsBatchCalls(wagmiConfig, config.chainId);
 
         if (canBatch) {
-            console.log('⚡ Using EIP-5792 batch: approve + mint in single call');
+            console.log('Using EIP-5792 batch: approve + mint in one wallet request');
 
             // Encode approve calldata
             const approveData = encodeFunctionData({
@@ -453,31 +609,39 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
             // Try each possible mint function name
             const functionNames = ['mint', 'burnMint'];
             for (const funcName of functionNames) {
+                const exists = config.abi.some((item) => item.name === funcName && item.type === 'function');
+                if (!exists) continue;
+
                 try {
+                    const mintArgs = getMintArgs(config.abi, funcName, tokenId);
                     const mintData = encodeFunctionData({
                         abi: config.abi,
                         functionName: funcName,
-                        args: [tokenId],
+                        args: mintArgs,
                     });
 
-                    // Batch approve + mint into one wallet_sendCalls
-                    const bundleId = await sendBatchedCalls([
+                    // Batch approve + mint into one wallet_sendCalls request
+                    const batchTxHash = await sendBatchedCalls([
                         { to: tokenAddress, data: approveData },
                         { to: config.address, data: mintData },
-                    ]);
+                    ], {
+                        chainId: config.chainId,
+                        fromAddress: userAddress,
+                        wagmiConfig
+                    });
 
-                    console.log(`✅ Batched approve+mint sent, bundle: ${bundleId}`);
-                    return bundleId;
+                    console.log(`Batched approve+mint sent, tx hash: ${batchTxHash}`);
+                    return batchTxHash;
                 } catch (e) {
                     if (e.name === 'UserRejectedRequestError' || e.message?.includes('User rejected')) {
                         throw e;
                     }
-                    console.log(`Batched ${funcName} failed:`, e);
+                    console.log(`Batched ${funcName} failed:`, e?.shortMessage || e?.message || e);
                 }
             }
 
             // If batch failed for all functions, fall through to sequential
-            console.warn('Batch failed, falling back to sequential approve → mint');
+            console.warn('Batch failed, falling back to sequential approve then mint');
         }
 
         // Sequential fallback: approve first, then mint
@@ -500,13 +664,17 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
     const functionNames = ['mint', 'burnMint'];
 
     for (const funcName of functionNames) {
+        const exists = config.abi.some((item) => item.name === funcName && item.type === 'function');
+        if (!exists) continue;
+
         try {
             console.log(`Attempting mint with function: ${funcName}`);
+            const mintArgs = getMintArgs(config.abi, funcName, tokenId);
             const hash = await writeContract(wagmiConfig, {
                 address: config.address,
                 abi: config.abi,
                 functionName: funcName,
-                args: [tokenId],
+                args: mintArgs,
                 chainId: config.chainId,
                 dataSuffix: DATA_SUFFIX
             });
@@ -526,19 +694,47 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
 // UTILITY FUNCTIONS
 // ============================================
 
+let ethPriceCache = null;
+let lastEthPriceFetch = 0;
+
+async function getEthPriceUsd() {
+    const now = Date.now();
+    if (ethPriceCache && now - lastEthPriceFetch < 300000) {
+        return ethPriceCache; // 5 min cache
+    }
+    try {
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        const data = await res.json();
+        if (data?.ethereum?.usd) {
+            ethPriceCache = data.ethereum.usd;
+            lastEthPriceFetch = now;
+            return ethPriceCache;
+        }
+    } catch (e) {
+        console.warn('Could not fetch ETH price', e);
+    }
+    return ethPriceCache || 0;
+}
+
 /**
  * Get mint button text based on stage
  * @param {Object} stage - Current stage
- * @returns {string} Button text
+ * @returns {Promise<string>} Button text
  */
-export function getMintButtonText(stage) {
+export async function getMintButtonText(stage) {
     if (!stage) return 'Limit Reached';
 
     switch (stage.type) {
         case 'FREE':
             return 'Free Mint';
         case 'PAID':
-            return `Mint (${Number(BigInt(stage.price)) / 1e18} ETH)`;
+            const ethValue = Number(BigInt(stage.price)) / 1e18;
+            const ethPrice = await getEthPriceUsd();
+            if (ethPrice > 0) {
+                const usdValue = (ethValue * ethPrice).toFixed(2);
+                return `Mint $${usdValue} (${ethValue} ETH)`;
+            }
+            return `Mint (${ethValue} ETH)`;
         case 'BURN_ERC20':
             return 'Burn to Mint';
         default:
