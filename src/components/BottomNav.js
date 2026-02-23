@@ -30,6 +30,17 @@ const NAV_ITEMS = [
         <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75A2.25 2.25 0 0 1 4.5 4.5h15A2.25 2.25 0 0 1 21.75 6.75v10.5A2.25 2.25 0 0 1 19.5 19.5h-15A2.25 2.25 0 0 1 2.25 17.25V6.75Zm0 0 6 6 3.75-3.75 5.25 5.25" />
       </svg>
     `
+  },
+  {
+    id: 'battle',
+    label: 'Battle',
+    path: '/battle',
+    icon: `
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-5 h-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" />
+      </svg>
+    `
   }
 ];
 
@@ -45,12 +56,14 @@ export function renderBottomNav(activeTab = null) {
       ? 'analytics'
       : normalizePath(window.location.pathname).startsWith('/gallery')
         ? 'gallery'
-        : 'home'
+        : normalizePath(window.location.pathname).startsWith('/battle')
+          ? 'battle'
+          : 'home'
   );
 
   return `
     <nav class="fixed bottom-0 left-0 right-0 z-40 glass-header border-t border-white/10 px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]" aria-label="Primary navigation">
-      <div class="max-w-6xl mx-auto grid grid-cols-3 gap-2">
+      <div class="max-w-6xl mx-auto grid grid-cols-4 gap-2">
         ${NAV_ITEMS.map((item) => {
     const isActive = item.id === tab;
     return `

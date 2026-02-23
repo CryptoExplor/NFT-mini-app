@@ -35,6 +35,21 @@ let walletHandler = null;
 let scrollHandler = null;
 let delegatedClickHandler = null;
 
+function cleanupGalleryEventHandlers() {
+    if (walletHandler) {
+        document.removeEventListener(EVENTS.WALLET_UPDATE, walletHandler);
+        walletHandler = null;
+    }
+    if (scrollHandler) {
+        window.removeEventListener('scroll', scrollHandler);
+        scrollHandler = null;
+    }
+    if (delegatedClickHandler) {
+        document.removeEventListener('click', delegatedClickHandler);
+        delegatedClickHandler = null;
+    }
+}
+
 /**
  * Render the gallery page
  */
@@ -127,12 +142,12 @@ function buildGalleryHTML() {
 
                     <!-- Grid size toggle -->
                     <div class="hidden sm:flex glass-card rounded-lg overflow-hidden">
-                        <button data-grid="large" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors bg-white/10" title="Large grid">
+                        <button data-grid="large" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors bg-white/10" title="Large grid" aria-label="Large grid">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z"/>
                             </svg>
                         </button>
-                        <button data-grid="small" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors" title="Small grid">
+                        <button data-grid="small" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors" title="Small grid" aria-label="Small grid">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h1.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 1-1.5 0V6ZM3.75 15.75A2.25 2.25 0 0 0 6 18h1.5a.75.75 0 0 0 0-1.5H6a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 0-1.5 0v1.5ZM15.75 3.75a.75.75 0 0 0 0 1.5H18a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 0 1.5 0V6A2.25 2.25 0 0 0 18 3.75h-2.25ZM18 16.5h-2.25a.75.75 0 0 0 0 1.5H18a2.25 2.25 0 0 0 2.25-2.25v-1.5a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 1-.75.75Z"/>
                             </svg>
@@ -163,7 +178,7 @@ function buildGalleryHTML() {
             <div class="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-[#0f172a] border-r border-white/10 p-6 transform -translate-x-full transition-transform duration-300" id="mobile-filter-content">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-lg font-bold">Filters</h2>
-                    <button id="close-filter-btn" class="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <button id="close-filter-btn" class="p-2 hover:bg-white/10 rounded-full transition-colors" aria-label="Close filters" title="Close filters">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
@@ -491,16 +506,7 @@ function buildLoadingSkeletons(count) {
 // ============================================
 
 function attachGalleryEvents() {
-    // Cleanup old handlers
-    if (walletHandler) {
-        document.removeEventListener(EVENTS.WALLET_UPDATE, walletHandler);
-    }
-    if (scrollHandler) {
-        window.removeEventListener('scroll', scrollHandler);
-    }
-    if (delegatedClickHandler) {
-        document.removeEventListener('click', delegatedClickHandler);
-    }
+    cleanupGalleryEventHandlers();
 
     // Wallet update
     walletHandler = (e) => {
@@ -672,4 +678,9 @@ function setupInfiniteScroll() {
         });
     };
     window.addEventListener('scroll', scrollHandler);
+}
+
+export function cleanup() {
+    cleanupGalleryEventHandlers();
+    isLoading = false;
 }

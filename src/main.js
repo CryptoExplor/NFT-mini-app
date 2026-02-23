@@ -193,6 +193,12 @@ function setupRoutes() {
         const page = await loadPageModule(() => import('./pages/gallery.js'));
         await page.renderGalleryPage();
     });
+
+    router.route('/battle', async () => {
+        await cleanupAnalyticsIfNeeded();
+        const page = await loadPageModule(() => import('./pages/battle.js'));
+        await page.renderBattlePage();
+    });
 }
 
 function hideLoading() {

@@ -165,7 +165,7 @@ export async function renderHomePage() {
             ${renderThemeToggleButton('theme-toggle-home')}
 
             <!-- Global Share Button -->
-            <button id="global-share-btn" class="glass-card relative p-2 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group overflow-hidden border border-indigo-500/30 hover:border-indigo-400">
+            <button id="global-share-btn" class="glass-card relative p-2 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group overflow-hidden border border-indigo-500/30 hover:border-indigo-400" aria-label="Share app" title="Share app">
                 <!-- Inner Glow -->
                 <div class="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 
@@ -179,7 +179,7 @@ export async function renderHomePage() {
             </button>
 
             <!-- Mobile Profile Button (Person Icon) -->
-            <button id="mobile-profile-btn" class="sm:hidden glass-card w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors overflow-hidden">
+            <button id="mobile-profile-btn" class="sm:hidden glass-card w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors overflow-hidden" aria-label="Open profile menu" title="Open profile menu">
                 <img id="mobile-profile-avatar" class="w-full h-full rounded-full object-cover hidden" alt="Profile avatar">
                 <svg id="mobile-profile-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -194,7 +194,7 @@ export async function renderHomePage() {
           <div class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300" id="profile-backdrop"></div>
           <div class="absolute right-0 top-0 bottom-0 w-full max-w-xs bg-[#0f172a] border-l border-white/10 p-6 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col justify-center gap-6" id="profile-content">
               
-              <button id="close-profile-btn" class="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full transition-colors">
+              <button id="close-profile-btn" class="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full transition-colors" aria-label="Close profile menu" title="Close profile menu">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -356,6 +356,8 @@ function renderCollectionCard(collection) {
           <!-- Share Button Overlay -->
           <button class="share-btn absolute top-2 right-2 bg-indigo-500/20 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 hover:bg-indigo-500/40 border border-white/10 hover:border-indigo-400 z-10 flex items-center justify-center"
                   data-slug="${collection.slug}"
+                  aria-label="Share ${collection.name}"
+                  title="Share ${collection.name}"
                   onclick="event.stopPropagation();">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-white translate-x-[0.5px]">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
