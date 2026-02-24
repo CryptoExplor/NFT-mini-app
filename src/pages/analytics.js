@@ -38,7 +38,7 @@ function escapeHtml(value) {
 function getViewerIdentity(walletAddress) {
     const miniProfile = getMiniAppProfile();
     const profileLabel = getMiniAppProfileLabel(miniProfile);
-    const walletLabel = walletAddress ? 'User' : '';
+    const walletLabel = walletAddress ? shortenAddress(walletAddress) : '';
 
     return {
         profileLabel: profileLabel || '',
@@ -1143,3 +1143,4 @@ function setupAdminListeners() {
         });
     });
 }
+
