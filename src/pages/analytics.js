@@ -22,6 +22,7 @@ const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(
 
 let renderVersion = 0;
 let walletUpdateHandler = null;
+let mintSuccessHandler = null;
 let activityInterval = null;
 let feedStatusTimeout = null;
 let collectionCardClickHandler = null;
@@ -266,6 +267,12 @@ export async function renderAnalyticsPage(params) {
     };
     document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
 
+    // Listen for new mints → re-render
+    mintSuccessHandler = () => {
+        setTimeout(() => renderAnalyticsPage(params), 300);
+    };
+    document.addEventListener(EVENTS.MINT_SUCCESS, mintSuccessHandler);
+
     // Expose refresh method for external triggers (e.g., mint.js)
     window.refreshAnalytics = () => renderAnalyticsPage(params);
 }
@@ -274,6 +281,10 @@ export function teardownAnalyticsPage() {
     if (walletUpdateHandler) {
         document.removeEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
         walletUpdateHandler = null;
+    }
+    if (mintSuccessHandler) {
+        document.removeEventListener(EVENTS.MINT_SUCCESS, mintSuccessHandler);
+        mintSuccessHandler = null;
     }
     if (activityInterval) {
         clearInterval(activityInterval);
@@ -1143,4 +1154,3 @@ function setupAdminListeners() {
         });
     });
 }
-
