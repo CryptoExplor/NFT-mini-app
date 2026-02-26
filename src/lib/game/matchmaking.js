@@ -1,112 +1,94 @@
 /**
- * Matchmaking KV Storage (Mock Backend)
- * 
- * Uses LocalStorage as a temporary Key-Value store to hold user-posted challenges.
- * In a production environment, this would hit an actual database or Redis KV.
- * 
- * V2 Schema: challenges now include snapshot hash, passive ability, and expiry.
+ * Matchmaking API Client
+ * Connects to global Vercel KV backend to load and post challenges.
  */
 
-import { createSnapshotHash } from '../battle/snapshot.js';
+// We import ARENA for the expiry time fallback just in case
 import { ARENA } from '../battle/balanceConfig.js';
-
-const KV_KEY = 'miniapp_battle_challenges';
-
-function loadKV() {
-    try {
-        const data = localStorage.getItem(KV_KEY);
-        if (data) {
-            const challenges = JSON.parse(data);
-            // Filter expired challenges
-            const now = Date.now();
-            return challenges.filter(c => !c.expiresAt || c.expiresAt > now);
-        }
-    } catch (e) {
-        console.error('Failed to parse KV challenges', e);
-    }
-    return [];
-}
-
-function saveKV(challenges) {
-    try {
-        const trimmed = challenges.slice(0, ARENA.MAX_ACTIVE_CHALLENGES);
-        localStorage.setItem(KV_KEY, JSON.stringify(trimmed));
-    } catch (e) {
-        console.error('Failed to save KV challenges', e);
-    }
-}
-
 /**
- * Gets all active player-posted challenges from the KV store.
+ * Gets all active player-posted challenges from the global API.
  */
 export async function getActiveChallenges() {
-    await new Promise(res => setTimeout(res, 200));
-    return loadKV();
+    try {
+        const res = await fetch('/api/battle/challenge');
+        if (!res.ok) throw new Error('Failed to fetch challenges');
+
+        const data = await res.json();
+
+        // Filter expired challenges locally as well just in case
+        const now = Date.now();
+        return (data.challenges || []).filter(c => !c.expiresAt || c.expiresAt > now);
+    } catch (e) {
+        console.error('Failed to load global challenges', e);
+        return [];
+    }
 }
 
 /**
- * Posts a new challenge to the KV store.
+ * Posts a new challenge to the global API.
  * @param {string} playerAddress - The wallet address of the poster
- * @param {Object} selectedNft - The specific NFT selected for combat (must be normalized)
- * @param {Array} playerTeam - The full wallet inventory of the poster (for synergies)
+ * @param {Object} selectedNft - The specific NFT selected for combat
+ * @param {Array} playerTeam - The full wallet inventory of the poster
  */
 export async function postChallenge(playerAddress, selectedNft, playerTeam = []) {
-    await new Promise(res => setTimeout(res, 300));
+    try {
+        const res = await fetch('/api/battle/challenge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userAddress: playerAddress,
+                collectionId: selectedNft.engineId, // Pass the engineId for the normalizer
+                tokenId: selectedNft.nftId,
+                rawMetadata: selectedNft.rawAttributes || []
+            })
+        });
 
-    const challenges = loadKV();
-
-    // Create snapshot hash of the fighter's stats at challenge time
-    let snapshotHash = null;
-    if (selectedNft.stats) {
-        try {
-            snapshotHash = await createSnapshotHash(selectedNft.stats);
-        } catch (e) {
-            console.warn('Failed to create snapshot hash', e);
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to post challenge');
         }
+
+        return await res.json();
+    } catch (e) {
+        console.error('API Error posting challenge:', e);
+        throw e;
     }
-
-    const newChallenge = {
-        id: `challenge_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        // V2 schema version
-        schemaVersion: 2,
-        // Player info
-        player: playerAddress || 'Anonymous',
-        // Fighter info
-        collectionName: selectedNft.collectionName,
-        nftId: selectedNft.nftId,
-        stats: selectedNft.stats,
-        trait: selectedNft.trait || 'Standard',
-        imageUrl: selectedNft.imageUrl || '',
-        passive: selectedNft.passive || selectedNft.stats?.passive || null,
-        // Anti-cheat
-        snapshotHash,
-        // Team synergies (V2)
-        teamSynergies: playerTeam,
-        // Metadata
-        isAi: false,
-        timestamp: Date.now(),
-        expiresAt: Date.now() + ARENA.CHALLENGE_EXPIRY_MS,
-    };
-
-    challenges.unshift(newChallenge);
-    saveKV(challenges);
-
-    return newChallenge;
 }
 
 /**
- * Removes a challenge (e.g., after it has been fought or cancelled)
- */
-export async function removeChallenge(challengeId) {
-    let challenges = loadKV();
-    challenges = challenges.filter(c => c.id !== challengeId);
-    saveKV(challenges);
-}
-
-/**
- * Gets a challenge by ID for validation before fight.
+ * Gets a challenge by ID (fetch from active list)
  */
 export async function getChallengeById(challengeId) {
-    const challenges = loadKV();
+    const challenges = await getActiveChallenges();
     return challenges.find(c => c.id === challengeId) || null;
+}
+
+/**
+ * Execute a fight against a challenge
+ */
+export async function resolveFight(challengeId, attackerAddress, selectedNft) {
+    try {
+        // Send resolution request to the secure backend engine
+        const res = await fetch('/api/battle/fight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                challengeId,
+                attackerAddress,
+                attackerCollectionId: selectedNft.engineId,
+                attackerTokenId: selectedNft.nftId,
+                rawMetadata: selectedNft.rawAttributes || []
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Battle failed on server');
+        }
+
+        return await res.json();
+    } catch (e) {
+        console.error('Battle resolution error:', e);
+        throw e;
+    }
 }

@@ -58,18 +58,51 @@ export async function renderBattlePage() {
             previewModal.hide();
             board.show();
         },
-        (playerCombatStats, enemyCombatStats) => {
+        async (playerCombatStats, enemyCombatStats) => {
             previewModal.hide();
 
-            // Inject the player's overall wallet team so synergies apply
-            const battleOptions = {
-                playerTeam: selectorModal.inventory || []
-            };
+            // Show loading state while server calculates the match
+            app.insertAdjacentHTML('beforeend', `
+                <div id="battle-loading-overlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md">
+                    <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-orange-400 animate-pulse">Calculating Match...</h2>
+                </div>
+            `);
 
-            // Trigger Visual Battle
-            renderCombatArena(playerCombatStats, enemyCombatStats, () => {
-                console.log("Battle concluded");
-            }, battleOptions);
+            try {
+                // We stored the raw selection inside previewModal before showing it
+                const selectedNft = window.__CURRENT_FIGHTER_SELECTION__;
+                if (!selectedNft) throw new Error("No fighter selected.");
+
+                const walletAddress = state.wallet?.address || 'Anonymous';
+
+                // 1. Call secure backend to generate the fight result
+                const { resolveFight } = await import('../lib/game/matchmaking.js');
+                const result = await resolveFight(
+                    previewModal.enemyData.id,
+                    walletAddress,
+                    selectedNft
+                );
+
+                $('#battle-loading-overlay')?.remove();
+
+                // 2. Play the server-generated logs in the visual arena
+                const battleOptions = {
+                    playerTeam: selectorModal.inventory || [],
+                    precomputedLogs: result.replayLogs,
+                    winner: result.summary.winner
+                };
+
+                renderCombatArena(playerCombatStats, enemyCombatStats, () => {
+                    console.log("Visual Match concluded! Server Winner:", result.summary.winner);
+                }, battleOptions);
+
+            } catch (err) {
+                console.error("Match error:", err);
+                $('#battle-loading-overlay')?.remove();
+                alert('Battle failed to start: ' + err.message);
+                board.show();
+            }
         },
         () => {
             // on Select Fighter clicked inside Match Preview
@@ -96,6 +129,9 @@ export async function renderBattlePage() {
                 trait: selectedNft.trait,
                 imageUrl: selectedNft.imageUrl || ''
             };
+
+            // Save globally for submit to secure server when they hit 'START BATTLE'
+            window.__CURRENT_FIGHTER_SELECTION__ = selectedNft;
 
             // If we have an active enemy preview, we update the player slot
             if (previewModal.enemyData) {
