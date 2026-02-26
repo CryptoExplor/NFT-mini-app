@@ -150,5 +150,17 @@ export const COLLECTION_PROFILES = {
  * Returns the profile configuration for a given collection ID
  */
 export function getCollectionProfile(collectionId) {
-    return COLLECTION_PROFILES[collectionId] || null;
+    // 1. Direct match (e.g. 'base-invaders')
+    if (COLLECTION_PROFILES[collectionId]) {
+        return COLLECTION_PROFILES[collectionId];
+    }
+
+    // 2. Alias match (e.g. 'BASE_INVADERS')
+    for (const [key, profile] of Object.entries(COLLECTION_PROFILES)) {
+        if (profile.engineAlias && profile.engineAlias.includes(collectionId)) {
+            return profile;
+        }
+    }
+
+    return null;
 }
