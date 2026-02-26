@@ -281,7 +281,7 @@ export function shareToTwitter(collection, customText = null) {
  */
 export async function shareAppToFeed() {
     const url = getMainAppShareUrl();
-    const text = 'Check out Base Mint App — Mint and collect Onchain NFTs on Base!';
+    const text = 'Check out Base Mint — NFT Battle Arena on Base! Pick your fighter and enter the arena.';
     const embeds = getMainAppEmbeds();
 
     if (await tryComposeCast(text, embeds)) {

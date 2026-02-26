@@ -54,7 +54,7 @@ async function getWalletModal() {
                     '--w3m-border-radius-master': '1px'
                 },
                 metadata: {
-                    name: 'Base Mint App',
+                    name: 'Base Mint',
                     description: 'Mint NFTs on Base',
                     url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
                     icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
@@ -200,7 +200,7 @@ function handleAccountChange(account) {
                 try {
                     const { getMiniAppProfile } = await import('./utils/profile.js');
                     profile = getMiniAppProfile();
-                } catch (_) {}
+                } catch (_) { }
                 trackWalletConnect(account.address, profile ? {
                     displayName: profile.displayName || profile.username || null,
                     username: profile.username || null
@@ -265,22 +265,22 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
         });
         const nfts = result.nfts || [];
         const allowedSlugs = ['base-invaders', 'baseheads-404', 'base-moods', 'void-pfps', 'neon-runes'];
-        
+
         return nfts
             .filter(nft => allowedSlugs.includes(nft.collection))
             .map(nft => {
                 const traits = nft.traits || [];
                 let primaryTrait = 'Standard';
                 if (traits.length > 0) {
-                    const mapped = traits.find(t => 
-                        t.trait_type === 'Faction' || 
-                        t.trait_type === 'Mood' || 
+                    const mapped = traits.find(t =>
+                        t.trait_type === 'Faction' ||
+                        t.trait_type === 'Mood' ||
                         t.trait_type === 'Distortion'
                     );
                     if (mapped) primaryTrait = mapped.value;
                     else primaryTrait = traits[0].value;
                 }
-                
+
                 // Map OpenSea slug to engine known collection ID
                 let engineId = 'BASE_INVADERS';
                 if (nft.collection === 'baseheads-404') engineId = 'BASEHEADS_404';

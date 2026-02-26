@@ -134,7 +134,7 @@ export async function renderHomePage() {
       <header class="glass-header fixed top-0 left-0 right-0 z-40 p-4">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
           <div class="flex items-center space-x-3">
-            <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Base Mint App</h1>
+            <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Base Mint</h1>
             
             <!-- Wallet Balance -->
             <div id="wallet-balance" class="hidden md:flex flex-col items-end mr-4 animate-fade-in">
