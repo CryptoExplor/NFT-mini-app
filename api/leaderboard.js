@@ -1,5 +1,5 @@
 import { kv } from '@vercel/kv';
-import { setCors } from './lib/cors.js';
+import { setCors } from './_lib/cors.js';
 
 // NOTE: loadCollections uses import.meta.env (Vite-only) which doesn't exist in
 // Vercel serverless Node.js runtime. We wrap it in a try/catch to degrade gracefully.

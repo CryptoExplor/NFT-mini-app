@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv';
-import { requireAdmin } from './lib/authMiddleware.js';
-import { setCors } from './lib/cors.js';
+import { requireAdmin } from './_lib/authMiddleware.js';
+import { setCors } from './_lib/cors.js';
 
 const BATCH_SIZE = 1000;
 

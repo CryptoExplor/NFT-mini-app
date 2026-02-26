@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv';
-import { requireAuth } from './lib/authMiddleware.js';
-import { setCors } from './lib/cors.js';
+import { requireAuth } from './_lib/authMiddleware.js';
+import { setCors } from './_lib/cors.js';
 
 export default async function handler(req, res) {
     setCors(req, res, {

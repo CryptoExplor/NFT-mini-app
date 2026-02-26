@@ -1,13 +1,13 @@
 import { kv } from '@vercel/kv';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
-import { setCors } from './lib/cors.js';
+import { setCors } from './_lib/cors.js';
 import {
     VALID_EVENTS,
     processEvent,
     checkRateLimit,
     cleanupExpiredKeys
-} from './lib/events.js';
+} from './_lib/events.js';
 
 // RPC Client for on-chain verification
 const publicClient = createPublicClient({
