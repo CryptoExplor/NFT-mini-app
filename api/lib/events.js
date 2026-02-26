@@ -23,7 +23,12 @@ export const VALID_EVENTS = [
     'mint_success',
     'mint_failure',
     'gallery_view',
-    'click'
+    'click',
+    'battle_challenge_posted',
+    'battle_previewed',
+    'battle_started',
+    'battle_won',
+    'battle_lost'
 ];
 
 // Funnel steps (ordered)
@@ -140,6 +145,16 @@ export function handleMintFailure(pipe, event) {
     }
     if (wallet && wallet !== 'anonymous') {
         pipe.hincrby(`user:${wallet}:profile`, 'total_failures', 1);
+    }
+}
+
+/** battle_won — updates battle leaderboard */
+export function handleBattleWon(pipe, event, { weekNum }) {
+    const { wallet } = event;
+    if (wallet && wallet !== 'anonymous') {
+        pipe.hincrby(`user:${wallet}:profile`, 'battle_wins', 1);
+        pipe.zincrby('leaderboard:battle_wins:all_time', 1, wallet);
+        pipe.zincrby(`leaderboard:battle_wins:week:${weekNum}`, 1, wallet);
     }
 }
 
@@ -446,6 +461,9 @@ export async function processEvent(kv, event, opts = {}) {
             if (mintResult?.invalid) {
                 return { success: false, eventId, error: 'Invalid transaction' };
             }
+            break;
+        case 'battle_won':
+            handleBattleWon(pipe, event, helpers);
             break;
         default:
             break;

@@ -247,3 +247,59 @@ export function getCurrentAccount() {
 export async function switchToBase() {
     await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
 }
+
+
+/**
+ * Game Ecosystem Utility
+ * Fetches all owned NFTs across the whitelisted collections
+ * using the existing OpenSea API client (src/lib/opensea.js) to populate the NFTSelectorModal.
+ */
+export async function fetchOwnedBattleNFTs(walletAddress) {
+    if (!walletAddress) return [];
+    console.log(`[Wallet] Fetching OpenSea NFTs on Base for ${walletAddress}...`);
+    try {
+        const { fetchNFTsByWallet } = await import('./lib/opensea.js');
+        const result = await fetchNFTsByWallet(walletAddress, {
+            chain: 'base',
+            limit: 200
+        });
+        const nfts = result.nfts || [];
+        const allowedSlugs = ['base-invaders', 'baseheads-404', 'base-moods', 'void-pfps', 'neon-runes'];
+        
+        return nfts
+            .filter(nft => allowedSlugs.includes(nft.collection))
+            .map(nft => {
+                const traits = nft.traits || [];
+                let primaryTrait = 'Standard';
+                if (traits.length > 0) {
+                    const mapped = traits.find(t => 
+                        t.trait_type === 'Faction' || 
+                        t.trait_type === 'Mood' || 
+                        t.trait_type === 'Distortion'
+                    );
+                    if (mapped) primaryTrait = mapped.value;
+                    else primaryTrait = traits[0].value;
+                }
+                
+                // Map OpenSea slug to engine known collection ID
+                let engineId = 'BASE_INVADERS';
+                if (nft.collection === 'baseheads-404') engineId = 'BASEHEADS_404';
+                else if (nft.collection === 'base-moods') engineId = 'BaseMoods';
+                else if (nft.collection === 'void-pfps') engineId = 'VOID_PFPS';
+                else if (nft.collection === 'neon-runes') engineId = 'NeonRunes';
+
+                return {
+                    id: nft.identifier,
+                    engineId,  // The ID the normalizer expects
+                    collectionName: nft.collection,
+                    nftId: nft.identifier,
+                    trait: primaryTrait,
+                    rawAttributes: traits,
+                    imageUrl: nft.image_url || nft.animation_url || ''
+                };
+            });
+    } catch (e) {
+        console.error('[Wallet] Error fetching APIs from OpenSea wrapper:', e);
+        return [];
+    }
+}

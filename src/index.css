@@ -876,6 +876,207 @@ body {
 }
 
 /* ============================================ */
+/* BATTLE ARENA — PREMIUM ANIMATIONS            */
+/* ============================================ */
+
+/* --- Screen Shake on Hit --- */
+@keyframes battle-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-4px, -2px) rotate(-0.5deg); }
+  20% { transform: translate(6px, 1px) rotate(0.5deg); }
+  30% { transform: translate(-3px, 3px) rotate(-0.3deg); }
+  40% { transform: translate(4px, -1px) rotate(0.4deg); }
+  50% { transform: translate(-2px, 2px) rotate(-0.2deg); }
+  60% { transform: translate(3px, -2px) rotate(0.3deg); }
+  70% { transform: translate(-1px, 1px) rotate(-0.1deg); }
+  80% { transform: translate(2px, -1px) rotate(0.15deg); }
+  90% { transform: translate(-1px, 0px) rotate(0deg); }
+}
+.battle-shake {
+  animation: battle-shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* --- Crit Burst (golden explosion) --- */
+@keyframes crit-burst {
+  0% { transform: scale(0.3); opacity: 1; box-shadow: 0 0 0 0 rgba(255,200,50,0.8); }
+  50% { transform: scale(1.4); opacity: 0.8; box-shadow: 0 0 60px 20px rgba(255,160,0,0.4); }
+  100% { transform: scale(2); opacity: 0; box-shadow: 0 0 0 0 transparent; }
+}
+.crit-burst {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,220,80,0.9) 0%, rgba(255,140,0,0.6) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 50;
+  animation: crit-burst 0.6s ease-out forwards;
+}
+
+/* --- Dodge Ghost (afterimage fade) --- */
+@keyframes dodge-ghost {
+  0% { opacity: 0.8; transform: translateX(0) scale(1); filter: hue-rotate(0deg); }
+  50% { opacity: 0.4; transform: translateX(-30px) scale(0.95); filter: hue-rotate(180deg) brightness(1.5); }
+  100% { opacity: 0; transform: translateX(-60px) scale(0.9); filter: hue-rotate(360deg) brightness(2); }
+}
+.dodge-ghost {
+  animation: dodge-ghost 0.5s ease-out forwards;
+  pointer-events: none;
+}
+
+/* --- Floating Damage Numbers --- */
+@keyframes dmg-float {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  20% { opacity: 1; transform: translateY(-15px) scale(1.2); }
+  100% { opacity: 0; transform: translateY(-60px) scale(0.8); }
+}
+.dmg-number {
+  position: absolute;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 1.5rem;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6), 0 0 20px currentColor;
+  pointer-events: none;
+  z-index: 60;
+  animation: dmg-float 1s ease-out forwards;
+}
+.dmg-normal { color: #f8fafc; }
+.dmg-crit { color: #fbbf24; font-size: 2rem; }
+.dmg-heal { color: #34d399; }
+.dmg-miss {
+  color: #94a3b8;
+  font-size: 1.2rem;
+  font-style: italic;
+  letter-spacing: 0.1em;
+}
+
+/* --- Battle Particles Background --- */
+@keyframes particle-drift {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.3; }
+  100% { transform: translateY(-120vh) translateX(50px) rotate(720deg); opacity: 0; }
+}
+.battle-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+.battle-particle {
+  position: absolute;
+  bottom: -20px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  animation: particle-drift linear infinite;
+}
+
+/* --- Round Splash --- */
+@keyframes round-splash {
+  0% { transform: scale(0.3) rotate(-5deg); opacity: 0; letter-spacing: 0.5em; }
+  30% { transform: scale(1.15) rotate(1deg); opacity: 1; letter-spacing: 0.05em; }
+  70% { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: scale(0.8) rotate(0deg); opacity: 0; }
+}
+.round-splash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: white;
+  text-shadow: 0 0 40px rgba(99,102,241,0.8), 0 0 80px rgba(99,102,241,0.4);
+  z-index: 70;
+  pointer-events: none;
+  animation: round-splash 1.2s cubic-bezier(.17,.67,.3,1.2) forwards;
+}
+
+/* --- HP Bar Pulse (low health) --- */
+@keyframes hp-pulse {
+  0%, 100% { opacity: 1; box-shadow: none; }
+  50% { opacity: 0.7; box-shadow: 0 0 12px rgba(239,68,68,0.6); }
+}
+.hp-critical {
+  animation: hp-pulse 0.8s ease-in-out infinite;
+}
+
+/* --- Fighter Entrance Slide --- */
+@keyframes fighter-enter-left {
+  0% { transform: translateX(-120px) scale(0.8); opacity: 0; filter: blur(8px); }
+  60% { transform: translateX(10px) scale(1.05); opacity: 1; filter: blur(0px); }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes fighter-enter-right {
+  0% { transform: translateX(120px) scale(0.8); opacity: 0; filter: blur(8px); }
+  60% { transform: translateX(-10px) scale(1.05); opacity: 1; filter: blur(0px); }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+.fighter-enter-left { animation: fighter-enter-left 0.8s cubic-bezier(.17,.67,.3,1.2) forwards; }
+.fighter-enter-right { animation: fighter-enter-right 0.8s cubic-bezier(.17,.67,.3,1.2) forwards; }
+
+/* --- Victory / Defeat --- */
+@keyframes victory-glow {
+  0% { transform: scale(0.5) rotate(-3deg); opacity: 0; text-shadow: none; }
+  50% { transform: scale(1.1) rotate(1deg); opacity: 1; text-shadow: 0 0 60px rgba(52,211,153,0.8); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; text-shadow: 0 0 30px rgba(52,211,153,0.4); }
+}
+@keyframes defeat-shake {
+  0% { transform: scale(0.5); opacity: 0; }
+  30% { transform: scale(1.1) rotate(-2deg); opacity: 1; }
+  45% { transform: scale(1) rotate(2deg); }
+  60% { transform: scale(1.05) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.victory-text { animation: victory-glow 0.8s cubic-bezier(.17,.67,.3,1.2) forwards; }
+.defeat-text { animation: defeat-shake 0.6s cubic-bezier(.36,.07,.19,.97) forwards; }
+
+/* --- Attack Slash Trail --- */
+@keyframes slash-trail {
+  0% { transform: scaleX(0) rotate(-15deg); opacity: 0.9; }
+  30% { transform: scaleX(1.2) rotate(-15deg); opacity: 0.7; }
+  100% { transform: scaleX(0) rotate(-15deg); opacity: 0; }
+}
+.slash-trail {
+  position: absolute;
+  width: 100px;
+  height: 6px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
+  border-radius: 3px;
+  z-index: 55;
+  pointer-events: none;
+  transform-origin: left center;
+  animation: slash-trail 0.35s ease-out forwards;
+}
+
+/* --- Biome Background Ambience --- */
+.biome-desert { background: linear-gradient(180deg, #1a0d00 0%, #2d1b00 30%, #1a0f0a 100%); }
+.biome-ocean { background: linear-gradient(180deg, #001a2c 0%, #002844 30%, #001520 100%); }
+.biome-forest { background: linear-gradient(180deg, #0a1a0a 0%, #0d2910 30%, #060f06 100%); }
+.biome-tundra { background: linear-gradient(180deg, #1a1a2e 0%, #2a2a4e 30%, #0f0f1a 100%); }
+.biome-neon { background: linear-gradient(180deg, #0a0014 0%, #1a0033 30%, #0d001a 100%); }
+.biome-default { background: linear-gradient(180deg, #0f172a 0%, #1e293b 30%, #0f172a 100%); }
+
+/* --- Passive Ability Visuals --- */
+@keyframes shield-shimmer {
+  0% { border-color: rgba(99,102,241,0.3); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  50% { border-color: rgba(99,102,241,0.8); box-shadow: 0 0 30px 5px rgba(99,102,241,0.3); }
+  100% { border-color: rgba(99,102,241,0.3); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+}
+.passive-shield { animation: shield-shimmer 0.6s ease-in-out; }
+
+@keyframes leech-drain {
+  0% { filter: brightness(1) saturate(1); }
+  30% { filter: brightness(0.8) saturate(2) hue-rotate(-20deg); }
+  100% { filter: brightness(1) saturate(1); }
+}
+.passive-drain { animation: leech-drain 0.5s ease-out; }
+
+/* ============================================ */
 /* PRINT STYLES */
 /* ============================================ */
 

@@ -1,12 +1,6 @@
 import { kv } from '@vercel/kv';
 import crypto from 'crypto';
-
-function cors(res) {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
+import { setCors } from '../lib/cors.js';
 
 /**
  * GET /api/auth/nonce?wallet=0x...
@@ -15,7 +9,10 @@ function cors(res) {
  * Stores it in Redis with a 5-minute TTL.
  */
 export default async function handler(req, res) {
-    cors(res);
+    setCors(req, res, {
+        methods: 'GET,OPTIONS',
+        headers: 'Content-Type'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 

@@ -1,13 +1,7 @@
 import { kv } from '@vercel/kv';
 import { SiweMessage } from 'siwe';
 import { SignJWT } from 'jose';
-
-function cors(res) {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
+import { setCors } from '../lib/cors.js';
 
 /**
  * POST /api/auth/verify
@@ -16,7 +10,10 @@ function cors(res) {
  * Verifies EIP-4361 SIWE signature, validates nonce, issues JWT.
  */
 export default async function handler(req, res) {
-    cors(res);
+    setCors(req, res, {
+        methods: 'POST,OPTIONS',
+        headers: 'Content-Type'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 

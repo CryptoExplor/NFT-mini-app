@@ -1,6 +1,7 @@
 import { kv } from '@vercel/kv';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
+import { setCors } from './lib/cors.js';
 import {
     VALID_EVENTS,
     processEvent,
@@ -14,16 +15,11 @@ const publicClient = createPublicClient({
     transport: http(process.env.RPC_URL)
 });
 
-// CORS helper
-function cors(res) {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
-
 export default async function handler(req, res) {
-    cors(res);
+    setCors(req, res, {
+        methods: 'POST,OPTIONS',
+        headers: 'Content-Type, Authorization'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
