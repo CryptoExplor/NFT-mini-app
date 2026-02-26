@@ -8,23 +8,18 @@
  * Uses Web Crypto API (SubtleCrypto) instead of Node.js crypto for browser compatibility.
  */
 
+import hash from 'object-hash';
+
 /**
  * Creates a unique deterministic hash for a set of normalized stats.
+ * Uses object-hash for isomorphic support (works in Browser + Vercel Node).
+ * 
  * @param {Object} normalizedStats - Output from metadataNormalizer.js
- * @returns {Promise<string>} SHA-256 hash hex string
+ * @returns {Promise<string>} SHA-1 hash hex string
  */
 export async function createSnapshotHash(normalizedStats) {
-    // Stringify deterministically (keys sorted) to ensure same stats = same hash
-    const sortedKeys = Object.keys(normalizedStats).sort();
-    const statString = sortedKeys.map(k => `${k}:${normalizedStats[k]}`).join('|');
-
-    const encoder = new TextEncoder();
-    const data = encoder.encode(statString);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-
-    // Convert ArrayBuffer to hex string
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // object-hash guarantees deterministic hashing even if key insertion order changes
+    return hash(normalizedStats, { algorithm: 'sha1' });
 }
 
 /**

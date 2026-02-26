@@ -12,7 +12,7 @@ function setCorsHeaders(res) {
 const CHALLENGES_KEY = 'battle_challenges:v2';
 
 export default async function handler(req, res) {
-    setCors(req, res, { methods: 'GET,POST,OPTIONS' });
+    setCorsHeaders(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method === 'GET' && req.url.includes('/preview/')) {

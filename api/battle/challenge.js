@@ -27,16 +27,16 @@ export default async function handler(req, res) {
 }
 
 async function createChallenge(req, res) {
-    const { collectionId, tokenId, rawMetadata, userAddress } = req.body;
+    const { collectionId, collectionName, nftId, rawMetadata, userAddress } = req.body;
 
     // 1. Verify Ownership (Server Authoritative) - SKIP for MVP if needed, or implement actual check
     // For MVP, we trust the client's payload that they own it to reduce RPC load, 
     // but in prod this should verify against an RPC node.
-    // const ownsToken = await verifyOwnership(collectionId, tokenId, userAddress);
+    // const ownsToken = await verifyOwnership(collectionId, nftId, userAddress);
     // if (!ownsToken) return res.status(403).json({ error: 'Caller does not own this token.' });
 
     // 2. Normalize Stats
-    const stats = normalizeFighter(collectionId, tokenId, rawMetadata);
+    const stats = normalizeFighter(collectionId, nftId, rawMetadata);
 
     // 3. Prevent stat drift by creating a snapshot
     const snapshotHash = await createSnapshotHash(stats);
@@ -46,8 +46,10 @@ async function createChallenge(req, res) {
     const challenge = {
         id: challengeId,
         creator: userAddress,
+        player: userAddress, // ChallengeBoard looks for 'player'
         collectionId,
-        tokenId,
+        collectionName,
+        nftId,
         trait: rawMetadata?.find?.(t => t.trait_type === 'Faction' || t.trait_type === 'Mood' || t.trait_type === 'Type')?.value || 'Standard',
         imageUrl: `https://avatar.vercel.sh/${userAddress}`, // Fallback if not provided
         stats,

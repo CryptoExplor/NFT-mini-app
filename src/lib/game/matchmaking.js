@@ -38,7 +38,8 @@ export async function postChallenge(playerAddress, selectedNft, playerTeam = [])
             body: JSON.stringify({
                 userAddress: playerAddress,
                 collectionId: selectedNft.engineId, // Pass the engineId for the normalizer
-                tokenId: selectedNft.nftId,
+                collectionName: selectedNft.collectionName,
+                nftId: selectedNft.nftId,
                 rawMetadata: selectedNft.rawAttributes || []
             })
         });

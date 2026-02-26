@@ -266,6 +266,8 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
         const nfts = result.nfts || [];
         const allowedSlugs = ['base-invaders', 'baseheads-404', 'base-moods', 'void-pfps', 'neon-runes'];
 
+        const { normalizeFighter } = await import('./lib/battle/metadataNormalizer.js');
+
         return nfts
             .filter(nft => allowedSlugs.includes(nft.collection))
             .map(nft => {
@@ -288,6 +290,14 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
                 else if (nft.collection === 'void-pfps') engineId = 'VOID_PFPS';
                 else if (nft.collection === 'neon-runes') engineId = 'NeonRunes';
 
+                // Normalize stats so the selector can display real values
+                let stats = {};
+                try {
+                    stats = normalizeFighter(engineId, nft.identifier, traits);
+                } catch (e) {
+                    console.warn(`[Wallet] Could not normalize stats for ${engineId} #${nft.identifier}`, e);
+                }
+
                 return {
                     id: nft.identifier,
                     engineId,  // The ID the normalizer expects
@@ -295,7 +305,9 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
                     nftId: nft.identifier,
                     trait: primaryTrait,
                     rawAttributes: traits,
-                    imageUrl: nft.image_url || nft.animation_url || ''
+                    stats,
+                    passive: stats.passive || null,
+                    imageUrl: nft.image_url || nft.animation_url || null
                 };
             });
     } catch (e) {

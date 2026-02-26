@@ -11,6 +11,20 @@ import { renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { normalizeFighter } from '../lib/game/metadataNormalizer.js';
 import { postChallenge } from '../lib/game/matchmaking.js';
 
+/** Inline toast for Farcaster miniapp (no browser alert) */
+function showBattleToast(message, type = 'error') {
+    const existing = document.getElementById('battle-toast');
+    if (existing) existing.remove();
+    const bg = type === 'error' ? 'rgba(239,68,68,0.92)' : 'rgba(16,185,129,0.92)';
+    const border = type === 'error' ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.5)';
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="battle-toast" style="position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:200;padding:12px 20px;border-radius:12px;background:${bg};border:1px solid ${border};color:#fff;font-size:14px;font-weight:500;text-align:center;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.4);backdrop-filter:blur(8px);">
+            ${message}
+        </div>
+    `);
+    setTimeout(() => document.getElementById('battle-toast')?.remove(), 3500);
+}
+
 let walletHandler = null;
 
 export async function renderBattlePage() {
@@ -72,7 +86,13 @@ export async function renderBattlePage() {
             try {
                 // We stored the raw selection inside previewModal before showing it
                 const selectedNft = window.__CURRENT_FIGHTER_SELECTION__;
-                if (!selectedNft) throw new Error("No fighter selected.");
+                if (!selectedNft) {
+                    $('#battle-loading-overlay')?.remove();
+                    showBattleToast('Pick your fighter first!');
+                    previewModal.show(previewModal.enemyData);
+                    selectorModal.show();
+                    return;
+                }
 
                 const walletAddress = state.wallet?.address || 'Anonymous';
 
@@ -100,7 +120,7 @@ export async function renderBattlePage() {
             } catch (err) {
                 console.error("Match error:", err);
                 $('#battle-loading-overlay')?.remove();
-                alert('Battle failed to start: ' + err.message);
+                showBattleToast('Battle failed to start. Try again.');
                 board.show();
             }
         },
@@ -151,7 +171,7 @@ export async function renderBattlePage() {
                     })
                     .catch(err => {
                         console.error('Failed to post challenge:', err);
-                        alert('Failed to post challenge. Try again.');
+                        showBattleToast('Failed to post challenge. Try again.');
                         board.show();
                     });
             }

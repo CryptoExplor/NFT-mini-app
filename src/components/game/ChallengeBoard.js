@@ -8,47 +8,42 @@ import { getActiveChallenges } from '../../lib/game/matchmaking.js';
  */
 
 const AI_MINTED_POOL = [
+    // BASE_INVADERS
     {
-        collectionId: 'BASE_INVADERS',
-        collectionName: 'BASE_INVADERS',
-        nftId: '402',
-        trait: 'Glitched',
-        rawAttributes: [
-            { trait_type: 'Faction', value: 'GLITCHED' },
-            { trait_type: 'Body', value: 'Slim' },
-            { trait_type: 'Corruption', value: 'Static' }
-        ]
+        collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '402', trait: 'Glitched',
+        rawAttributes: [{ trait_type: 'Faction', value: 'GLITCHED' }, { trait_type: 'Body', value: 'Slim' }]
     },
     {
-        collectionId: 'BASEHEADS_404',
-        collectionName: 'BASEHEADS_404',
-        nftId: '99',
-        trait: 'Overload',
-        rawAttributes: [
-            { trait_type: 'Mood', value: 'OVERLOAD' },
-            { trait_type: 'Noise', value: 'MAX' },
-            { trait_type: 'Error', value: '500' }
-        ]
+        collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '1087', trait: 'Corrupted',
+        rawAttributes: [{ trait_type: 'Faction', value: 'CORRUPTED' }, { trait_type: 'Body', value: 'Heavy' }]
+    },
+    // BASEHEADS_404
+    {
+        collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '99', trait: 'Overload',
+        rawAttributes: [{ trait_type: 'Mood', value: 'OVERLOAD' }, { trait_type: 'Noise', value: 'MAX' }]
     },
     {
-        collectionId: 'BaseMoods',
-        collectionName: 'BaseMoods',
-        nftId: '55',
-        trait: 'Zen',
-        rawAttributes: [
-            { trait_type: 'Mood', value: 'Zen' },
-            { trait_type: 'Blush', value: 'Yes' }
-        ]
+        collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '256', trait: 'Rage',
+        rawAttributes: [{ trait_type: 'Mood', value: 'RAGE' }, { trait_type: 'Error', value: '404' }]
+    },
+    // BaseMoods
+    {
+        collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '55', trait: 'Zen',
+        rawAttributes: [{ trait_type: 'Mood', value: 'Zen' }, { trait_type: 'Blush', value: 'Yes' }]
     },
     {
-        collectionId: 'VOID_PFPS',
-        collectionName: 'VOID_PFPS',
-        nftId: '12',
-        trait: 'Distortion',
-        rawAttributes: [
-            { trait_type: 'Type', value: 'Distortion' }
-        ]
-    }
+        collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '128', trait: 'Happy',
+        rawAttributes: [{ trait_type: 'Mood', value: 'Happy' }]
+    },
+    // VOID_PFPS
+    {
+        collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '12', trait: 'Distortion',
+        rawAttributes: [{ trait_type: 'Type', value: 'Distortion' }]
+    },
+    {
+        collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '77', trait: 'Phantom',
+        rawAttributes: [{ trait_type: 'Type', value: 'Phantom' }]
+    },
 ];
 
 const COLLECTION_COLORS = {
@@ -69,25 +64,25 @@ function shuffle(list) {
 }
 
 function buildAiChallenges() {
-    const aiWallets = [
-        '0x5C5a38168517B610fe06b00c07a2D45BBB10c2e8',
-        '0x1828c4Bf78DAb66B4B7deBfaA38F0Ad125Ec8d15'
-    ];
     const now = Date.now();
-    return shuffle(AI_MINTED_POOL).map((entry, index) => {
-        const randomAiWallet = aiWallets[Math.floor(Math.random() * aiWallets.length)];
-        return {
-            id: `ai_${entry.collectionId}_${entry.nftId}_${index}_${now}`,
-            player: randomAiWallet,
-            collectionName: entry.collectionName,
-            nftId: entry.nftId,
-            stats: normalizeFighter(entry.collectionId, entry.nftId, entry.rawAttributes),
-            trait: entry.trait,
-            isAi: true,
-            mintedToken: true,
-            aiWinRate: 0.6
-        };
-    });
+    const picked = shuffle(AI_MINTED_POOL).slice(0, 4);
+    const results = [];
+    for (const entry of picked) {
+        try {
+            results.push({
+                id: `ai_${entry.collectionId}_${entry.nftId}_${results.length}_${now}`,
+                collectionName: entry.collectionName,
+                nftId: entry.nftId,
+                stats: normalizeFighter(entry.collectionId, entry.nftId, entry.rawAttributes),
+                trait: entry.trait,
+                isAi: true,
+                mintedToken: true
+            });
+        } catch (e) {
+            console.warn(`[AI Pool] Skipped ${entry.collectionId} #${entry.nftId}:`, e.message);
+        }
+    }
+    return results;
 }
 
 function formatTimestamp(ts) {
@@ -207,10 +202,11 @@ export class ChallengeBoard {
             }
                     </div>
                     <div class="min-w-0 flex-1">
-                        <h3 class="font-bold text-sm truncate text-white/90">${challenge.collectionName} #${challenge.nftId}</h3>
-                        <p class="text-[11px] text-slate-500 font-mono truncate" title="${challenge.player}">
-                            ${shortenAddress(challenge.player)}
-                        </p>
+                        <h3 class="font-bold text-sm truncate text-white/90">${challenge.collectionName || challenge.collectionId || 'Unknown'} #${challenge.nftId || challenge.tokenId || '?'}</h3>
+                        ${isAi
+                ? `<p class="text-[11px] text-red-400/60 font-semibold uppercase tracking-wider">AI Opponent</p>`
+                : `<p class="text-[11px] text-slate-500 font-mono truncate" title="${challenge.player || challenge.creator}">${shortenAddress(challenge.player || challenge.creator)}</p>`
+            }
                     </div>
                 </div>
 
