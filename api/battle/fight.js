@@ -1,53 +1,56 @@
+import { kv } from '@vercel/kv';
 import { verifyOwnership } from '../../src/lib/battle/statProviders.js';
 import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
 import { simulateBattle, summarizeReplay } from '../../src/lib/game/engine.js';
 import { validateSnapshot, createSnapshotHash } from '../../src/lib/battle/snapshot.js';
 
-// Note: Using the same mock KV logic assumed across files 
-// (In Next/Express this would require shared state/redis mapping)
-const KV = {
-    challenges: new Map(), // Pretend this is injected/shared with challenge.js
-    matches: new Map()
-};
+// Simple CORS polyfill
+function setCorsHeaders(res) {
+    res.setHeader('Access-Control-Allow-Credentials', true)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
+}
 
-/**
- * POST /api/battle/fight
- * User commits to fighting an open challenge.
- */
-export async function resolveFight(req, res) {
+const CHALLENGES_KEY = 'battle_challenges:v2';
+const MATCHES_KEY = 'battle_matches:v2';
+
+export default async function handler(req, res) {
+    setCorsHeaders(res);
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+    return await resolveFight(req, res);
+}
+
+async function resolveFight(req, res) {
     const { challengeId, attackerCollectionId, attackerTokenId, rawMetadata, attackerAddress } = req.body;
 
-    const challenge = KV.challenges.get(challengeId);
-    if (!challenge || challenge.status !== 'OPEN') {
+    let challenges = await kv.get(CHALLENGES_KEY) || [];
+    const challengeIndex = challenges.findIndex(c => c.id === challengeId);
+
+    if (challengeIndex === -1 || challenges[challengeIndex].status !== 'OPEN') {
         return res.status(404).json({ error: 'Challenge not found or already closed.' });
     }
 
-    // 1. Verify attacker ownership
-    const ownsToken = await verifyOwnership(attackerCollectionId, attackerTokenId, attackerAddress);
-    if (!ownsToken) {
-        return res.status(403).json({ error: 'Caller does not own the attacking token.' });
-    }
+    const challenge = challenges[challengeIndex];
 
-    // 2. Prevent attacking yourself 
+    // 1. Prevent attacking yourself 
     if (challenge.creator.toLowerCase() === attackerAddress.toLowerCase()) {
         return res.status(400).json({ error: 'Cannot fight your own challenge.' });
     }
 
-    // 3. Normalize attacker stats & take attacker snapshot
+    // 2. Normalize attacker stats 
     const attackerStats = normalizeFighter(attackerCollectionId, attackerTokenId, rawMetadata);
 
-    // 4. Verify Defender Snapshot hasn't drifted since challenge was created
-    // Wait, since defender is stored in KV, we just use the stored stats directly right now
-    // But in a real DB we would re-fetch and validate against the stored hash.
-    const isDefenderValid = validateSnapshot(challenge.stats, challenge.snapshotHash);
+    // 3. Verify Defender Snapshot hasn't drifted
+    const isDefenderValid = await validateSnapshot(challenge.stats, challenge.snapshotHash);
     if (!isDefenderValid) {
         return res.status(409).json({ error: 'Defender stats have drifted. Challenge is voided.' });
     }
 
-    // 5. Seeded Battle Simulation
-    // In production we would use a robust PRNG like 'seedrandom'
-    // For MVP scaffold we will inject Math.random mapped to a dummy seed structure
-    const matchSeed = Math.random().toString(36).substring(7); // Server-side deterministic seed
+    // 4. Seeded Battle Simulation
+    const matchSeed = Math.random().toString(36).substring(7);
 
     // Polyfill a simple seeded random for MVP scope
     let a = parseInt(matchSeed, 36);
@@ -61,7 +64,7 @@ export async function resolveFight(req, res) {
     const fullLog = simulateBattle(attackerStats, challenge.stats, prng);
     const summary = summarizeReplay(fullLog);
 
-    // 6. Record Match
+    // 5. Record Match
     const matchId = `match_${Date.now()}`;
     const matchResult = {
         id: matchId,
@@ -73,11 +76,22 @@ export async function resolveFight(req, res) {
         timestamp: Date.now()
     };
 
-    KV.matches.set(matchId, matchResult);
+    await kv.hset(MATCHES_KEY, { [matchId]: matchResult });
 
-    // 7. Close Challenge
-    challenge.status = 'COMPLETED';
-    KV.challenges.set(challengeId, challenge);
+    // 6. Close Challenge
+    challenges[challengeIndex].status = 'COMPLETED';
+    await kv.set(CHALLENGES_KEY, challenges);
+
+    // 7. Update Global Leaderboard if base engine events existed
+    const winAddress = summary.winner === 1 ? attackerAddress : challenge.creator;
+    const loseAddress = summary.winner === 1 ? challenge.creator : attackerAddress;
+
+    try {
+        await kv.zincrby('global_leaderboard', 10, winAddress);
+        // Optional: decrement loser
+    } catch (e) {
+        console.error('Failed to update leaderboard', e);
+    }
 
     // 8. Return determinable result for client playback
     return res.status(200).json({

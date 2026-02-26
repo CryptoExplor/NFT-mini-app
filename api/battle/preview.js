@@ -1,26 +1,39 @@
+import { kv } from '@vercel/kv';
 import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
 
-// Mock DB reference
-const KV = {
-    challenges: new Map() // Would be injected
-};
+// Simple CORS polyfill
+function setCorsHeaders(res) {
+    res.setHeader('Access-Control-Allow-Credentials', true)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
+}
 
-/**
- * GET /api/battle/preview/:challengeId
- * 
- * Returns the hashed stats of the defender so the client can render 
- * the Match Preview screen before committing to the fight.
- */
-export async function getMatchPreview(req, res) {
-    const { challengeId } = req.params;
+const CHALLENGES_KEY = 'battle_challenges:v2';
 
-    const challenge = KV.challenges.get(challengeId);
+export default async function handler(req, res) {
+    setCors(req, res, { methods: 'GET,POST,OPTIONS' });
+    if (req.method === 'OPTIONS') return res.status(200).end();
+
+    if (req.method === 'GET' && req.url.includes('/preview/')) {
+        return await getMatchPreview(req, res);
+    } else if (req.method === 'POST' && req.url.endsWith('/evaluate')) {
+        return await evaluateMyFighter(req, res);
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function getMatchPreview(req, res) {
+    const parts = req.url.split('/');
+    const challengeId = parts[parts.length - 1]; // Basic router extraction
+
+    const challenges = await kv.get(CHALLENGES_KEY) || [];
+    const challenge = challenges.find(c => c.id === challengeId);
+
     if (!challenge || challenge.status !== 'OPEN') {
         return res.status(404).json({ error: 'Challenge not available.' });
     }
-
-    // In a real DB, we could optionally re-fetch dynamic stats from the provider
-    // and re-verify the snapshot here to warn the user early if it drifted.
 
     // For MVP, we pass the static snapshot payload back for the UI.
     return res.status(200).json({
@@ -33,12 +46,7 @@ export async function getMatchPreview(req, res) {
     });
 }
 
-/**
- * POST /api/battle/preview/evaluate (Optional helper)
- * Allows client to preview what their OWN normalized stats will look like 
- * before clicking "Challenge" or "Fight".
- */
-export async function evaluateMyFighter(req, res) {
+async function evaluateMyFighter(req, res) {
     const { collectionId, tokenId, rawMetadata } = req.body;
 
     try {
