@@ -27,6 +27,26 @@ function showBattleToast(message, type = 'error') {
 
 let walletHandler = null;
 
+const FIGHTER_STORAGE_KEY = 'battle_last_fighter';
+
+/** Save selected fighter to localStorage */
+function saveLastFighter(selectedNft, pData) {
+    try {
+        localStorage.setItem(FIGHTER_STORAGE_KEY, JSON.stringify({ selectedNft, pData }));
+    } catch (_) { /* quota exceeded or private mode */ }
+}
+
+/** Load last fighter from localStorage */
+function loadLastFighter() {
+    try {
+        const raw = localStorage.getItem(FIGHTER_STORAGE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (data?.selectedNft && data?.pData) return data;
+    } catch (_) { }
+    return null;
+}
+
 export async function renderBattlePage() {
     const app = $('#app');
 
@@ -75,7 +95,7 @@ export async function renderBattlePage() {
         async (playerCombatStats, enemyCombatStats) => {
             previewModal.hide();
 
-            // Show loading state while server calculates the match
+            // Show loading state while calculating the match
             app.insertAdjacentHTML('beforeend', `
                 <div id="battle-loading-overlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md">
                     <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -84,7 +104,6 @@ export async function renderBattlePage() {
             `);
 
             try {
-                // We stored the raw selection inside previewModal before showing it
                 const selectedNft = window.__CURRENT_FIGHTER_SELECTION__;
                 if (!selectedNft) {
                     $('#battle-loading-overlay')?.remove();
@@ -94,28 +113,42 @@ export async function renderBattlePage() {
                     return;
                 }
 
-                const walletAddress = state.wallet?.address || 'Anonymous';
+                const isAi = !!previewModal.enemyData?.isAi;
+                let replayLogs, winner;
 
-                // 1. Call secure backend to generate the fight result
-                const { resolveFight } = await import('../lib/game/matchmaking.js');
-                const result = await resolveFight(
-                    previewModal.enemyData.id,
-                    walletAddress,
-                    selectedNft
-                );
+                if (isAi) {
+                    // ── AI Battles: resolve locally with the client engine ──
+                    const { simulateBattle, summarizeReplay } = await import('../lib/game/engine.js');
+                    const battleResult = simulateBattle(playerCombatStats, enemyCombatStats, Math.random, {
+                        isAiBattle: true,
+                        aiWinRate: previewModal.enemyData.aiWinRate || 0.6,
+                        playerTeam: selectorModal.inventory || []
+                    });
+                    const summary = summarizeReplay(battleResult);
+                    replayLogs = battleResult.logs;
+                    winner = summary.winner;
+                } else {
+                    // ── PvP Battles: resolve via secure server API ──
+                    const walletAddress = state.wallet?.address || 'Anonymous';
+                    const { resolveFight } = await import('../lib/game/matchmaking.js');
+                    const result = await resolveFight(
+                        previewModal.enemyData.id,
+                        walletAddress,
+                        selectedNft
+                    );
+                    replayLogs = result.replayLogs;
+                    winner = result.summary.winner;
+                }
 
                 $('#battle-loading-overlay')?.remove();
 
-                // 2. Play the server-generated logs in the visual arena
-                const battleOptions = {
-                    playerTeam: selectorModal.inventory || [],
-                    precomputedLogs: result.replayLogs,
-                    winner: result.summary.winner
-                };
-
                 renderCombatArena(playerCombatStats, enemyCombatStats, () => {
-                    console.log("Visual Match concluded! Server Winner:", result.summary.winner);
-                }, battleOptions);
+                    console.log("Match concluded! Winner:", winner);
+                }, {
+                    playerTeam: selectorModal.inventory || [],
+                    precomputedLogs: replayLogs,
+                    winner
+                });
 
             } catch (err) {
                 console.error("Match error:", err);
@@ -150,8 +183,9 @@ export async function renderBattlePage() {
                 imageUrl: selectedNft.imageUrl || ''
             };
 
-            // Save globally for submit to secure server when they hit 'START BATTLE'
+            // Save globally for submit when they hit 'START BATTLE'
             window.__CURRENT_FIGHTER_SELECTION__ = selectedNft;
+            saveLastFighter(selectedNft, pData);
 
             // If we have an active enemy preview, we update the player slot
             if (previewModal.enemyData) {
@@ -185,8 +219,14 @@ export async function renderBattlePage() {
         'challenge-board-view',
         (challengeData) => {
             board.hide();
-            // Clear player data when looking at a new enemy
-            previewModal.playerData = null;
+            // Auto-restore last fighter from localStorage
+            const saved = loadLastFighter();
+            if (saved) {
+                window.__CURRENT_FIGHTER_SELECTION__ = saved.selectedNft;
+                previewModal.playerData = saved.pData;
+            } else {
+                previewModal.playerData = null;
+            }
             previewModal.show(challengeData);
         },
         () => {
