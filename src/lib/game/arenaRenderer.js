@@ -89,7 +89,8 @@ function showRoundSplash(container, roundNumber) {
     const splash = document.createElement('div');
     splash.className = 'round-splash';
     splash.textContent = `Round ${roundNumber}`;
-    container.appendChild(splash);
+    // Append to body (not container) so position:fixed isn't broken by parent transforms
+    document.body.appendChild(splash);
     setTimeout(() => splash.remove(), 1300);
 }
 
@@ -245,11 +246,22 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
     }, 600);
 
     setTimeout(() => {
-        const battleData = simulateBattle(playerData, enemyData, Math.random, {
-            ...options,
-            isAiBattle: !!enemyData.isAi,
-            aiWinRate: 0.6
-        });
+        let battleData;
+        if (options.precomputedLogs && options.precomputedLogs.length > 0) {
+            // Use precomputed logs from battle.js (AI local or PvP server)
+            battleData = {
+                logs: options.precomputedLogs,
+                winner: options.winner || playerData.name,
+                totalRounds: options.precomputedLogs[options.precomputedLogs.length - 1]?.round || 1
+            };
+        } else {
+            // Fallback: simulate locally (shouldn't normally happen)
+            battleData = simulateBattle(playerData, enemyData, Math.random, {
+                ...options,
+                isAiBattle: !!enemyData.isAi,
+                aiWinRate: 0.6
+            });
+        }
         animateBattle(battleData, playerData.hp, enemyData.hp, playerData.name, enemyData.name, onBattleComplete);
     }, 1800);
 }

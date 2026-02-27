@@ -221,6 +221,176 @@ body {
   background-color: rgba(15, 23, 42, 0.6);
 }
 
+/* -- Card gradient tints (darken for light bg) -- */
+:root[data-theme='light'] .from-emerald-900\/30 {
+  --tw-gradient-from: rgba(6, 95, 70, 0.12);
+}
+
+:root[data-theme='light'] .from-orange-900\/30 {
+  --tw-gradient-from: rgba(154, 52, 18, 0.12);
+}
+
+:root[data-theme='light'] .from-pink-900\/30 {
+  --tw-gradient-from: rgba(131, 24, 67, 0.12);
+}
+
+:root[data-theme='light'] .from-purple-900\/30 {
+  --tw-gradient-from: rgba(88, 28, 135, 0.12);
+}
+
+:root[data-theme='light'] .from-cyan-900\/30 {
+  --tw-gradient-from: rgba(22, 78, 99, 0.12);
+}
+
+:root[data-theme='light'] .from-indigo-900\/30 {
+  --tw-gradient-from: rgba(49, 46, 129, 0.12);
+}
+
+:root[data-theme='light'] .from-indigo-950\/40 {
+  --tw-gradient-from: rgba(30, 27, 75, 0.08);
+}
+
+/* -- Card borders (stronger in light) -- */
+:root[data-theme='light'] .border-emerald-500\/40 {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+:root[data-theme='light'] .border-orange-500\/40 {
+  border-color: rgba(249, 115, 22, 0.35);
+}
+
+:root[data-theme='light'] .border-pink-500\/40 {
+  border-color: rgba(236, 72, 153, 0.35);
+}
+
+:root[data-theme='light'] .border-purple-500\/40 {
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+:root[data-theme='light'] .border-cyan-500\/40 {
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+:root[data-theme='light'] .border-indigo-500\/40 {
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+:root[data-theme='light'] .border-indigo-500\/50 {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* -- Badge / pill text (dark for readability) -- */
+:root[data-theme='light'] .text-emerald-300 {
+  color: #047857;
+}
+
+:root[data-theme='light'] .text-emerald-400 {
+  color: #059669;
+}
+
+:root[data-theme='light'] .text-orange-300 {
+  color: #c2410c;
+}
+
+:root[data-theme='light'] .text-orange-400 {
+  color: #ea580c;
+}
+
+:root[data-theme='light'] .text-pink-300 {
+  color: #be185d;
+}
+
+:root[data-theme='light'] .text-pink-400 {
+  color: #db2777;
+}
+
+:root[data-theme='light'] .text-purple-300 {
+  color: #7e22ce;
+}
+
+:root[data-theme='light'] .text-cyan-300 {
+  color: #0e7490;
+}
+
+:root[data-theme='light'] .text-red-300 {
+  color: #dc2626;
+}
+
+:root[data-theme='light'] .text-red-400 {
+  color: #dc2626;
+}
+
+:root[data-theme='light'] .text-red-400\/50 {
+  color: rgba(220, 38, 38, 0.6);
+}
+
+:root[data-theme='light'] .text-red-400\/60 {
+  color: rgba(220, 38, 38, 0.7);
+}
+
+:root[data-theme='light'] .text-indigo-400\/50 {
+  color: rgba(67, 56, 202, 0.6);
+}
+
+/* -- Badge backgrounds (slightly stronger on light) -- */
+:root[data-theme='light'] .bg-red-500\/15 {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+:root[data-theme='light'] .bg-indigo-500\/15 {
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+:root[data-theme='light'] .bg-emerald-500\/15 {
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+:root[data-theme='light'] .bg-emerald-500\/20 {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+:root[data-theme='light'] .bg-orange-500\/20 {
+  background-color: rgba(249, 115, 22, 0.15);
+}
+
+:root[data-theme='light'] .bg-pink-500\/20 {
+  background-color: rgba(236, 72, 153, 0.15);
+}
+
+:root[data-theme='light'] .bg-purple-500\/20 {
+  background-color: rgba(168, 85, 247, 0.15);
+}
+
+:root[data-theme='light'] .bg-cyan-500\/20 {
+  background-color: rgba(6, 182, 212, 0.15);
+}
+
+:root[data-theme='light'] .bg-indigo-500\/20 {
+  background-color: rgba(99, 102, 241, 0.15);
+}
+
+/* -- Badge borders -- */
+:root[data-theme='light'] .border-red-500\/20 {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+:root[data-theme='light'] .border-indigo-500\/20 {
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+:root[data-theme='light'] .border-emerald-500\/20 {
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+:root[data-theme='light'] .border-indigo-500\/30 {
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* -- Card white overlay bg (glass effect for light) -- */
+:root[data-theme='light'] .bg-white\/\[0\.03\] {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
 :root[data-theme='light'] #profile-content,
 :root[data-theme='light'] #mobile-filter-content {
   background: #f8fbff;
@@ -1105,31 +1275,34 @@ body {
 /* --- Round Splash --- */
 @keyframes round-splash {
   0% {
-    transform: scale(0.3) rotate(-5deg);
+    transform: translate(-50%, -50%) scale(0);
     opacity: 0;
-    letter-spacing: 0.5em;
+  }
+
+  15% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
   }
 
   30% {
-    transform: scale(1.15) rotate(1deg);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
-    letter-spacing: 0.05em;
   }
 
   70% {
-    transform: scale(1) rotate(0deg);
+    transform: translate(-50%, -50%) scale(1);
     opacity: 1;
   }
 
   100% {
-    transform: scale(0.8) rotate(0deg);
+    transform: translate(-50%, -50%) scale(0);
     opacity: 0;
   }
 }
 
 .round-splash {
   position: fixed;
-  top: 50%;
+  top: calc(50% - 40px);
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 3rem;
