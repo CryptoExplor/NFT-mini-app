@@ -251,11 +251,11 @@ export function executeTurn(attacker, defender, prng, turnContext = {}) {
     const finalDamage = Math.floor(rawDamage);
     defender.hp -= finalDamage;
 
-    // Lifesteal calculation
+    // Lifesteal calculation (clamped to maxHp to prevent overheal exploit)
     let healing = 0;
     if (attacker.lifesteal && attacker.lifesteal > 0) {
         healing = Math.floor(finalDamage * attacker.lifesteal);
-        attacker.hp += healing;
+        attacker.hp = Math.min(attacker.maxHp || attacker.hp + healing, attacker.hp + healing);
     }
 
     return {
@@ -358,6 +358,7 @@ function _simulateBattleCore(playerFighter, enemyFighter, prng, options = {}) {
 
     let round = 1;
     let winner = null;
+    let winnerSide = null;
 
     while (p1.hp > 0 && p2.hp > 0 && round <= COMBAT.MAX_ROUNDS) {
         const turnEvents = [];
@@ -439,6 +440,7 @@ function _simulateBattleCore(playerFighter, enemyFighter, prng, options = {}) {
 
         if (currentDefender.hp <= 0) {
             winner = currentAttacker.name;
+            winnerSide = currentAttacker.side;
             break;
         }
 
@@ -451,11 +453,15 @@ function _simulateBattleCore(playerFighter, enemyFighter, prng, options = {}) {
     }
 
     if (!winner) {
-        winner = (p1.hp / p1.maxHp) > (p2.hp / p2.maxHp) ? p1.name : p2.name;
+        const p1Ratio = p1.hp / p1.maxHp;
+        const p2Ratio = p2.hp / p2.maxHp;
+        winner = p1Ratio > p2Ratio ? p1.name : p2.name;
+        winnerSide = p1Ratio > p2Ratio ? 'P1' : 'P2';
     }
 
     return {
         winner,
+        winnerSide,
         totalRounds: logs.length || round,
         logs
     };
@@ -469,6 +475,7 @@ export function summarizeReplay(battleResult) {
 
     return {
         winner: battleResult?.winner || null,
+        winnerSide: battleResult?.winnerSide || null,
         totalRounds: battleResult?.totalRounds || logs.length,
         totalDamageP1: logs.filter((l) => l.attackerSide === 'P1').reduce((sum, l) => sum + (l.damage || 0), 0),
         totalDamageP2: logs.filter((l) => l.attackerSide === 'P2').reduce((sum, l) => sum + (l.damage || 0), 0)

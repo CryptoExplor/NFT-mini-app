@@ -1,7 +1,7 @@
 import { kv } from '@vercel/kv';
 import { SiweMessage } from 'siwe';
 import { SignJWT } from 'jose';
-import { setCors } from '../lib/cors.js';
+import { setCors } from '../_lib/cors.js';
 
 /**
  * POST /api/auth/verify

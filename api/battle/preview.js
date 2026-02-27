@@ -1,18 +1,14 @@
 import { kv } from '@vercel/kv';
 import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
+import { setCors } from '../_lib/cors.js';
 
-// Simple CORS polyfill
-function setCorsHeaders(res) {
-    res.setHeader('Access-Control-Allow-Credentials', true)
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
-}
-
-const CHALLENGES_KEY = 'battle_challenges:v2';
+const CHALLENGES_LIST_KEY = 'battle_challenges_list:v2';
 
 export default async function handler(req, res) {
-    setCorsHeaders(res);
+    setCors(req, res, {
+        methods: 'GET,POST,OPTIONS',
+        headers: 'Content-Type, Authorization'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method === 'GET' && req.url.includes('/preview/')) {
@@ -28,7 +24,11 @@ async function getMatchPreview(req, res) {
     const parts = req.url.split('/');
     const challengeId = parts[parts.length - 1]; // Basic router extraction
 
-    const challenges = await kv.get(CHALLENGES_KEY) || [];
+    const raw = await kv.lrange(CHALLENGES_LIST_KEY, 0, 49) || [];
+    const challenges = raw.map(item => {
+        try { return typeof item === 'string' ? JSON.parse(item) : item; }
+        catch { return null; }
+    }).filter(Boolean);
     const challenge = challenges.find(c => c.id === challengeId);
 
     if (!challenge || challenge.status !== 'OPEN') {
@@ -40,9 +40,10 @@ async function getMatchPreview(req, res) {
         challengeId: challenge.id,
         defender: challenge.creator,
         collectionId: challenge.collectionId,
-        tokenId: challenge.tokenId,
-        stats: challenge.stats, // Needed for MatchPreview UI
-        snapshotHash: challenge.snapshotHash // Passed back in /fight payload
+        collectionName: challenge.collectionName,
+        nftId: challenge.nftId,
+        stats: challenge.stats,
+        snapshotHash: challenge.snapshotHash
     });
 }
 
@@ -56,3 +57,4 @@ async function evaluateMyFighter(req, res) {
         return res.status(400).json({ error: err.message });
     }
 }
+

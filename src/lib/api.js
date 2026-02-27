@@ -231,12 +231,36 @@ export function setAuthToken(token) {
 }
 
 /**
- * Get stored auth token
+ * Get stored auth token (auto-clears if expired)
  */
 export function getAuthToken() {
-    if (authToken) return authToken;
+    if (authToken) {
+        if (isTokenExpired(authToken)) {
+            clearAuthToken();
+            return null;
+        }
+        return authToken;
+    }
     try { authToken = sessionStorage.getItem('auth_token'); } catch { }
+    if (authToken && isTokenExpired(authToken)) {
+        clearAuthToken();
+        return null;
+    }
     return authToken;
+}
+
+/**
+ * Check if a JWT is expired (without verifying signature)
+ */
+function isTokenExpired(token) {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.exp) return false;
+        // 30s buffer to avoid edge-case races
+        return (payload.exp * 1000) < (Date.now() - 30_000);
+    } catch {
+        return true; // Malformed token = treat as expired
+    }
 }
 
 /**

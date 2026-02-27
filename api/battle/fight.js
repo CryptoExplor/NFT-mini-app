@@ -1,22 +1,18 @@
 import { kv } from '@vercel/kv';
-import { verifyOwnership } from '../../src/lib/battle/statProviders.js';
 import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
 import { simulateBattle, summarizeReplay } from '../../src/lib/game/engine.js';
 import { validateSnapshot, createSnapshotHash } from '../../src/lib/battle/snapshot.js';
+import { setCors } from '../_lib/cors.js';
+import crypto from 'crypto';
 
-// Simple CORS polyfill
-function setCorsHeaders(res) {
-    res.setHeader('Access-Control-Allow-Credentials', true)
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
-}
-
-const CHALLENGES_KEY = 'battle_challenges:v2';
+const CHALLENGES_LIST_KEY = 'battle_challenges_list:v2';
 const MATCHES_KEY = 'battle_matches:v2';
 
 export default async function handler(req, res) {
-    setCorsHeaders(res);
+    setCors(req, res, {
+        methods: 'POST,OPTIONS',
+        headers: 'Content-Type, Authorization'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -26,14 +22,27 @@ export default async function handler(req, res) {
 async function resolveFight(req, res) {
     const { challengeId, attackerCollectionId, attackerTokenId, rawMetadata, attackerAddress } = req.body;
 
-    let challenges = await kv.get(CHALLENGES_KEY) || [];
-    const challengeIndex = challenges.findIndex(c => c.id === challengeId);
-
-    if (challengeIndex === -1 || challenges[challengeIndex].status !== 'OPEN') {
-        return res.status(404).json({ error: 'Challenge not found or already closed.' });
+    // Payload validation
+    if (!challengeId || !attackerCollectionId || !attackerTokenId || !attackerAddress) {
+        return res.status(400).json({ error: 'Missing required fields: challengeId, attackerCollectionId, attackerTokenId, attackerAddress' });
     }
 
-    const challenge = challenges[challengeIndex];
+    // Read all challenges from the list
+    const raw = await kv.lrange(CHALLENGES_LIST_KEY, 0, 49) || [];
+    const challenges = raw.map((item, idx) => {
+        try {
+            const parsed = typeof item === 'string' ? JSON.parse(item) : item;
+            parsed._listIndex = idx;
+            return parsed;
+        }
+        catch { return null; }
+    }).filter(Boolean);
+
+    const challenge = challenges.find(c => c.id === challengeId);
+
+    if (!challenge || challenge.status !== 'OPEN') {
+        return res.status(404).json({ error: 'Challenge not found or already closed.' });
+    }
 
     // 1. Prevent attacking yourself 
     if (challenge.creator.toLowerCase() === attackerAddress.toLowerCase()) {
@@ -49,11 +58,11 @@ async function resolveFight(req, res) {
         return res.status(409).json({ error: 'Defender stats have drifted. Challenge is voided.' });
     }
 
-    // 4. Seeded Battle Simulation
-    const matchSeed = Math.random().toString(36).substring(7);
+    // 4. Cryptographically secure seed
+    const matchSeed = crypto.randomBytes(4).toString('hex');
 
-    // Polyfill a simple seeded random for MVP scope
-    let a = parseInt(matchSeed, 36);
+    // Seeded PRNG from secure seed
+    let a = parseInt(matchSeed, 16);
     const prng = () => {
         let t = a += 0x6D2B79F5;
         t = Math.imul(t ^ t >>> 15, t | 1);
@@ -72,23 +81,26 @@ async function resolveFight(req, res) {
         attacker: attackerAddress,
         defender: challenge.creator,
         winner: summary.winner,
+        winnerSide: fullLog.winnerSide,
         seed: matchSeed,
         timestamp: Date.now()
     };
 
     await kv.hset(MATCHES_KEY, { [matchId]: matchResult });
 
-    // 6. Close Challenge
-    challenges[challengeIndex].status = 'COMPLETED';
-    await kv.set(CHALLENGES_KEY, challenges);
+    // 6. Close Challenge — mark as completed by updating the list entry
+    challenge.status = 'COMPLETED';
+    delete challenge._listIndex;
+    await kv.lset(CHALLENGES_LIST_KEY, challenges.indexOf(challenges.find(c => c.id === challengeId)), JSON.stringify(challenge));
 
-    // 7. Update Global Leaderboard if base engine events existed
-    const winAddress = summary.winner === 1 ? attackerAddress : challenge.creator;
-    const loseAddress = summary.winner === 1 ? challenge.creator : attackerAddress;
+    // 7. Update Global Leaderboard — use unified key matching events system
+    const winAddress = fullLog.winnerSide === 'P1' ? attackerAddress : challenge.creator;
 
     try {
-        await kv.zincrby('global_leaderboard', 10, winAddress);
-        // Optional: decrement loser
+        const pipe = kv.pipeline();
+        pipe.zincrby('leaderboard:battle_wins:all_time', 1, winAddress);
+        pipe.hincrby(`user:${winAddress}:profile`, 'battle_wins', 1);
+        await pipe.exec();
     } catch (e) {
         console.error('Failed to update leaderboard', e);
     }
@@ -99,6 +111,8 @@ async function resolveFight(req, res) {
         matchId,
         seed: matchSeed,
         summary,
-        replayLogs: fullLog.logs // Client uses this to animate the fight visually
+        winnerSide: fullLog.winnerSide,
+        replayLogs: fullLog.logs
     });
 }
+

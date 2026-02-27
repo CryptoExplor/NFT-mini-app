@@ -1301,19 +1301,27 @@ body {
 }
 
 .round-splash {
-  position: fixed;
+  position: absolute;
   top: calc(50% - 40px);
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 3rem;
+  font-size: 1.8rem;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.1em;
   color: white;
-  text-shadow: 0 0 40px rgba(99, 102, 241, 0.8), 0 0 80px rgba(99, 102, 241, 0.4);
+  text-shadow: 0 0 30px rgba(99, 102, 241, 0.7), 0 0 60px rgba(99, 102, 241, 0.3);
   z-index: 70;
   pointer-events: none;
   animation: round-splash 1.2s cubic-bezier(.17, .67, .3, 1.2) forwards;
+}
+
+@media (min-width: 768px) {
+  .round-splash {
+    font-size: 3rem;
+    letter-spacing: 0.15em;
+    text-shadow: 0 0 40px rgba(99, 102, 241, 0.8), 0 0 80px rgba(99, 102, 241, 0.4);
+  }
 }
 
 /* --- HP Bar Pulse (low health) --- */

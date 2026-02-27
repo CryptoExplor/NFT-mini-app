@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import { ViteImageOptimizer } from 'vite-plugin-image-optimizer';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
     // Build optimization
     build: {
         target: 'esnext',
@@ -97,7 +97,7 @@ export default defineConfig({
     esbuild: {
         logOverride: { 'this-is-undefined-in-esm': 'silent' },
         // Strip console.log and console.info in production builds
-        drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
+        drop: mode === 'production' ? ['console', 'debugger'] : [],
     },
 
     // Preview server (for testing build)
@@ -105,4 +105,4 @@ export default defineConfig({
         port: 4173,
         host: true
     }
-});
+}));

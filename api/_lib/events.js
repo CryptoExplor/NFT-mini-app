@@ -374,10 +374,9 @@ const RATE_LIMITS = {
 
 export async function checkRateLimit(kv, key, action) {
     const limitKey = `ratelimit:${key}:${action}`;
+    // Atomic: SET NX with TTL ensures the key always has an expiry
+    await kv.set(limitKey, 0, { ex: 60, nx: true });
     const count = await kv.incr(limitKey);
-    if (count === 1) {
-        await kv.expire(limitKey, 60);
-    }
     if (count > (RATE_LIMITS[action] || 100)) {
         throw new Error('Rate limit exceeded');
     }
@@ -387,13 +386,18 @@ export async function checkRateLimit(kv, key, action) {
 
 export async function cleanupExpiredKeys(kv) {
     const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const keys = await kv.keys('daily:stats:*');
-    for (const key of keys) {
-        const date = key.split(':')[2];
-        if (date < cutoffDate) {
-            await kv.del(key);
+    let cursor = 0;
+    do {
+        const result = await kv.scan(cursor, { match: 'daily:stats:*', count: 100 });
+        cursor = result[0];
+        const keys = result[1] || [];
+        for (const key of keys) {
+            const date = key.split(':')[2];
+            if (date < cutoffDate) {
+                await kv.del(key);
+            }
         }
-    }
+    } while (cursor !== 0 && cursor !== '0');
 }
 
 // ── Orchestrator ───────────────────────────────────────────────

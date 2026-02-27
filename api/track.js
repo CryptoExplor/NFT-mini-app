@@ -100,7 +100,7 @@ async function verifyMintTransaction(txHash, wallet) {
             receipt = await publicClient.getTransactionReceipt({ hash: txHash });
         } catch (err) {
             console.warn(`Tx receipt not found for ${txHash} (RPC latency possible)`);
-            return true; // Soft fail
+            return false; // Fail-closed: reject unverifiable mints
         }
 
         if (receipt.status !== 'success') return false;
@@ -123,6 +123,6 @@ async function verifyMintTransaction(txHash, wallet) {
         });
     } catch (e) {
         console.error('Verify tx failed:', e);
-        return true; // Fail open
+        return false; // Fail-closed: reject on verification errors
     }
 }

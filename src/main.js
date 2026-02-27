@@ -18,7 +18,6 @@ import { initTheme } from './utils/theme.js';
 // Farcaster SDK is kept as static import (~100KB) so ready() fires instantly.
 // Without this, the app stays stuck on the Farcaster splash screen.
 import { sdk as farcasterSdk } from '@farcaster/miniapp-sdk';
-import { renderBattlePage } from './pages/battle.js';
 import { initFarcasterSDK } from './farcaster.js';
 
 // Apply theme as early as possible to avoid flash on first paint.
@@ -200,12 +199,6 @@ function setupRoutes() {
         const page = await loadPageModule(() => import('./pages/gallery.js'));
         await page.renderGalleryPage();
     });
-
-    router.route('/battle', async () => {
-        await cleanupAnalyticsIfNeeded();
-        const page = await loadPageModule(() => import('./pages/battle.js'));
-        await page.renderBattlePage();
-    });
 }
 
 function hideLoading() {
@@ -255,7 +248,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 // DEBUG UTILITIES
 // ============================================
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
     window.router = router;
     window.state = state;
     window.navigate = (path) => router.navigate(path);

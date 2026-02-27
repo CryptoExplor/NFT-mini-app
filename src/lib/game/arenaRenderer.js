@@ -1,5 +1,6 @@
 import { $ } from '../../utils/dom.js';
 import { simulateBattle } from './engine.js';
+import { createShareCard, getFarcasterShareUrl } from '../../components/game/BattleShareCard.js';
 
 /**
  * Premium Combat Arena Renderer
@@ -89,7 +90,13 @@ function showRoundSplash(container, roundNumber) {
     const splash = document.createElement('div');
     splash.className = 'round-splash';
     splash.textContent = `Round ${roundNumber}`;
-    // Append to body (not container) so position:fixed isn't broken by parent transforms
+
+    // Position absolutely relative to the battlefield, not the viewport
+    const rect = container.getBoundingClientRect();
+    splash.style.position = 'absolute';
+    splash.style.top = `${rect.top + rect.height / 2 + window.scrollY}px`;
+    splash.style.left = `${rect.left + rect.width / 2 + window.scrollX}px`;
+
     document.body.appendChild(splash);
     setTimeout(() => splash.remove(), 1300);
 }
@@ -138,7 +145,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
 
     arena.innerHTML = `
         <!-- Round Header -->
-        <div class="flex justify-between items-center bg-black/60 backdrop-blur-sm p-4 rounded-xl border border-white/5 mb-6 mt-4">
+        <div class="flex justify-between items-center bg-black/60 backdrop-blur-sm p-3 md:p-4 rounded-xl border border-white/5 mb-4 md:mb-6 mt-2 md:mt-4">
            <div class="flex items-center gap-3">
                <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
                <div class="text-sm font-bold text-indigo-300 tracking-wider">ROUND <span id="round-counter" class="text-white text-lg">1</span></div>
@@ -152,7 +159,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
         </div>
 
         <!-- Battlefield -->
-        <div class="relative w-full min-h-[340px] flex items-center justify-between px-6 md:px-16 ${biomeClass} rounded-2xl border border-white/10 overflow-hidden" id="battlefield">
+        <div class="relative w-full min-h-[300px] flex items-center justify-between px-3 md:px-16 ${biomeClass} rounded-2xl border border-white/10 overflow-hidden" id="battlefield">
 
             <!-- Player Fighter (Left) -->
             <div class="flex flex-col items-center w-2/5 z-10 fighter-enter-left" id="player-sprite-container">
@@ -167,11 +174,11 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
                     </div>
                 </div>
                 <!-- Avatar -->
-                <div class="w-28 h-28 md:w-36 md:h-36 rounded-2xl border-2 border-indigo-500/50 shadow-[0_0_40px_rgba(99,102,241,0.3)] flex items-center justify-center transition-all duration-300 overflow-hidden bg-indigo-950/50" id="player-avatar">
-                   ${playerData.image ? `<img src="${playerData.image}" class="w-full h-full object-contain" alt="Player Fighter" />` : `<div class="text-4xl font-black text-indigo-400/60">P1</div>`}
+                <div class="w-28 h-28 md:w-36 md:h-36 rounded-xl md:rounded-2xl border-2 border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.3)] md:shadow-[0_0_40px_rgba(99,102,241,0.3)] flex items-center justify-center transition-all duration-300 overflow-hidden bg-indigo-950/50" id="player-avatar">
+                   ${playerData.image ? `<img src="${playerData.image}" class="w-full h-full object-contain" alt="Player Fighter" />` : `<div class="text-2xl md:text-4xl font-black text-indigo-400/60">P1</div>`}
                 </div>
                 <!-- Name + Stats -->
-                <div class="mt-3 text-center">
+                <div class="mt-2 md:mt-3 text-center">
                     <div class="text-indigo-100 font-bold text-sm truncate max-w-[160px]">${playerData.name}</div>
                     <div class="flex gap-2 mt-1 justify-center">
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">${playerData.atk || '?'} ATK</span>
@@ -183,7 +190,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
 
             <!-- VS Indicator -->
             <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-5">
-                <div class="text-6xl md:text-7xl font-black italic text-white/10 select-none" style="text-shadow: 0 0 60px rgba(99,102,241,0.2);">VS</div>
+                <div class="text-4xl md:text-7xl font-black italic text-white/10 select-none" style="text-shadow: 0 0 60px rgba(99,102,241,0.2);">VS</div>
             </div>
 
             <!-- Enemy Fighter (Right) -->
@@ -199,11 +206,11 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
                     </div>
                 </div>
                 <!-- Avatar -->
-                <div class="w-28 h-28 md:w-36 md:h-36 rounded-2xl border-2 border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.2)] flex items-center justify-center transition-all duration-300 overflow-hidden bg-red-950/40" id="enemy-avatar">
-                   ${enemyData.image ? `<img src="${enemyData.image}" class="w-full h-full object-contain" alt="Enemy Fighter" />` : `<div class="text-4xl font-black ${enemyData.isAi ? 'text-red-400/60' : 'text-red-400/60'}">${enemyData.isAi ? 'AI' : 'P2'}</div>`}
+                <div class="w-28 h-28 md:w-36 md:h-36 rounded-xl md:rounded-2xl border-2 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)] md:shadow-[0_0_40px_rgba(239,68,68,0.2)] flex items-center justify-center transition-all duration-300 overflow-hidden bg-red-950/40" id="enemy-avatar">
+                   ${enemyData.image ? `<img src="${enemyData.image}" class="w-full h-full object-contain" alt="Enemy Fighter" />` : `<div class="text-2xl md:text-4xl font-black ${enemyData.isAi ? 'text-red-400/60' : 'text-red-400/60'}">${enemyData.isAi ? 'AI' : 'P2'}</div>`}
                 </div>
                 <!-- Name + Stats -->
-                <div class="mt-3 text-center">
+                <div class="mt-2 md:mt-3 text-center">
                     <div class="text-red-100 font-bold text-sm truncate max-w-[160px]">${enemyData.name}</div>
                     <div class="flex gap-2 mt-1 justify-center">
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">${enemyData.atk || '?'} ATK</span>
@@ -226,13 +233,15 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
         </div>
 
         <!-- Results Overlay -->
-        <div id="battle-results" class="hidden mt-8 flex flex-col items-center justify-center p-8 bg-slate-900/90 backdrop-blur-lg rounded-2xl border border-indigo-500/20 shadow-[0_0_80px_rgba(99,102,241,0.15)]">
-            <h2 class="text-5xl font-black mb-3" id="victory-text">VICTORY</h2>
-            <p class="text-slate-400 mb-2 text-center" id="victory-sub">Your fighter proved superior in combat.</p>
-            <div class="text-xs text-slate-500 mb-6 font-mono" id="battle-stats-line"></div>
-            <div class="flex gap-3">
-                <button id="return-board-btn" class="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-white/5">Return to Board</button>
+        <div id="battle-results" class="hidden mt-6 md:mt-8 flex flex-col items-center justify-center p-5 md:p-8 bg-slate-900/90 backdrop-blur-lg rounded-2xl border border-indigo-500/20 shadow-[0_0_80px_rgba(99,102,241,0.15)]">
+            <h2 class="text-3xl md:text-5xl font-black mb-2 md:mb-3" id="victory-text">VICTORY</h2>
+            <p class="text-slate-400 mb-2 text-center text-sm md:text-base" id="victory-sub">Your fighter proved superior in combat.</p>
+            <div class="text-[10px] md:text-xs text-slate-500 mb-4 md:mb-6 font-mono text-center" id="battle-stats-line"></div>
+            <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                <button id="return-board-btn" class="px-6 md:px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-indigo-400/30 shadow-lg shadow-indigo-500/20">Return to Board</button>
+                <button id="share-battle-btn" class="px-6 md:px-8 py-3 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-white/10">Share</button>
             </div>
+            <div id="share-card-container" class="hidden mt-4 w-full"></div>
         </div>
     `;
 
@@ -491,4 +500,30 @@ function showResults(battleData, playerName, enemyName, totalRounds) {
         $('#challenge-board-view').classList.remove('hidden');
         $('#battle-container').classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
     });
+
+    // Share button
+    const shareBtn = $('#share-battle-btn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+            const cardContainer = $('#share-card-container');
+            if (cardContainer?.classList.contains('hidden')) {
+                // Show the share card
+                const cardHtml = createShareCard({
+                    playerName, enemyName,
+                    playerWon,
+                    rounds: totalRounds,
+                    playerDmg: p1Dmg,
+                    enemyDmg: p2Dmg,
+                    crits, dodges
+                });
+                cardContainer.innerHTML = cardHtml;
+                cardContainer.classList.remove('hidden');
+                shareBtn.textContent = 'Open Warpcast';
+            } else {
+                // Open Farcaster share
+                const url = getFarcasterShareUrl({ playerName, enemyName, playerWon, rounds: totalRounds });
+                window.open(url, '_blank');
+            }
+        });
+    }
 }

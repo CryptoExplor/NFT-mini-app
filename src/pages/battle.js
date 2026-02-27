@@ -3,13 +3,15 @@ import { state, EVENTS } from '../state.js';
 import { connectWallet, disconnectWallet } from '../wallet.js';
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
+import { setThemePreference } from '../utils/theme.js';
 import { renderBottomNav, bindBottomNavEvents } from '../components/BottomNav.js';
 import { ChallengeBoard } from '../components/game/ChallengeBoard.js';
 import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
-import { normalizeFighter } from '../lib/game/metadataNormalizer.js';
+import { normalizeFighter } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge } from '../lib/game/matchmaking.js';
+import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
 
 /** Inline toast for Farcaster miniapp (no browser alert) */
 function showBattleToast(message, type = 'error') {
@@ -48,6 +50,9 @@ function loadLastFighter() {
 }
 
 export async function renderBattlePage() {
+    // Force dark mode on battle arena entry
+    setThemePreference('dark');
+
     const app = $('#app');
 
     app.innerHTML = `
@@ -69,9 +74,15 @@ export async function renderBattlePage() {
             </header>
 
             <main class="max-w-6xl mx-auto px-4 pt-6 page-transition relative" id="battle-container">
+                <!-- Tab Toggle -->
+                <div class="flex gap-2 mb-4" id="battle-tabs">
+                    <button id="tab-arena" class="px-4 py-2 rounded-xl text-sm font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition-all">Arena</button>
+                    <button id="tab-stats" class="px-4 py-2 rounded-xl text-sm font-bold bg-white/[0.03] text-slate-400 border border-white/10 hover:bg-white/[0.06] transition-all">My Stats</button>
+                </div>
                 <div id="challenge-board-view"></div>
                 <div id="match-preview-view" class="hidden"></div>
                 <div id="arena-view" class="hidden"></div>
+                <div id="leaderboard-view" class="hidden"></div>
                 
                 <!-- Modal Mount -->
                 <div id="nft-selector-modal" class="hidden"></div>
@@ -142,8 +153,25 @@ export async function renderBattlePage() {
 
                 $('#battle-loading-overlay')?.remove();
 
-                renderCombatArena(playerCombatStats, enemyCombatStats, () => {
+                renderCombatArena(playerCombatStats, enemyCombatStats, (battleData) => {
                     console.log("Match concluded! Winner:", winner);
+                    // Save battle result to localStorage for leaderboard
+                    const logs = replayLogs || [];
+                    const p1Dmg = logs.filter(l => l.attackerSide === 'P1').reduce((s, l) => s + (l.damage || 0), 0);
+                    const p2Dmg = logs.filter(l => l.attackerSide === 'P2').reduce((s, l) => s + (l.damage || 0), 0);
+                    saveBattleResult({
+                        playerName: playerCombatStats.name,
+                        enemyName: enemyCombatStats.name,
+                        playerWon: winner === playerCombatStats.name,
+                        isAi: isAi,
+                        rounds: logs[logs.length - 1]?.round || 1,
+                        playerDmg: p1Dmg,
+                        enemyDmg: p2Dmg,
+                        crits: logs.filter(l => l.isCrit).length,
+                        dodges: logs.filter(l => l.isDodge).length
+                    });
+                    // Refresh leaderboard if visible
+                    leaderboard.render();
                 }, {
                     playerTeam: selectorModal.inventory || [],
                     precomputedLogs: replayLogs,
@@ -236,7 +264,35 @@ export async function renderBattlePage() {
         }
     );
 
+    const leaderboard = new BattleLeaderboard('leaderboard-view');
+
     board.show();
+
+    // Tab Toggle Logic
+    const tabArena = $('#tab-arena');
+    const tabStats = $('#tab-stats');
+    const activeTabClass = 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+    const inactiveTabClass = 'bg-white/[0.03] text-slate-400 border-white/10';
+
+    function switchTab(tab) {
+        const boardEl = $('#challenge-board-view');
+        const lbEl = $('#leaderboard-view');
+        if (tab === 'arena') {
+            boardEl.classList.remove('hidden');
+            lbEl.classList.add('hidden');
+            tabArena.className = `px-4 py-2 rounded-xl text-sm font-bold ${activeTabClass} transition-all`;
+            tabStats.className = `px-4 py-2 rounded-xl text-sm font-bold ${inactiveTabClass} hover:bg-white/[0.06] transition-all`;
+        } else {
+            boardEl.classList.add('hidden');
+            lbEl.classList.remove('hidden');
+            leaderboard.render();
+            tabStats.className = `px-4 py-2 rounded-xl text-sm font-bold ${activeTabClass} transition-all`;
+            tabArena.className = `px-4 py-2 rounded-xl text-sm font-bold ${inactiveTabClass} hover:bg-white/[0.06] transition-all`;
+        }
+    }
+
+    tabArena?.addEventListener('click', () => switchTab('arena'));
+    tabStats?.addEventListener('click', () => switchTab('stats'));
 }
 
 function attachBattleEvents() {

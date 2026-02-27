@@ -19,7 +19,7 @@ import hash from 'object-hash';
  */
 export async function createSnapshotHash(normalizedStats) {
     // object-hash guarantees deterministic hashing even if key insertion order changes
-    return hash(normalizedStats, { algorithm: 'sha1' });
+    return hash(normalizedStats, { algorithm: 'sha256' });
 }
 
 /**

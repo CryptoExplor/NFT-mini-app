@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv';
 import crypto from 'crypto';
-import { setCors } from '../lib/cors.js';
+import { setCors } from '../_lib/cors.js';
 
 /**
  * GET /api/auth/nonce?wallet=0x...

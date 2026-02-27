@@ -1,20 +1,17 @@
 import { kv } from '@vercel/kv';
-import { verifyOwnership } from '../../src/lib/battle/statProviders.js';
 import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
 import { createSnapshotHash } from '../../src/lib/battle/snapshot.js';
+import { setCors } from '../_lib/cors.js';
+import crypto from 'crypto';
 
-// Simple CORS polyfill since setCors might be missing or causing issues
-function setCorsHeaders(res) {
-    res.setHeader('Access-Control-Allow-Credentials', true)
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
-}
-
-const CHALLENGES_KEY = 'battle_challenges:v2';
+const CHALLENGES_LIST_KEY = 'battle_challenges_list:v2';
+const MAX_CHALLENGES = 50;
 
 export default async function handler(req, res) {
-    setCorsHeaders(res);
+    setCors(req, res, {
+        methods: 'GET,POST,OPTIONS',
+        headers: 'Content-Type, Authorization'
+    });
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method === 'POST') {
@@ -29,11 +26,10 @@ export default async function handler(req, res) {
 async function createChallenge(req, res) {
     const { collectionId, collectionName, nftId, rawMetadata, userAddress } = req.body;
 
-    // 1. Verify Ownership (Server Authoritative) - SKIP for MVP if needed, or implement actual check
-    // For MVP, we trust the client's payload that they own it to reduce RPC load, 
-    // but in prod this should verify against an RPC node.
-    // const ownsToken = await verifyOwnership(collectionId, nftId, userAddress);
-    // if (!ownsToken) return res.status(403).json({ error: 'Caller does not own this token.' });
+    // Payload validation
+    if (!collectionId || !nftId || !userAddress) {
+        return res.status(400).json({ error: 'Missing required fields: collectionId, nftId, userAddress' });
+    }
 
     // 2. Normalize Stats
     const stats = normalizeFighter(collectionId, nftId, rawMetadata);
@@ -41,8 +37,8 @@ async function createChallenge(req, res) {
     // 3. Prevent stat drift by creating a snapshot
     const snapshotHash = await createSnapshotHash(stats);
 
-    // 4. Create Challenge Object
-    const challengeId = `chal_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    // 4. Create Challenge Object with cryptographically secure ID
+    const challengeId = `chal_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const challenge = {
         id: challengeId,
         creator: userAddress,
@@ -58,20 +54,21 @@ async function createChallenge(req, res) {
         createdAt: Date.now()
     };
 
-    // Store in KV list (prepend)
-    let challenges = await kv.get(CHALLENGES_KEY) || [];
-    challenges.unshift(challenge);
-
-    // Keep max 50 active challenges to prevent bloat
-    if (challenges.length > 50) challenges = challenges.slice(0, 50);
-
-    await kv.set(CHALLENGES_KEY, challenges);
+    // Atomic: LPUSH + LTRIM avoids the get→modify→set race condition
+    const pipe = kv.pipeline();
+    pipe.lpush(CHALLENGES_LIST_KEY, JSON.stringify(challenge));
+    pipe.ltrim(CHALLENGES_LIST_KEY, 0, MAX_CHALLENGES - 1);
+    await pipe.exec();
 
     return res.status(200).json({ success: true, challengeId });
 }
 
 async function listChallenges(req, res) {
-    const challenges = await kv.get(CHALLENGES_KEY) || [];
+    const raw = await kv.lrange(CHALLENGES_LIST_KEY, 0, MAX_CHALLENGES - 1) || [];
+    const challenges = raw.map(item => {
+        try { return typeof item === 'string' ? JSON.parse(item) : item; }
+        catch { return null; }
+    }).filter(Boolean);
     const open = challenges.filter(c => c.status === 'OPEN');
     return res.status(200).json({ challenges: open });
 }

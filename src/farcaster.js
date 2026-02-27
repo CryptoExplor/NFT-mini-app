@@ -84,21 +84,6 @@ export async function initFarcasterSDK() {
     return { sdk: null, context: null, inMiniApp: false, host: MINIAPP_HOSTS.WEB, clientFid: null };
 }
 
-/**
- * Call this AFTER your app is fully loaded
- * This tells Farcaster the frame is ready to display
- */
-export function notifyReady() {
-    if (sdk && !isReady) {
-        try {
-            sdk.actions.ready({ disableNativeGestures: true });
-            isReady = true;
-            console.log('Farcaster: ready() called');
-        } catch (error) {
-            console.error('Failed to call ready():', error);
-        }
-    }
-}
 
 /**
  * Get current Farcaster context

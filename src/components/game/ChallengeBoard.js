@@ -1,5 +1,5 @@
 import { $, shortenAddress } from '../../utils/dom.js';
-import { normalizeFighter } from '../../lib/game/metadataNormalizer.js';
+import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
 
 /**
