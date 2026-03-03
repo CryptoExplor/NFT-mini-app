@@ -1,11 +1,13 @@
 import { kv } from '@vercel/kv';
-import { normalizeFighter } from '../../src/lib/battle/metadataNormalizer.js';
+import { normalizeFighter, normalizeItemStats, normalizeArenaStats, applyLayer, clampStats } from '../../src/lib/battle/metadataNormalizer.js';
 import { simulateBattle, summarizeReplay } from '../../src/lib/game/engine.js';
-import { validateSnapshot, createSnapshotHash } from '../../src/lib/battle/snapshot.js';
+import { computeCompleteSnapshotHash } from '../../src/lib/battle/teamSnapshot.js';
 import { setCors } from '../_lib/cors.js';
+import { requireAuth } from '../_lib/authMiddleware.js';
 import crypto from 'crypto';
 
-const CHALLENGES_LIST_KEY = 'battle_challenges_list:v2';
+const CHALLENGES_HASH_KEY = 'battle_challenges_data:v2';
+const ACTIVE_CHALLENGES_SET_KEY = 'battle_challenges_active:v2';
 const MATCHES_KEY = 'battle_matches:v2';
 
 export default async function handler(req, res) {
@@ -20,45 +22,64 @@ export default async function handler(req, res) {
 }
 
 async function resolveFight(req, res) {
-    const { challengeId, attackerCollectionId, attackerTokenId, rawMetadata, attackerAddress } = req.body;
+    const { challengeId, attackerAddress, loadout } = req.body;
 
     // Payload validation
-    if (!challengeId || !attackerCollectionId || !attackerTokenId || !attackerAddress) {
-        return res.status(400).json({ error: 'Missing required fields: challengeId, attackerCollectionId, attackerTokenId, attackerAddress' });
+    if (!challengeId || !attackerAddress || !loadout || !loadout.fighter) {
+        return res.status(400).json({ error: 'Missing required payload: challengeId, attackerAddress, loadout.fighter' });
     }
 
-    // Read all challenges from the list
-    const raw = await kv.lrange(CHALLENGES_LIST_KEY, 0, 49) || [];
-    const challenges = raw.map((item, idx) => {
-        try {
-            const parsed = typeof item === 'string' ? JSON.parse(item) : item;
-            parsed._listIndex = idx;
-            return parsed;
-        }
-        catch { return null; }
-    }).filter(Boolean);
+    const { engineId: attackerCollectionId, nftId: attackerTokenId, rawAttributes: rawMetadata } = loadout.fighter;
 
-    const challenge = challenges.find(c => c.id === challengeId);
-
-    if (!challenge || challenge.status !== 'OPEN') {
-        return res.status(404).json({ error: 'Challenge not found or already closed.' });
+    // Auth Validation (SIWE)
+    const auth = await requireAuth(req);
+    if (!auth || !auth.authenticated || auth.wallet.toLowerCase() !== attackerAddress.toLowerCase()) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid or missing wallet signature.' });
     }
 
-    // 1. Prevent attacking yourself 
+    // 1. Atomically fetch the specific challenge from the Hash storage
+    const storedChallengeRaw = await kv.hget(CHALLENGES_HASH_KEY, challengeId);
+
+    if (!storedChallengeRaw) {
+        return res.status(404).json({ error: 'Challenge not found.' });
+    }
+
+    let challenge;
+    try {
+        challenge = typeof storedChallengeRaw === 'string' ? JSON.parse(storedChallengeRaw) : storedChallengeRaw;
+    } catch {
+        return res.status(500).json({ error: 'Corrupted challenge data.' });
+    }
+
+    if (challenge.status !== 'OPEN') {
+        return res.status(404).json({ error: 'Challenge already closed or completed.' });
+    }
+
+    // 2. Prevent attacking yourself 
     if (challenge.creator.toLowerCase() === attackerAddress.toLowerCase()) {
         return res.status(400).json({ error: 'Cannot fight your own challenge.' });
     }
 
-    // 2. Normalize attacker stats 
-    const attackerStats = normalizeFighter(attackerCollectionId, attackerTokenId, rawMetadata);
+    // 3. Normalize attacker stats Securely on the Backend
+    let attackerStats = normalizeFighter(attackerCollectionId, attackerTokenId, rawMetadata);
 
-    // 3. Verify Defender Snapshot hasn't drifted
-    const isDefenderValid = await validateSnapshot(challenge.stats, challenge.snapshotHash);
-    if (!isDefenderValid) {
+    if (loadout.item) {
+        const itemStats = normalizeItemStats(loadout.item.engineId, loadout.item.nftId, loadout.item.rawAttributes);
+        attackerStats = applyLayer(attackerStats, itemStats);
+    }
+    if (loadout.arena) {
+        const arenaStats = normalizeArenaStats(loadout.arena.engineId, loadout.arena.nftId, loadout.arena.rawAttributes);
+        attackerStats = applyLayer(attackerStats, arenaStats);
+    }
+    attackerStats = clampStats(attackerStats);
+
+    // 4. Verify Defender Snapshot hasn't drifted
+    const computedHash = await computeCompleteSnapshotHash(challenge.stats, challenge.loadout?.teamSnapshot);
+    if (computedHash !== challenge.snapshotHash) {
         return res.status(409).json({ error: 'Defender stats have drifted. Challenge is voided.' });
     }
 
-    // 4. Cryptographically secure seed
+    // 5. Cryptographically secure seed
     const matchSeed = crypto.randomBytes(4).toString('hex');
 
     // Seeded PRNG from secure seed
@@ -70,10 +91,13 @@ async function resolveFight(req, res) {
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
 
-    const fullLog = simulateBattle(attackerStats, challenge.stats, prng);
+    const fullLog = simulateBattle(attackerStats, challenge.stats, prng, {
+        playerTeam: loadout.teamSnapshot || [],
+        enemyTeam: challenge.loadout?.teamSnapshot || []
+    });
     const summary = summarizeReplay(fullLog);
 
-    // 5. Record Match
+    // 6. Record Match
     const matchId = `match_${Date.now()}`;
     const matchResult = {
         id: matchId,
@@ -86,26 +110,31 @@ async function resolveFight(req, res) {
         timestamp: Date.now()
     };
 
-    await kv.hset(MATCHES_KEY, { [matchId]: matchResult });
-
-    // 6. Close Challenge — mark as completed by updating the list entry
+    // 7. Atomic state updates via Pipeline
     challenge.status = 'COMPLETED';
-    delete challenge._listIndex;
-    await kv.lset(CHALLENGES_LIST_KEY, challenges.indexOf(challenges.find(c => c.id === challengeId)), JSON.stringify(challenge));
 
-    // 7. Update Global Leaderboard — use unified key matching events system
+    const pipe = kv.pipeline();
+    // Record match
+    pipe.hset(MATCHES_KEY, { [matchId]: matchResult });
+    // Update challenge to COMPLETED in the data hash
+    pipe.hset(CHALLENGES_HASH_KEY, { [challengeId]: JSON.stringify(challenge) });
+    // Remove from the 'active' sorting set
+    pipe.zrem(ACTIVE_CHALLENGES_SET_KEY, challengeId);
+    await pipe.exec();
+
+    // 8. Update Global Leaderboard — use unified key matching events system
     const winAddress = fullLog.winnerSide === 'P1' ? attackerAddress : challenge.creator;
 
     try {
-        const pipe = kv.pipeline();
-        pipe.zincrby('leaderboard:battle_wins:all_time', 1, winAddress);
-        pipe.hincrby(`user:${winAddress}:profile`, 'battle_wins', 1);
-        await pipe.exec();
+        const boardPipe = kv.pipeline();
+        boardPipe.zincrby('leaderboard:battle_wins:all_time', 1, winAddress);
+        boardPipe.hincrby(`user:${winAddress}:profile`, 'battle_wins', 1);
+        await boardPipe.exec();
     } catch (e) {
         console.error('Failed to update leaderboard', e);
     }
 
-    // 8. Return determinable result for client playback
+    // 9. Return determinable result for client playback
     return res.status(200).json({
         success: true,
         matchId,
