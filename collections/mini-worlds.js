@@ -19,7 +19,7 @@ export default {
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0x72810F6963E94742799A945EF01BECd34bb7374c", // TODO: replace after deployment
+    contractAddress: "0x72810F6963E94742799A945EF01BECd34bb7374c",
     abiName: "MiniWorlds",
 
     // ============================================

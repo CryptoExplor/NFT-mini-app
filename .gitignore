@@ -30,3 +30,12 @@ dist-ssr
 
 # Vite crash artifacts
 vite.config.js.timestamp-*
+
+.vercel
+.env*.local
+
+# Non-repo files
+ZUMP/
+.agent/
+.qoder/
+vite.config.js.timestamp-*

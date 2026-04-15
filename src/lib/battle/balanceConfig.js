@@ -6,23 +6,23 @@
 
 // ── Stat Boundaries ──────────────────────────────────────────────
 export const STAT_CAPS = {
-    hp: 300,
-    atk: 60,
-    def: 60,
-    spd: 60,
-    crit: 0.75,
-    dodge: 0.75,
-    lifesteal: 0.80,
+    hp: 220,
+    atk: 48,
+    def: 48,
+    spd: 50,
+    crit: 0.60,
+    dodge: 0.50,
+    lifesteal: 0.15,
     regen: 15,
-    magicResist: 90,
+    magicResist: 80,
     damageMultiplier: 2.0,
 };
 
 export const STAT_FLOORS = {
     hp: 30,
-    atk: 3,
-    def: 1,
-    spd: 1,
+    atk: 5,
+    def: 5,
+    spd: 5,
     crit: 0,
     dodge: 0,
     lifesteal: 0,

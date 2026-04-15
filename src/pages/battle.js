@@ -9,7 +9,7 @@ import { ChallengeBoard } from '../components/game/ChallengeBoard.js';
 import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
-import { normalizeFighter } from '../lib/battle/metadataNormalizer.js';
+import { normalizeFighter, applyLayer } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge } from '../lib/game/matchmaking.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
 
@@ -128,12 +128,22 @@ export async function renderBattlePage() {
                 let replayLogs, winner;
 
                 if (isAi) {
-                    // ── AI Battles: resolve locally with the client engine ──
-                    const { simulateBattle, summarizeReplay } = await import('../lib/game/engine.js');
-                    const battleResult = simulateBattle(playerCombatStats, enemyCombatStats, Math.random, {
+                    // ── AI Battles: resolve locally with V2 engine ──
+                    const { simulateBattleV2 } = await import('../lib/battle/engineV2.js');
+                    const { summarizeReplay } = await import('../lib/game/engine.js');
+
+                    if (!simulateBattleV2) {
+                        throw new Error('V2 ERROR: engineV2.js failed to load');
+                    }
+
+                    // Pass full V2 loadout context
+                    const loadout = window.__CURRENT_FIGHTER_SELECTION__ || {};
+                    const battleResult = simulateBattleV2(playerCombatStats, enemyCombatStats, {
                         isAiBattle: true,
                         aiWinRate: previewModal.enemyData.aiWinRate || 0.6,
-                        playerTeam: selectorModal.inventory || []
+                        playerItem: loadout.item?.stats || null,
+                        environment: loadout.arena?.stats || null,
+                        playerTeam: loadout.teamSnapshot || [],
                     });
                     const summary = summarizeReplay(battleResult);
                     replayLogs = battleResult.logs;
@@ -145,7 +155,7 @@ export async function renderBattlePage() {
                     const result = await resolveFight(
                         previewModal.enemyData.id,
                         walletAddress,
-                        selectedNft
+                        selectedNft // now the full loadout object
                     );
                     replayLogs = result.replayLogs;
                     winner = result.summary.winner;
@@ -173,6 +183,7 @@ export async function renderBattlePage() {
                     // Refresh leaderboard if visible
                     leaderboard.render();
                 }, {
+                    environment: previewModal.enemyData?.loadout?.arena || window.__CURRENT_FIGHTER_SELECTION__?.arena,
                     playerTeam: selectorModal.inventory || [],
                     precomputedLogs: replayLogs,
                     winner
@@ -193,27 +204,29 @@ export async function renderBattlePage() {
 
     const selectorModal = new NFTSelectorModal(
         'nft-selector-modal',
-        (selectedNft) => {
-            // When user picks an NFT, normalize its real stats
-            let stats;
-            try {
-                stats = normalizeFighter(selectedNft.engineId, selectedNft.nftId, selectedNft.rawAttributes);
-            } catch (e) {
-                console.error("Failed to parse fighter stats:", e);
-                // Fallback if structure is unexpected
-                stats = { hp: 100, atk: 10, def: 10, spd: 10, crit: 0.05, dodge: 0, magicResist: 0, lifesteal: 0, regen: 0 };
+        (loadout) => {
+            const selectedNft = loadout.fighter;
+
+            // V2: Apply item buff at 100% scale, arena modifier at 80% (diminishing returns)
+            let finalStats = selectedNft.stats;
+            if (loadout.item?.stats) {
+                finalStats = applyLayer(finalStats, loadout.item.stats, 1.0);
+            }
+            if (loadout.arena?.stats) {
+                finalStats = applyLayer(finalStats, loadout.arena.stats, 0.8);
             }
 
             const pData = {
                 name: `${selectedNft.collectionName} #${selectedNft.nftId}`,
-                stats: stats,
+                stats: finalStats,
                 trait: selectedNft.trait,
-                imageUrl: selectedNft.imageUrl || ''
+                imageUrl: selectedNft.imageUrl || '',
+                loadout: loadout // pass full loadout schema for reference
             };
 
             // Save globally for submit when they hit 'START BATTLE'
-            window.__CURRENT_FIGHTER_SELECTION__ = selectedNft;
-            saveLastFighter(selectedNft, pData);
+            window.__CURRENT_FIGHTER_SELECTION__ = loadout;
+            saveLastFighter(loadout, pData);
 
             // If we have an active enemy preview, we update the player slot
             if (previewModal.enemyData) {
@@ -227,7 +240,8 @@ export async function renderBattlePage() {
                 const btn = $('#post-challenge-btn');
                 if (btn) btn.textContent = 'Posting...';
 
-                postChallenge(walletAddress, selectedNft, selectorModal.inventory || [])
+                // Pass the complete V2 schema payload
+                postChallenge(walletAddress, loadout, loadout.teamSnapshot)
                     .then(() => {
                         board.show(); // Refresh board and reload challenges from KV
                     })

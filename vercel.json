@@ -1,5 +1,8 @@
 {
+  "framework": "vite",
+  "installCommand": "npm install",
   "buildCommand": "npm run build",
+  "devCommand": "vite --port $PORT",
   "headers": [
     {
       "source": "/(.*)\\.(png|jpg|jpeg|webp|avif|svg|ico)$",
@@ -28,7 +31,7 @@
       "destination": "/api/share?slug=:slug"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api|src|assets|node_modules|public|@vite|@|.*\\.).*)",
       "destination": "/index.html"
     }
   ]

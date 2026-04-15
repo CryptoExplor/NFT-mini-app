@@ -164,3 +164,12 @@ export function getCollectionProfile(collectionId) {
 
     return null;
 }
+
+/**
+ * Returns the V2 Role (FIGHTER, ITEM_BUFF, ENVIRONMENT) for a given collection slug.
+ * Used by wallet.js to categorize inventory items.
+ */
+export function getRoleForSlug(slug) {
+    const profile = getCollectionProfile(slug);
+    return profile ? profile.role : 'UNKNOWN';
+}

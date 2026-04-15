@@ -12,7 +12,7 @@ function normalizeOrigin(originHeaderValue) {
 
 export function setCors(req, res, options = {}) {
     const methods = options.methods || 'GET,OPTIONS';
-    const headers = options.headers || 'Content-Type';
+    const headers = options.headers || 'Content-Type,Authorization';
     const origin = options.origin || normalizeOrigin(req?.headers?.origin);
 
     res.setHeader('Vary', 'Origin');
@@ -20,4 +20,25 @@ export function setCors(req, res, options = {}) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', methods);
     res.setHeader('Access-Control-Allow-Headers', headers);
+}
+
+/**
+ * Higher-order function that wraps an API handler with CORS.
+ * Handles OPTIONS preflight automatically.
+ */
+export function withCors(handler, options = {}) {
+    return async function (req, res) {
+        setCors(req, res, {
+            methods: 'GET,POST,OPTIONS',
+            headers: 'Content-Type,Authorization',
+            ...options,
+        });
+
+        // Handle preflight
+        if (req.method === 'OPTIONS') {
+            return res.status(204).end();
+        }
+
+        return handler(req, res);
+    };
 }

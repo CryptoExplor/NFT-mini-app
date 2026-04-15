@@ -19,7 +19,7 @@ export default {
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0xD6bBe0A69395F68Ee1F20aC60b7B9eb4E20e7E41", // TODO: Replace with deployed address
+    contractAddress: "0xD6bBe0A69395F68Ee1F20aC60b7B9eb4E20e7E41",
     abiName: "ByteBeats",
 
     // ============================================

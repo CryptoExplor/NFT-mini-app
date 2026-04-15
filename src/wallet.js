@@ -264,9 +264,10 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
             limit: 200
         });
         const nfts = result.nfts || [];
-        const allowedSlugs = ['base-invaders', 'baseheads-404', 'base-moods', 'void-pfps', 'neon-runes'];
+        const { normalizeFighter, normalizeItemStats, normalizeArenaStats } = await import('./lib/battle/metadataNormalizer.js');
+        const { COLLECTION_PROFILES, getRoleForSlug } = await import('./lib/battle/collectionProfiles.js');
 
-        const { normalizeFighter } = await import('./lib/battle/metadataNormalizer.js');
+        const allowedSlugs = Object.keys(COLLECTION_PROFILES);
 
         return nfts
             .filter(nft => allowedSlugs.includes(nft.collection))
@@ -284,16 +285,25 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
                 }
 
                 // Map OpenSea slug to engine known collection ID
-                let engineId = 'BASE_INVADERS';
+                let engineId = nft.collection;
                 if (nft.collection === 'baseheads-404') engineId = 'BASEHEADS_404';
                 else if (nft.collection === 'base-moods') engineId = 'BaseMoods';
                 else if (nft.collection === 'void-pfps') engineId = 'VOID_PFPS';
-                else if (nft.collection === 'neon-runes') engineId = 'NeonRunes';
+                else if (nft.collection === 'neon-runes') engineId = 'neon-runes';
+                else if (nft.collection === 'base-invaders') engineId = 'BASE_INVADERS';
+
+                const role = getRoleForSlug(engineId) || 'UNKNOWN';
 
                 // Normalize stats so the selector can display real values
                 let stats = {};
                 try {
-                    stats = normalizeFighter(engineId, nft.identifier, traits);
+                    if (role === 'FIGHTER') {
+                        stats = normalizeFighter(engineId, nft.identifier, traits);
+                    } else if (role === 'ITEM_BUFF') {
+                        stats = normalizeItemStats(engineId, nft.identifier, traits);
+                    } else if (role === 'ENVIRONMENT') {
+                        stats = normalizeArenaStats(engineId, nft.identifier, traits);
+                    }
                 } catch (e) {
                     console.warn(`[Wallet] Could not normalize stats for ${engineId} #${nft.identifier}`, e);
                 }
@@ -304,6 +314,8 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
                     collectionName: nft.collection,
                     nftId: nft.identifier,
                     trait: primaryTrait,
+                    role,
+                    slotEligible: true,
                     rawAttributes: traits,
                     stats,
                     passive: stats.passive || null,

@@ -13,7 +13,7 @@ export async function verifyJWT(token) {
         const secret = new TextEncoder().encode(process.env.JWT_SECRET);
         const { payload } = await jwtVerify(token, secret);
         return {
-            wallet: payload.wallet || payload.sub,
+            wallet: payload.wallet || payload.address || payload.sub,
             isAdmin: payload.isAdmin || false
         };
     } catch {
@@ -22,10 +22,33 @@ export async function verifyJWT(token) {
 }
 
 /**
+ * Verify auth from request for battle API endpoints.
+ * Returns a standardized { valid, address, error } shape.
+ *
+ * @param {Object} req - HTTP request
+ * @returns {Promise<{ valid: boolean, address?: string, error?: string }>}
+ */
+export async function verifyAuth(req) {
+    const authHeader = req.headers?.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return { valid: false, error: 'Missing or invalid Authorization header' };
+    }
+
+    const token = authHeader.slice(7);
+    const decoded = await verifyJWT(token);
+
+    if (!decoded) {
+        return { valid: false, error: 'Invalid or expired token' };
+    }
+
+    return { valid: true, address: decoded.wallet };
+}
+
+/**
  * Extract and verify auth from request.
  * Supports: Bearer token in Authorization header
  * Fallback: wallet query param (backward compat, read-only)
- * 
+ *
  * @returns {{ wallet: string, isAdmin: boolean, authenticated: boolean }}
  */
 export async function requireAuth(req) {

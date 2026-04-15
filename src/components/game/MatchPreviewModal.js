@@ -81,7 +81,8 @@ export class MatchPreviewModal {
                     <h3 class="text-lg font-bold text-indigo-100 mb-1">${this.playerData ? this.playerData.name : 'Select Fighter'}</h3>
                     <p class="text-xs text-indigo-400/70 mb-4">${this.playerData ? 'Tap to change' : 'Choose from your wallet'}</p>
 
-                    ${this.playerData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 mb-4">${this.playerData.trait}</span>` : ''}
+                    ${this.playerData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 mb-2">${this.playerData.trait}</span>` : ''}
+                    ${this.playerData?.loadout ? this.renderLayerBadges(this.playerData.loadout, 'player') : '<div class="mb-4"></div>'}
 
                     <!-- Player Stats -->
                     <div class="w-full space-y-2.5 mt-auto">
@@ -121,7 +122,8 @@ export class MatchPreviewModal {
                     <h3 class="text-lg font-bold text-red-100 mb-1">${this.enemyData.collectionName} #${this.enemyData.nftId}</h3>
                     <p class="text-xs font-mono text-red-400/60 truncate max-w-[180px] mb-4" title="${this.enemyData.player}">${shortenAddress(this.enemyData.player)}</p>
 
-                    ${this.enemyData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 border border-red-500/20 mb-4">${this.enemyData.trait}</span>` : ''}
+                    ${this.enemyData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 border border-red-500/20 mb-2">${this.enemyData.trait}</span>` : ''}
+                    ${this.enemyData?.loadout ? this.renderLayerBadges(this.enemyData.loadout, 'enemy') : '<div class="mb-4"></div>'}
 
                     <!-- Enemy Stats -->
                     <div class="w-full space-y-2.5 mt-auto">
@@ -220,6 +222,29 @@ export class MatchPreviewModal {
                 <span class="${verdictColor} font-bold">${verdict} matchup</span>
             </div>
         `;
+    }
+
+    renderLayerBadges(loadout, side) {
+        if (!loadout) return '';
+        const badges = [];
+        const isPlayer = side === 'player';
+
+        const borderClass = isPlayer ? 'border-indigo-400/30' : 'border-red-400/30';
+        const bgClass = isPlayer ? 'bg-indigo-500/20' : 'bg-red-500/20';
+        const textClass = isPlayer ? 'text-indigo-200' : 'text-red-200';
+
+        if (loadout.item) {
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.item.collectionName}">🔮 ITEM</span>`);
+        }
+        if (loadout.arena) {
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.arena.collectionName}">🌌 ARENA</span>`);
+        }
+        if (loadout.teamSnapshot && loadout.teamSnapshot.length > 0) {
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.teamSnapshot.length} Allies">🤝 TEAM SYNERGY</span>`);
+        }
+
+        if (badges.length === 0) return '<div class="mb-4"></div>';
+        return `<div class="flex gap-1.5 mt-1 mb-3 justify-center text-center w-full flex-wrap">${badges.join('')}</div>`;
     }
 
     hide() {

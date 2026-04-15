@@ -19,7 +19,7 @@ export default {
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0x8ED87D7E5582Ec38a8F3A6274f2CC7B107958E60", // TODO: replace after deployment
+    contractAddress: "0x8ED87D7E5582Ec38a8F3A6274f2CC7B107958E60",
     abiName: "NeonShapes",
 
     // ============================================

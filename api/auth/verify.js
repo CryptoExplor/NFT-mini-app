@@ -1,75 +1,143 @@
+/**
+ * Auth Verify Endpoint
+ * POST /api/auth/verify
+ *
+ * Verifies a SIWE signed message, consumes the nonce (one-time use),
+ * and issues a JWT for authenticated API calls.
+ *
+ * Body: { message: string, signature: string }
+ * Returns: { token: string, address: string, expiresIn: number }
+ */
+
 import { kv } from '@vercel/kv';
-import { SiweMessage } from 'siwe';
+import { withCors } from '../_lib/cors.js';
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
 import { SignJWT } from 'jose';
-import { setCors } from '../_lib/cors.js';
+import { SiweMessage } from 'siwe';
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production');
+const JWT_EXPIRY_SECONDS = 3600; // 1 hour
 
 /**
- * POST /api/auth/verify
- * Body: { message: string, signature: string }
- * 
- * Verifies EIP-4361 SIWE signature, validates nonce, issues JWT.
+ * Parse SIWE message using the official siwe package.
+ * Falls back to manual parsing if the package fails.
  */
-export default async function handler(req, res) {
-    setCors(req, res, {
-        methods: 'POST,OPTIONS',
-        headers: 'Content-Type'
-    });
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+function parseSiweMessage(message) {
+    try {
+        const siwe = new SiweMessage(message);
+        return {
+            address: siwe.address?.toLowerCase(),
+            nonce: siwe.nonce,
+            chainId: siwe.chainId,
+            uri: siwe.uri,
+            issuedAt: siwe.issuedAt,
+            expirationTime: siwe.expirationTime,
+        };
+    } catch {
+        // Fallback: manual line parsing if siwe package can't parse
+        const lines = message.split('\n');
+        const result = {};
+        for (const line of lines) {
+            if (line.startsWith('Nonce: ')) result.nonce = line.slice(7).trim();
+            if (line.startsWith('Chain ID: ')) result.chainId = parseInt(line.slice(10).trim(), 10);
+        }
+        const addressLine = lines.find(l => /^0x[a-fA-F0-9]{40}$/.test(l.trim()));
+        if (addressLine) result.address = addressLine.trim().toLowerCase();
+        return result;
+    }
+}
 
-    const { message, signature } = req.body;
+const client = createPublicClient({
+    chain: base,
+    transport: http(),
+});
+
+async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({
+            code: 'METHOD_NOT_ALLOWED',
+            message: 'Only POST requests accepted',
+        });
+    }
+
+    const { message, signature } = req.body || {};
 
     if (!message || !signature) {
-        return res.status(400).json({ error: 'Missing message or signature' });
+        return res.status(400).json({
+            code: 'MISSING_FIELDS',
+            message: 'Both message and signature are required',
+        });
     }
 
     try {
-        // Parse the SIWE message
-        const siweMessage = new SiweMessage(message);
+        // 1. Parse the SIWE message
+        const parsed = parseSiweMessage(message);
 
-        // Verify the signature
-        const { data: fields } = await siweMessage.verify({ signature });
-
-        const wallet = fields.address.toLowerCase();
-
-        // Check nonce matches what we stored
-        const storedNonce = await kv.get(`auth:nonce:${wallet}`);
-        if (!storedNonce || storedNonce !== fields.nonce) {
-            return res.status(401).json({ error: 'Invalid or expired nonce' });
+        if (!parsed.address || !parsed.nonce) {
+            return res.status(400).json({
+                code: 'INVALID_MESSAGE',
+                message: 'Could not parse SIWE message (missing address or nonce)',
+            });
         }
 
-        // Delete nonce (one-time use)
-        await kv.del(`auth:nonce:${wallet}`);
+        // 2. Check nonce exists and matches
+        const storedNonce = await kv.get(`nonce:${parsed.address}`);
 
-        // Check if wallet is admin
-        const adminList = (process.env.ADMIN_WALLETS || '')
-            .split(',')
-            .map(w => w.trim().toLowerCase())
-            .filter(Boolean);
-        const isAdmin = adminList.includes(wallet);
+        if (!storedNonce) {
+            return res.status(401).json({
+                code: 'NONCE_EXPIRED',
+                message: 'Nonce expired or not found. Request a new one.',
+            });
+        }
 
-        // Issue JWT (30 min expiry)
-        const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+        if (storedNonce !== parsed.nonce) {
+            return res.status(401).json({
+                code: 'NONCE_MISMATCH',
+                message: 'Nonce does not match. Possible replay attack.',
+            });
+        }
+
+        // 3. Verify signature on-chain
+        const isValid = await client.verifyMessage({
+            address: parsed.address,
+            message,
+            signature,
+        });
+
+        if (!isValid) {
+            return res.status(401).json({
+                code: 'INVALID_SIGNATURE',
+                message: 'Signature verification failed',
+            });
+        }
+
+        // 4. Consume nonce (one-time use — prevents replay)
+        await kv.del(`nonce:${parsed.address}`);
+
+        // 5. Issue JWT
         const token = await new SignJWT({
-            wallet,
-            isAdmin,
-            iat: Math.floor(Date.now() / 1000)
+            address: parsed.address,
+            chainId: parsed.chainId || 8453,
         })
             .setProtectedHeader({ alg: 'HS256' })
-            .setExpirationTime('30m')
             .setIssuedAt()
-            .setSubject(wallet)
-            .sign(secret);
+            .setExpirationTime(`${JWT_EXPIRY_SECONDS}s`)
+            .setSubject(parsed.address)
+            .sign(JWT_SECRET);
 
         return res.status(200).json({
             token,
-            wallet,
-            isAdmin,
-            expiresIn: 1800 // 30 min in seconds
+            address: parsed.address,
+            expiresIn: JWT_EXPIRY_SECONDS,
         });
-
     } catch (error) {
-        console.error('SIWE verification error:', error);
-        return res.status(401).json({ error: 'Signature verification failed' });
+        console.error('[Auth Verify] Error:', error.message);
+        return res.status(500).json({
+            code: 'INTERNAL_ERROR',
+            message: 'Authentication failed',
+        });
     }
 }
+
+export default withCors(handler);

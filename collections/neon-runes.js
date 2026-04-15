@@ -19,7 +19,7 @@ export default {
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0x64b41CdF5ec5ECBDbBC684e760f93Ddbde05067c", // TODO: replace with deployed NeonRunes address
+    contractAddress: "0x64b41CdF5ec5ECBDbBC684e760f93Ddbde05067c",
     abiName: "NeonRunes",
 
     // ============================================

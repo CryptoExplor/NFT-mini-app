@@ -19,8 +19,8 @@ export default {
     // ============================================
 
     chainId: 8453, // Base Mainnet
-    contractAddress: "0x3Fe053d29BebBAe4F711aa56325dE46Fa7a1Dd64", // TODO: Replace with deployed address
-    abiName: "void-pfps", // TODO: Ensure ABI is added to contracts/abis/ and exported in contracts/index.js
+    contractAddress: "0x3Fe053d29BebBAe4F711aa56325dE46Fa7a1Dd64",
+    abiName: "void-pfps",
 
     // ============================================
     // MINT CONFIGURATION
