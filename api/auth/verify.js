@@ -20,7 +20,7 @@ const JWT_SECRET_RAW = process.env.JWT_SECRET;
 if (!JWT_SECRET_RAW) {
     console.error('[Auth Verify] CRITICAL: JWT_SECRET is not set. Token issuance will fail.');
 }
-const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW || '');
+const JWT_SECRET = JWT_SECRET_RAW ? new TextEncoder().encode(JWT_SECRET_RAW) : null;
 const JWT_EXPIRY_SECONDS = 3600; // 1 hour
 
 /**
@@ -62,6 +62,13 @@ async function handler(req, res) {
         return res.status(405).json({
             code: 'METHOD_NOT_ALLOWED',
             message: 'Only POST requests accepted',
+        });
+    }
+
+    if (!JWT_SECRET) {
+        return res.status(500).json({
+            code: 'SERVER_MISCONFIGURED',
+            message: 'Authentication is temporarily unavailable',
         });
     }
 

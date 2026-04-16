@@ -310,7 +310,7 @@ export function clearAuthToken() {
  * Request a nonce for SIWE sign-in
  */
 export async function getNonce(wallet) {
-    const response = await fetch(`${API_BASE}/api/auth/nonce?wallet=${wallet}`);
+    const response = await fetch(`${API_BASE}/api/auth/nonce?address=${wallet}`);
     if (!response.ok) throw new Error('Failed to get nonce');
     return await response.json();
 }

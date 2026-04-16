@@ -105,7 +105,7 @@ export async function listActiveChallenges() {
 
     // Async cleanup of expired challenges (non-blocking)
     if (expiredIds.length > 0) {
-        Promise.all(expiredIds.map(id => kv.hdel(CHALLENGE_HASH_KEY, id))).catch(() => {});
+        Promise.all(expiredIds.map(id => kv.hdel(CHALLENGE_HASH_KEY, id))).catch(() => { });
     }
 
     return challenges;

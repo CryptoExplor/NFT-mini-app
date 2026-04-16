@@ -9,8 +9,14 @@ import { ChallengeBoard } from '../components/game/ChallengeBoard.js';
 import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
-import { normalizeFighter, applyLayer } from '../lib/battle/metadataNormalizer.js';
+import { applyLayer } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge } from '../lib/game/matchmaking.js';
+import {
+    getCurrentBattleLoadout,
+    getCurrentBattleSelection,
+    restoreLastBattleSelection,
+    saveLastBattleSelection,
+} from '../lib/battle/loadoutSession.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
 import { trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
 
@@ -29,26 +35,6 @@ function showBattleToast(message, type = 'error') {
 }
 
 let walletHandler = null;
-
-const FIGHTER_STORAGE_KEY = 'battle_last_fighter';
-
-/** Save selected fighter to localStorage */
-function saveLastFighter(selectedNft, pData) {
-    try {
-        localStorage.setItem(FIGHTER_STORAGE_KEY, JSON.stringify({ selectedNft, pData }));
-    } catch (_) { /* quota exceeded or private mode */ }
-}
-
-/** Load last fighter from localStorage */
-function loadLastFighter() {
-    try {
-        const raw = localStorage.getItem(FIGHTER_STORAGE_KEY);
-        if (!raw) return null;
-        const data = JSON.parse(raw);
-        if (data?.selectedNft && data?.pData) return data;
-    } catch (_) { }
-    return null;
-}
 
 export async function renderBattlePage() {
     // Force dark mode on battle arena entry
@@ -119,8 +105,8 @@ export async function renderBattlePage() {
             `);
 
             try {
-                const selectedNft = window.__CURRENT_FIGHTER_SELECTION__;
-                if (!selectedNft) {
+                const selectedLoadout = getCurrentBattleLoadout();
+                if (!selectedLoadout) {
                     $('#battle-loading-overlay')?.remove();
                     showBattleToast('Pick your fighter first!');
                     previewModal.show(previewModal.enemyData);
@@ -129,7 +115,7 @@ export async function renderBattlePage() {
                 }
 
                 const isAi = !!previewModal.enemyData?.isAi;
-                let replayLogs, winner;
+                let replayLogs, winner, winnerSide;
 
                 // V2 Analytics: track battle start
                 trackBattleStarted(state.wallet?.address, {
@@ -148,7 +134,7 @@ export async function renderBattlePage() {
                     }
 
                     // Pass full V2 loadout context
-                    const loadout = window.__CURRENT_FIGHTER_SELECTION__ || {};
+                    const loadout = selectedLoadout || {};
                     const battleResult = simulateBattleV2(playerCombatStats, enemyCombatStats, {
                         isAiBattle: true,
                         aiWinRate: previewModal.enemyData.aiWinRate || 0.6,
@@ -159,6 +145,7 @@ export async function renderBattlePage() {
                     const summary = summarizeReplay(battleResult);
                     replayLogs = battleResult.logs;
                     winner = summary.winner;
+                    winnerSide = summary.winnerSide || battleResult.winnerSide || null;
                 } else {
                     // ── PvP Battles: resolve via secure server API ──
                     const walletAddress = state.wallet?.address || 'Anonymous';
@@ -166,10 +153,11 @@ export async function renderBattlePage() {
                     const result = await resolveFight(
                         previewModal.enemyData.id,
                         walletAddress,
-                        selectedNft // now the full loadout object
+                        selectedLoadout // now the full loadout object
                     );
                     replayLogs = result.logs; // Server returns `logs`, not `replayLogs`
                     winner = result.summary?.winner || result.winner;
+                    winnerSide = result.summary?.winnerSide || result.winnerSide || null;
                 }
 
                 $('#battle-loading-overlay')?.remove();
@@ -180,7 +168,8 @@ export async function renderBattlePage() {
                     const logs = replayLogs || [];
                     const p1Dmg = logs.filter(l => l.attackerSide === 'P1').reduce((s, l) => s + (l.damage || 0), 0);
                     const p2Dmg = logs.filter(l => l.attackerSide === 'P2').reduce((s, l) => s + (l.damage || 0), 0);
-                    const playerWon = winner === playerCombatStats.name;
+                    const expectedPlayerSide = isAi ? 'P1' : 'P2';
+                    const playerWon = winnerSide ? winnerSide === expectedPlayerSide : winner === playerCombatStats.name;
                     const totalRounds = logs[logs.length - 1]?.round || 1;
                     saveBattleResult({
                         playerName: playerCombatStats.name,
@@ -203,8 +192,8 @@ export async function renderBattlePage() {
                     // Refresh leaderboard if visible
                     leaderboard.render();
                 }, {
-                    environment: previewModal.enemyData?.loadout?.arena || window.__CURRENT_FIGHTER_SELECTION__?.arena,
-                    playerTeam: selectorModal.inventory || [],
+                    environment: previewModal.enemyData?.loadout?.arena || selectedLoadout?.arena,
+                    playerTeam: selectedLoadout?.teamSnapshot || selectorModal.inventory || [],
                     precomputedLogs: replayLogs,
                     winner
                 });
@@ -244,9 +233,7 @@ export async function renderBattlePage() {
                 loadout: loadout // pass full loadout schema for reference
             };
 
-            // Save globally for submit when they hit 'START BATTLE'
-            window.__CURRENT_FIGHTER_SELECTION__ = loadout;
-            saveLastFighter(loadout, pData);
+            saveLastBattleSelection(loadout, pData);
 
             // V2 Analytics: track loadout built
             trackBattleLoadout(state.wallet?.address, loadout);
@@ -284,11 +271,11 @@ export async function renderBattlePage() {
         'challenge-board-view',
         (challengeData) => {
             board.hide();
-            // Auto-restore last fighter from localStorage
-            const saved = loadLastFighter();
+            const saved = getCurrentBattleSelection().loadout
+                ? getCurrentBattleSelection()
+                : restoreLastBattleSelection();
             if (saved) {
-                window.__CURRENT_FIGHTER_SELECTION__ = saved.selectedNft;
-                previewModal.playerData = saved.pData;
+                previewModal.playerData = saved.previewData;
             } else {
                 previewModal.playerData = null;
             }

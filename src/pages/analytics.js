@@ -3,22 +3,24 @@ import { router } from '../lib/router.js';
 import {
     getLeaderboard,
     getUserStats,
-    getAdminData,
-    downloadCSV,
-    getNonce,
-    verifySignature,
-    getAuthToken,
-    clearAuthToken
 } from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
-import { signMessage } from '@wagmi/core';
-import { wagmiAdapter } from '../wallet.js';
+import { escapeHtml } from '../utils/html.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 import { getMiniAppProfile, getMiniAppProfileLabel } from '../utils/profile.js';
+import {
+    clearAdminSession,
+    exportAdminCsv,
+    fetchAdminDateData,
+    fetchAdminOverviewData,
+    hasAdminSession,
+    isUnauthorizedAdminResponse,
+    requestAdminAuth,
+} from '../lib/analytics/adminService.js';
 
-const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+const ADMIN_WALLETS = (import.meta.env.VITE_ADMIN_WALLETS || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
 
 let renderVersion = 0;
 let walletUpdateHandler = null;
@@ -26,15 +28,6 @@ let mintSuccessHandler = null;
 let activityInterval = null;
 let feedStatusTimeout = null;
 let collectionCardClickHandler = null;
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function getViewerIdentity(walletAddress) {
     const miniProfile = getMiniAppProfile();
@@ -829,7 +822,7 @@ function renderAdminPanel(wallet, slug) {
     const adminHintAllowed = ADMIN_WALLETS.length === 0 || ADMIN_WALLETS.includes(walletAddress);
     if (!adminHintAllowed) return '';
 
-    const hasToken = Boolean(getAuthToken());
+    const hasToken = hasAdminSession();
     const scopeHint = slug ? `<span class="text-[10px] opacity-50">Scoped to ${slug}</span>` : '';
 
     return `
@@ -881,33 +874,6 @@ function renderAdminPanel(wallet, slug) {
     `;
 }
 
-async function requestAdminAuth() {
-    const wallet = state.wallet?.address;
-    if (!wallet) return { success: false, error: 'Connect wallet first' };
-
-    try {
-        const chainId = state.wallet?.chainId || 8453;
-        const nonceData = await getNonce(wallet);
-        const nonce = nonceData?.nonce;
-        if (!nonce) return { success: false, error: 'Failed to get nonce' };
-
-        const domain = window.location.host;
-        const origin = window.location.origin;
-        const issuedAt = new Date().toISOString();
-        const message = `${domain} wants you to sign in with your Ethereum account:\n${wallet}\n\nSign in to Mint Intelligence Admin\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;
-
-        const signature = await signMessage(wagmiAdapter.wagmiConfig, { message });
-        const verified = await verifySignature(message, signature);
-        if (!verified?.token) {
-            return { success: false, error: 'Signature verified but no token returned' };
-        }
-
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: error?.message || 'Admin sign-in failed' };
-    }
-}
-
 function setAdminLockedState(locked) {
     const loadBtn = document.getElementById('load-admin-data');
     const actions = document.getElementById('admin-actions-group');
@@ -929,19 +895,15 @@ function setAdminAuthState(text, isError = false) {
     stateEl.classList.toggle('text-green-300', !isError);
 }
 
-function isUnauthorizedAdminResponse(data) {
-    return data?.status === 401 || data?.status === 403;
-}
-
 async function loadAdminOverview() {
     const content = document.getElementById('admin-panel-content');
     if (!content) return;
 
     content.innerHTML = '<div class="text-center py-4 opacity-30">Loading...</div>';
-    const data = await getAdminData('overview');
+    const data = await fetchAdminOverviewData();
 
     if (isUnauthorizedAdminResponse(data)) {
-        clearAuthToken();
+        clearAdminSession();
         setAdminLockedState(true);
         setAdminAuthState('Admin session expired. Sign in again.', true);
         content.innerHTML = '<div class="text-center py-4 text-red-400">Unauthorized</div>';
@@ -999,10 +961,10 @@ async function handleAdminDateAction(action, title) {
     if (!content) return;
 
     content.innerHTML = '<div class="text-center py-2 opacity-30">Loading...</div>';
-    const data = await getAdminData(action, date);
+    const data = await fetchAdminDateData(action, date);
 
     if (isUnauthorizedAdminResponse(data)) {
-        clearAuthToken();
+        clearAdminSession();
         setAdminLockedState(true);
         setAdminAuthState('Admin session expired. Sign in again.', true);
         content.innerHTML = '<div class="text-red-400 text-sm">Unauthorized</div>';
@@ -1073,11 +1035,11 @@ async function handleAdminDateAction(action, title) {
 }
 
 async function handleCsvExport(type) {
-    const result = await downloadCSV(type);
+    const result = await exportAdminCsv(type);
     if (result?.success) return;
 
     if (result?.status === 401 || result?.status === 403) {
-        clearAuthToken();
+        clearAdminSession();
         setAdminLockedState(true);
         setAdminAuthState('Admin session expired. Sign in again.', true);
         return;
@@ -1087,7 +1049,7 @@ async function handleCsvExport(type) {
 }
 
 function setupAdminListeners() {
-    const hasToken = Boolean(getAuthToken());
+    const hasToken = hasAdminSession();
     setAdminLockedState(!hasToken);
 
     const signInBtn = document.getElementById('admin-signin-btn');
@@ -1095,7 +1057,10 @@ function setupAdminListeners() {
         signInBtn.addEventListener('click', async () => {
             signInBtn.disabled = true;
             setAdminAuthState('Signing admin message...');
-            const authResult = await requestAdminAuth();
+            const authResult = await requestAdminAuth({
+                walletAddress: state.wallet?.address,
+                chainId: state.wallet?.chainId || 8453,
+            });
             signInBtn.disabled = false;
 
             if (!authResult.success) {
@@ -1112,7 +1077,7 @@ function setupAdminListeners() {
     const signOutBtn = document.getElementById('admin-signout-btn');
     if (signOutBtn) {
         signOutBtn.addEventListener('click', () => {
-            clearAuthToken();
+            clearAdminSession();
             setAdminAuthState('Signed out.');
             setAdminLockedState(true);
             renderAnalyticsPage(router.getParams());

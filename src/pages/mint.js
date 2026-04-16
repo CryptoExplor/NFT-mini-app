@@ -18,6 +18,8 @@ import { shareCollection, shareToTwitter } from '../utils/social.js';
 import { cache } from '../utils/cache.js';
 import { getCollectionActions, getActionInputDefs, getActionConfigInputDefs, executeContractAction } from '../lib/contractActions.js';
 import { fetchOwnedTokenIdsForContract, getOpenSeaChainFromChainId } from '../lib/opensea.js';
+import { escapeHtml } from '../utils/html.js';
+import { formatCountdown as formatMintCountdown } from '../utils/time.js';
 
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
@@ -35,27 +37,6 @@ function clearMintCountdownTicker() {
     clearInterval(mintCountdownInterval);
     mintCountdownInterval = null;
   }
-}
-
-function formatMintCountdown(ms) {
-  const safeMs = Math.max(0, ms);
-  const totalSeconds = Math.floor(safeMs / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function getActionButtonText(action) {

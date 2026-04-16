@@ -14,6 +14,8 @@ import {
     listActiveChallenges,
 } from '../_lib/kv.js';
 
+const CHALLENGE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 function generateChallengeId() {
     return `ch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -88,6 +90,8 @@ async function handler(req, res) {
 
         try {
             const challengeId = generateChallengeId();
+            const timestamp = Date.now();
+            const expiresAt = timestamp + CHALLENGE_EXPIRY_MS;
 
             // Compute snapshot hash for anti-tamper verification
             const snapshotData = JSON.stringify(loadout) + JSON.stringify(fighterStats || {});
@@ -99,7 +103,8 @@ async function handler(req, res) {
                 loadout,
                 fighterStats: fighterStats || loadout.fighter?.stats || {},
                 snapshotHash,
-                timestamp: Date.now(),
+                timestamp,
+                expiresAt,
                 isAi: false,
                 schemaVersion: 'battle-loadout-v1',
             };

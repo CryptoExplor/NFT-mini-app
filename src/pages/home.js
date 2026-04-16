@@ -9,6 +9,7 @@ import { trackPageView } from '../lib/api.js';
 import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalletIdentityLabel } from '../utils/profile.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
+import { formatCountdown } from '../utils/time.js';
 
 // Lazy wallet module loader
 let _walletMod = null;
@@ -51,18 +52,6 @@ const ONBOARDING_STEPS = [
 
 function getCollectionStatus(collection) {
   return String(collection?.status || collection?.computedStatus || 'paused').toLowerCase();
-}
-
-function formatCountdown(ms) {
-  const safeMs = Math.max(0, ms);
-  const totalSeconds = Math.floor(safeMs / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function clearHomeCountdownTicker() {

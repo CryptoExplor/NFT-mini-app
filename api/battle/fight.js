@@ -79,6 +79,16 @@ async function handler(req, res) {
         const attackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
         const defenderStats = defenderLoadout.fighter.stats || {};
 
+        const snapshotData = JSON.stringify(challenge.loadout) + JSON.stringify(attackerStats);
+        const snapshotHash = await computeHash(snapshotData);
+
+        if (snapshotHash !== challenge.snapshotHash) {
+            return res.status(409).json({
+                code: 'SNAPSHOT_MISMATCH',
+                message: 'Challenge data no longer matches the stored snapshot',
+            });
+        }
+
         // 4. Generate deterministic seed
         const attackerId = `${challenge.loadout?.fighter?.collectionSlug || 'unknown'}_${challenge.loadout?.fighter?.tokenId || '0'}`;
         const defenderId = `${defenderLoadout.fighter.collectionSlug || defenderLoadout.fighter.collectionName || 'unknown'}_${defenderLoadout.fighter.tokenId || defenderLoadout.fighter.nftId || '0'}`;
@@ -147,6 +157,19 @@ async function handler(req, res) {
             code: 'INTERNAL_ERROR',
             message: 'Battle simulation failed',
         });
+    }
+}
+
+async function computeHash(data) {
+    try {
+        const { createHash } = await import('crypto');
+        return createHash('sha256').update(data).digest('hex');
+    } catch {
+        const encoder = new TextEncoder();
+        const buffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+        return Array.from(new Uint8Array(buffer))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
     }
 }
 
