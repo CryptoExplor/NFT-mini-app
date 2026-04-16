@@ -33,12 +33,11 @@ export class MatchPreviewModal {
     async loadPreview(challengeData) {
         this.enemyData = challengeData;
 
-        // Mock player data for UI visual test until wallet sync is done
-        this.playerData = {
-            name: 'BaseHead #404',
-            stats: { hp: 120, atk: 18, def: 8, spd: 15, crit: 0.15, dodge: 0.05 },
-            trait: 'Angry'
-        };
+        // Only set mock player data if no real player data is loaded yet
+        // (real data comes from localStorage restore or NFTSelectorModal)
+        if (!this.playerData) {
+            this.playerData = null; // Show "Select Fighter" prompt
+        }
 
         this.render();
     }
@@ -120,7 +119,10 @@ export class MatchPreviewModal {
                     </div>
 
                     <h3 class="text-lg font-bold text-red-100 mb-1">${this.enemyData.collectionName} #${this.enemyData.nftId}</h3>
-                    <p class="text-xs font-mono text-red-400/60 truncate max-w-[180px] mb-4" title="${this.enemyData.player}">${shortenAddress(this.enemyData.player)}</p>
+                    ${this.enemyData.isAi
+                ? `<p class="text-xs text-red-400/60 font-semibold uppercase tracking-wider mb-4">AI Opponent${this.enemyData.difficulty ? ` · ${this.enemyData.difficulty}` : ''}</p>`
+                : `<p class="text-xs font-mono text-red-400/60 truncate max-w-[180px] mb-4" title="${this.enemyData.player || ''}">${shortenAddress(this.enemyData.player || '')}</p>`
+            }
 
                     ${this.enemyData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 border border-red-500/20 mb-2">${this.enemyData.trait}</span>` : ''}
                     ${this.enemyData?.loadout ? this.renderLayerBadges(this.enemyData.loadout, 'enemy') : '<div class="mb-4"></div>'}

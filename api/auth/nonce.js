@@ -9,15 +9,12 @@
 import { kv } from '@vercel/kv';
 import { withCors } from '../_lib/cors.js';
 
+import { randomBytes } from 'crypto';
+
 const NONCE_TTL_SECONDS = 300; // 5 minutes
 
 function generateNonce() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let nonce = '';
-    for (let i = 0; i < 32; i++) {
-        nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return nonce;
+    return randomBytes(16).toString('hex'); // 32-char hex string, cryptographically secure
 }
 
 async function handler(req, res) {

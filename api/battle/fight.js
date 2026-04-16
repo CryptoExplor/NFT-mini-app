@@ -108,7 +108,8 @@ async function handler(req, res) {
         const summary = summarizeReplay(battleResult);
 
         // 6. Determine winner address
-        const winnerAddress = summary.winner === 'player'
+        // P1 = attacker (challenge poster), P2 = defender (current user)
+        const winnerAddress = battleResult.winnerSide === 'P1'
             ? challenge.player
             : auth.address;
 
@@ -129,11 +130,12 @@ async function handler(req, res) {
             seed,
             summary: {
                 winner: summary.winner,
+                winnerSide: battleResult.winnerSide,
                 totalRounds: summary.totalRounds,
-                playerHpLeft: summary.playerHpLeft,
-                enemyHpLeft: summary.enemyHpLeft,
-                critsLanded: summary.critsLanded,
-                dodgesTriggered: summary.dodgesTriggered,
+                totalDamageP1: summary.totalDamageP1 || 0,
+                totalDamageP2: summary.totalDamageP2 || 0,
+                critsLanded: (battleResult.logs || []).filter(l => l.isCrit).length,
+                dodgesTriggered: (battleResult.logs || []).filter(l => l.isDodge).length,
             },
             // Replay data (logs can be large — consider pagination for prod)
             logs: battleResult.logs,

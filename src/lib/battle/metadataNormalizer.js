@@ -191,6 +191,7 @@ export function clampStats(stats) {
     stats.crit = Math.min(Math.max(stats.crit, STAT_FLOORS.crit), STAT_CAPS.crit);
     stats.dodge = Math.min(Math.max(stats.dodge, STAT_FLOORS.dodge), STAT_CAPS.dodge);
     stats.lifesteal = Math.min(Math.max(stats.lifesteal, STAT_FLOORS.lifesteal), STAT_CAPS.lifesteal);
+    stats.regen = Math.min(Math.max(stats.regen || 0, STAT_FLOORS.regen || 0), STAT_CAPS.regen || 15);
 
     // Flatten floats to 2 decimals for predictability
     stats.crit = Number(stats.crit.toFixed(2));

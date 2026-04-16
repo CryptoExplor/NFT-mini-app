@@ -291,7 +291,7 @@ export function simulateBattle(playerFighter, enemyFighter, prng, options = {}) 
 
     // AI Win Rate Injection
     if (battleOptions.isAiBattle && battleOptions.aiWinRate !== undefined) {
-        const targetAiWin = Math.random() < (battleOptions.aiWinRate ?? COMBAT.AI_WIN_RATE);
+        const targetAiWin = rng() < (battleOptions.aiWinRate ?? COMBAT.AI_WIN_RATE);
         const enemyName = enemyFighter?.name || 'Opponent';
         let bestResult = null;
 

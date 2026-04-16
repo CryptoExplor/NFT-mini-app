@@ -235,6 +235,10 @@ export async function disconnectWallet() {
         } else {
             await wagmiDisconnect(wagmiAdapter.wagmiConfig);
         }
+
+        // Clear all cached auth tokens to prevent stale sessions
+        import('./lib/game/matchmaking.js').then(({ clearBattleAuth }) => clearBattleAuth()).catch(() => {});
+        import('./lib/api.js').then(({ clearAuthToken }) => clearAuthToken()).catch(() => {});
     } catch (error) {
         console.error('Failed to disconnect:', error);
     }
@@ -309,7 +313,7 @@ export async function fetchOwnedBattleNFTs(walletAddress) {
                 }
 
                 return {
-                    id: nft.identifier,
+                    id: `${nft.collection}:${nft.identifier}`,
                     engineId,  // The ID the normalizer expects
                     collectionName: nft.collection,
                     nftId: nft.identifier,

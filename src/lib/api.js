@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 // Critical events (mints, wallet connect) are NEVER deduplicated.
 const DEDUP_TTL = 30_000; // 30 seconds
 const _recentEvents = new Map();
-const NEVER_DEDUP = new Set(['mint_success', 'mint_failure', 'mint_attempt', 'tx_sent', 'wallet_connect']);
+const NEVER_DEDUP = new Set(['mint_success', 'mint_failure', 'mint_attempt', 'tx_sent', 'wallet_connect', 'battle_loadout_built', 'battle_started_v2', 'battle_result_v2']);
 
 function shouldThrottle(type, data) {
     if (NEVER_DEDUP.has(type)) return false;
@@ -108,6 +108,41 @@ export function trackTxSent(wallet, collection, txHash) {
  */
 export function trackMintFailure(wallet, collection, reason = '') {
     trackEvent('mint_failure', { wallet, collection, metadata: { reason } });
+}
+
+/**
+ * Track V2 battle loadout built (fighter + item + arena selected)
+ */
+export function trackBattleLoadout(wallet, loadout = {}) {
+    trackEvent('battle_loadout_built', {
+        wallet,
+        metadata: {
+            fighter: loadout.fighter?.collectionSlug || null,
+            item: loadout.item?.collectionSlug || null,
+            arena: loadout.arena?.collectionSlug || null,
+            teamSize: loadout.teamSnapshot?.length || 0,
+        }
+    });
+}
+
+/**
+ * Track V2 battle started (AI or PvP)
+ */
+export function trackBattleStarted(wallet, { isAi = true, challengeId = null, opponent = null } = {}) {
+    trackEvent('battle_started_v2', {
+        wallet,
+        metadata: { isAi, challengeId, opponent }
+    });
+}
+
+/**
+ * Track V2 battle result
+ */
+export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0, opponent = null } = {}) {
+    trackEvent('battle_result_v2', {
+        wallet,
+        metadata: { won, isAi, rounds, opponent }
+    });
 }
 
 /**

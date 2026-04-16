@@ -16,7 +16,11 @@ import { base } from 'viem/chains';
 import { SignJWT } from 'jose';
 import { SiweMessage } from 'siwe';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production');
+const JWT_SECRET_RAW = process.env.JWT_SECRET;
+if (!JWT_SECRET_RAW) {
+    console.error('[Auth Verify] CRITICAL: JWT_SECRET is not set. Token issuance will fail.');
+}
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW || '');
 const JWT_EXPIRY_SECONDS = 3600; // 1 hour
 
 /**

@@ -120,3 +120,52 @@ export const SNAPSHOT = {
     HASH_ALGORITHM: 'sha256',
     DRIFT_TOLERANCE_PERCENT: 5, // Allow 5% stat drift before invalidation
 };
+
+// ── Live Balance Overrides ───────────────────────────────────────
+// Fetch balance patches from CDN without redeployment.
+// Set VITE_BALANCE_CONFIG_URL in .env to enable.
+// Falls back to bundled defaults if fetch fails.
+let _overridesApplied = false;
+
+export async function loadBalanceOverrides() {
+    if (_overridesApplied) return;
+    _overridesApplied = true;
+
+    const url = typeof import.meta !== 'undefined'
+        ? import.meta.env?.VITE_BALANCE_CONFIG_URL
+        : null;
+
+    if (!url) return; // No CDN configured, use bundled values
+
+    try {
+        const res = await fetch(url, { cache: 'no-cache' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const overrides = await res.json();
+
+        // Merge STAT_CAPS overrides
+        if (overrides.STAT_CAPS) {
+            for (const [key, val] of Object.entries(overrides.STAT_CAPS)) {
+                if (key in STAT_CAPS && typeof val === 'number') STAT_CAPS[key] = val;
+            }
+        }
+
+        // Merge STAT_FLOORS overrides
+        if (overrides.STAT_FLOORS) {
+            for (const [key, val] of Object.entries(overrides.STAT_FLOORS)) {
+                if (key in STAT_FLOORS && typeof val === 'number') STAT_FLOORS[key] = val;
+            }
+        }
+
+        // Merge COMBAT overrides
+        if (overrides.COMBAT) {
+            for (const [key, val] of Object.entries(overrides.COMBAT)) {
+                if (key in COMBAT && typeof val === 'number') COMBAT[key] = val;
+            }
+        }
+
+        console.log('[BalanceConfig] Live overrides applied from CDN');
+    } catch (err) {
+        console.warn('[BalanceConfig] CDN fetch failed, using bundled defaults:', err.message);
+    }
+}

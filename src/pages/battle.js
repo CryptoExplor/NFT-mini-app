@@ -12,6 +12,7 @@ import { renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { normalizeFighter, applyLayer } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge } from '../lib/game/matchmaking.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
+import { trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
 
 /** Inline toast for Farcaster miniapp (no browser alert) */
 function showBattleToast(message, type = 'error') {
@@ -52,6 +53,9 @@ function loadLastFighter() {
 export async function renderBattlePage() {
     // Force dark mode on battle arena entry
     setThemePreference('dark');
+
+    // Load live balance patches from CDN (fire-and-forget, falls back to bundled)
+    import('../lib/battle/balanceConfig.js').then(({ loadBalanceOverrides }) => loadBalanceOverrides()).catch(() => {});
 
     const app = $('#app');
 
@@ -127,6 +131,13 @@ export async function renderBattlePage() {
                 const isAi = !!previewModal.enemyData?.isAi;
                 let replayLogs, winner;
 
+                // V2 Analytics: track battle start
+                trackBattleStarted(state.wallet?.address, {
+                    isAi,
+                    challengeId: previewModal.enemyData?.id || null,
+                    opponent: enemyCombatStats.name || null,
+                });
+
                 if (isAi) {
                     // ── AI Battles: resolve locally with V2 engine ──
                     const { simulateBattleV2 } = await import('../lib/battle/engineV2.js');
@@ -157,8 +168,8 @@ export async function renderBattlePage() {
                         walletAddress,
                         selectedNft // now the full loadout object
                     );
-                    replayLogs = result.replayLogs;
-                    winner = result.summary.winner;
+                    replayLogs = result.logs; // Server returns `logs`, not `replayLogs`
+                    winner = result.summary?.winner || result.winner;
                 }
 
                 $('#battle-loading-overlay')?.remove();
@@ -169,16 +180,25 @@ export async function renderBattlePage() {
                     const logs = replayLogs || [];
                     const p1Dmg = logs.filter(l => l.attackerSide === 'P1').reduce((s, l) => s + (l.damage || 0), 0);
                     const p2Dmg = logs.filter(l => l.attackerSide === 'P2').reduce((s, l) => s + (l.damage || 0), 0);
+                    const playerWon = winner === playerCombatStats.name;
+                    const totalRounds = logs[logs.length - 1]?.round || 1;
                     saveBattleResult({
                         playerName: playerCombatStats.name,
                         enemyName: enemyCombatStats.name,
-                        playerWon: winner === playerCombatStats.name,
+                        playerWon,
                         isAi: isAi,
-                        rounds: logs[logs.length - 1]?.round || 1,
+                        rounds: totalRounds,
                         playerDmg: p1Dmg,
                         enemyDmg: p2Dmg,
                         crits: logs.filter(l => l.isCrit).length,
                         dodges: logs.filter(l => l.isDodge).length
+                    });
+                    // V2 Analytics: track battle result
+                    trackBattleResult(state.wallet?.address, {
+                        won: playerWon,
+                        isAi,
+                        rounds: totalRounds,
+                        opponent: enemyCombatStats.name || null,
                     });
                     // Refresh leaderboard if visible
                     leaderboard.render();
@@ -228,6 +248,9 @@ export async function renderBattlePage() {
             window.__CURRENT_FIGHTER_SELECTION__ = loadout;
             saveLastFighter(loadout, pData);
 
+            // V2 Analytics: track loadout built
+            trackBattleLoadout(state.wallet?.address, loadout);
+
             // If we have an active enemy preview, we update the player slot
             if (previewModal.enemyData) {
                 previewModal.playerData = pData;
@@ -241,7 +264,7 @@ export async function renderBattlePage() {
                 if (btn) btn.textContent = 'Posting...';
 
                 // Pass the complete V2 schema payload
-                postChallenge(walletAddress, loadout, loadout.teamSnapshot)
+                postChallenge(walletAddress, loadout)
                     .then(() => {
                         board.show(); // Refresh board and reload challenges from KV
                     })

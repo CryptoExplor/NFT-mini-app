@@ -7,43 +7,69 @@ import { getActiveChallenges } from '../../lib/game/matchmaking.js';
  * Shows AI-driven challenges and player-posted challenges with animated cards.
  */
 
+// ── AI Fighter Pool (expanded for V2) ────────────────────────────
 const AI_MINTED_POOL = [
     // BASE_INVADERS
-    {
-        collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '402', trait: 'Glitched',
-        rawAttributes: [{ trait_type: 'Faction', value: 'GLITCHED' }, { trait_type: 'Body', value: 'Slim' }]
-    },
-    {
-        collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '1087', trait: 'Corrupted',
-        rawAttributes: [{ trait_type: 'Faction', value: 'CORRUPTED' }, { trait_type: 'Body', value: 'Heavy' }]
-    },
+    { collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '402', trait: 'Glitched',
+        rawAttributes: [{ trait_type: 'Faction', value: 'GLITCHED' }, { trait_type: 'Body', value: 'Slim' }] },
+    { collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '1087', trait: 'Corrupted',
+        rawAttributes: [{ trait_type: 'Faction', value: 'CORRUPTED' }, { trait_type: 'Body', value: 'Heavy' }] },
+    { collectionId: 'BASE_INVADERS', collectionName: 'BASE_INVADERS', nftId: '733', trait: 'OG',
+        rawAttributes: [{ trait_type: 'Faction', value: 'OG' }, { trait_type: 'Body', value: 'Cracked' }] },
     // BASEHEADS_404
-    {
-        collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '99', trait: 'Overload',
-        rawAttributes: [{ trait_type: 'Mood', value: 'OVERLOAD' }, { trait_type: 'Noise', value: 'MAX' }]
-    },
-    {
-        collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '256', trait: 'Rage',
-        rawAttributes: [{ trait_type: 'Mood', value: 'RAGE' }, { trait_type: 'Error', value: '404' }]
-    },
+    { collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '99', trait: 'Overload',
+        rawAttributes: [{ trait_type: 'Mood', value: 'OVERLOAD' }, { trait_type: 'Noise', value: 'MAX' }] },
+    { collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '256', trait: 'Rage',
+        rawAttributes: [{ trait_type: 'Mood', value: 'RAGE' }, { trait_type: 'Error', value: '404' }] },
+    { collectionId: 'BASEHEADS_404', collectionName: 'BASEHEADS_404', nftId: '512', trait: 'Idle',
+        rawAttributes: [{ trait_type: 'Mood', value: 'IDLE' }, { trait_type: 'Noise', value: 'HIGH' }] },
     // BaseMoods
-    {
-        collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '55', trait: 'Zen',
-        rawAttributes: [{ trait_type: 'Mood', value: 'Zen' }, { trait_type: 'Blush', value: 'Yes' }]
-    },
-    {
-        collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '128', trait: 'Happy',
-        rawAttributes: [{ trait_type: 'Mood', value: 'Happy' }]
-    },
+    { collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '55', trait: 'Zen',
+        rawAttributes: [{ trait_type: 'Mood', value: 'Zen' }, { trait_type: 'Blush', value: 'Yes' }] },
+    { collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '128', trait: 'Happy',
+        rawAttributes: [{ trait_type: 'Mood', value: 'Happy' }] },
+    { collectionId: 'BaseMoods', collectionName: 'BaseMoods', nftId: '200', trait: 'Angry',
+        rawAttributes: [{ trait_type: 'Mood', value: 'Angry' }] },
     // VOID_PFPS
-    {
-        collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '12', trait: 'Distortion',
-        rawAttributes: [{ trait_type: 'Type', value: 'Distortion' }]
-    },
-    {
-        collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '77', trait: 'Phantom',
-        rawAttributes: [{ trait_type: 'Type', value: 'Phantom' }]
-    },
+    { collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '12', trait: 'Distortion',
+        rawAttributes: [{ trait_type: 'Type', value: 'Distortion' }] },
+    { collectionId: 'VOID_PFPS', collectionName: 'VOID_PFPS', nftId: '77', trait: 'Phantom',
+        rawAttributes: [{ trait_type: 'Type', value: 'Phantom' }] },
+    // QuantumQuills
+    { collectionId: 'quantum-quills', collectionName: 'QuantumQuills', nftId: '31', trait: 'Sustain',
+        rawAttributes: [] },
+    { collectionId: 'quantum-quills', collectionName: 'QuantumQuills', nftId: '88', trait: 'Sustain',
+        rawAttributes: [] },
+    // BaseFortunes
+    { collectionId: 'base-fortunes', collectionName: 'BaseFortunes', nftId: '7', trait: 'Legendary',
+        rawAttributes: [{ trait_type: 'Rarity', value: 'Legendary' }] },
+    { collectionId: 'base-fortunes', collectionName: 'BaseFortunes', nftId: '42', trait: 'Rare',
+        rawAttributes: [{ trait_type: 'Rarity', value: 'Rare' }] },
+    { collectionId: 'base-fortunes', collectionName: 'BaseFortunes', nftId: '100', trait: 'Standard',
+        rawAttributes: [] },
+];
+
+// V2: Item/Arena buff pools for AI loadouts
+const AI_ITEM_POOL = [
+    { name: 'Neon Rune', collectionSlug: 'neon-runes', stats: { atk: 10, crit: 0.05 } },
+    { name: 'Byte Beat', collectionSlug: 'bytebeats', stats: { spd: 10, dodge: 0.03 } },
+    { name: 'Neon Shape', collectionSlug: 'neon-shapes', stats: { def: 10, hp: 15 } },
+    null, // Some AI don't have items
+    null,
+];
+
+const AI_ARENA_POOL = [
+    { name: 'Mini World', collectionSlug: 'mini-worlds', stats: { hp: 25 } },
+    null, // Some AI don't have arenas
+    null,
+];
+
+// Difficulty tiers: controls AI win rate and whether they get items/arenas
+const AI_DIFFICULTY = [
+    { label: 'Rookie', aiWinRate: 0.35, canHaveItem: false, canHaveArena: false },
+    { label: 'Fighter', aiWinRate: 0.50, canHaveItem: true, canHaveArena: false },
+    { label: 'Veteran', aiWinRate: 0.60, canHaveItem: true, canHaveArena: true },
+    { label: 'Champion', aiWinRate: 0.75, canHaveItem: true, canHaveArena: true },
 ];
 
 const COLLECTION_COLORS = {
@@ -51,7 +77,12 @@ const COLLECTION_COLORS = {
     'BASEHEADS_404': { border: 'border-orange-500/40', glow: 'shadow-orange-500/20', badge: 'bg-orange-500/20 text-orange-300', gradient: 'from-orange-900/30 to-transparent' },
     'BaseMoods': { border: 'border-pink-500/40', glow: 'shadow-pink-500/20', badge: 'bg-pink-500/20 text-pink-300', gradient: 'from-pink-900/30 to-transparent' },
     'VOID_PFPS': { border: 'border-purple-500/40', glow: 'shadow-purple-500/20', badge: 'bg-purple-500/20 text-purple-300', gradient: 'from-purple-900/30 to-transparent' },
+    'QuantumQuills': { border: 'border-rose-500/40', glow: 'shadow-rose-500/20', badge: 'bg-rose-500/20 text-rose-300', gradient: 'from-rose-900/30 to-transparent' },
+    'BaseFortunes': { border: 'border-amber-500/40', glow: 'shadow-amber-500/20', badge: 'bg-amber-500/20 text-amber-300', gradient: 'from-amber-900/30 to-transparent' },
     'NeonRunes': { border: 'border-cyan-500/40', glow: 'shadow-cyan-500/20', badge: 'bg-cyan-500/20 text-cyan-300', gradient: 'from-cyan-900/30 to-transparent' },
+    'ByteBeats': { border: 'border-violet-500/40', glow: 'shadow-violet-500/20', badge: 'bg-violet-500/20 text-violet-300', gradient: 'from-violet-900/30 to-transparent' },
+    'NeonShapes': { border: 'border-teal-500/40', glow: 'shadow-teal-500/20', badge: 'bg-teal-500/20 text-teal-300', gradient: 'from-teal-900/30 to-transparent' },
+    'MiniWorlds': { border: 'border-sky-500/40', glow: 'shadow-sky-500/20', badge: 'bg-sky-500/20 text-sky-300', gradient: 'from-sky-900/30 to-transparent' },
     '_default': { border: 'border-indigo-500/40', glow: 'shadow-indigo-500/20', badge: 'bg-indigo-500/20 text-indigo-300', gradient: 'from-indigo-900/30 to-transparent' }
 };
 
@@ -63,20 +94,48 @@ function shuffle(list) {
     return [...list].sort(() => Math.random() - 0.5);
 }
 
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function buildAiChallenges() {
     const now = Date.now();
-    const picked = shuffle(AI_MINTED_POOL).slice(0, 4);
+    const picked = shuffle(AI_MINTED_POOL).slice(0, 6);
     const results = [];
     for (const entry of picked) {
         try {
+            const difficulty = pickRandom(AI_DIFFICULTY);
+            const fighterStats = normalizeFighter(entry.collectionId, entry.nftId, entry.rawAttributes);
+
+            // V2: Optionally equip item and arena based on difficulty
+            const item = difficulty.canHaveItem ? pickRandom(AI_ITEM_POOL) : null;
+            const arena = difficulty.canHaveArena ? pickRandom(AI_ARENA_POOL) : null;
+
             results.push({
                 id: `ai_${entry.collectionId}_${entry.nftId}_${results.length}_${now}`,
                 collectionName: entry.collectionName,
                 nftId: entry.nftId,
-                stats: normalizeFighter(entry.collectionId, entry.nftId, entry.rawAttributes),
+                stats: fighterStats,
                 trait: entry.trait,
                 isAi: true,
-                mintedToken: true
+                mintedToken: true,
+                aiWinRate: difficulty.aiWinRate,
+                difficulty: difficulty.label,
+                // V2 loadout schema
+                loadout: {
+                    fighter: {
+                        collectionSlug: entry.collectionId,
+                        collectionName: entry.collectionName,
+                        tokenId: entry.nftId,
+                        nftId: entry.nftId,
+                        stats: fighterStats,
+                        role: 'FIGHTER',
+                    },
+                    item: item,
+                    arena: arena,
+                    teamSnapshot: [],
+                    schemaVersion: 'battle-loadout-v1',
+                },
             });
         } catch (e) {
             console.warn(`[AI Pool] Skipped ${entry.collectionId} #${entry.nftId}:`, e.message);
@@ -210,9 +269,12 @@ export class ChallengeBoard {
                     </div>
                 </div>
 
-                <!-- Trait + Mini Stats -->
+                <!-- Trait + Difficulty + Loadout Badges -->
                 <div class="flex items-center gap-2 mb-4 flex-wrap">
                     <span class="text-[10px] px-2 py-0.5 rounded-md ${colors.badge} font-medium">${challenge.trait}</span>
+                    ${isAi && challenge.difficulty ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-slate-400 border border-white/10 font-medium">${challenge.difficulty}</span>` : ''}
+                    ${challenge.loadout?.item ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 font-bold">🔮 ITEM</span>` : ''}
+                    ${challenge.loadout?.arena ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/20 font-bold">🌌 ARENA</span>` : ''}
                 </div>
 
                 <!-- Stat Bars Preview -->
