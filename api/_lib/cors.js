@@ -1,19 +1,51 @@
-const DEFAULT_ALLOWED_ORIGIN = 'https://base-mintapp.vercel.app';
+/**
+ * CORS helper.
+ *
+ * Access-Control-Allow-Credentials is set to true so browsers send cookies /
+ * Authorization headers on cross-origin requests.  The spec forbids pairing
+ * credentials with a wildcard origin, so we must echo back an *exact* origin
+ * string — but only for origins we explicitly trust.  Reflecting an arbitrary
+ * Origin header (the previous behaviour) is equivalent to a wildcard and lets
+ * any site make credentialed requests to every API endpoint.
+ */
 
-function normalizeOrigin(originHeaderValue) {
-    if (Array.isArray(originHeaderValue)) {
-        return normalizeOrigin(originHeaderValue[0]);
+const PRODUCTION_ORIGIN = 'https://base-mintapp.vercel.app';
+
+/**
+ * Explicit set of origins that may send credentialed cross-origin requests.
+ * Add preview / staging URLs here as needed; never use a pattern match or
+ * startsWith('http') check.
+ */
+const ALLOWED_ORIGINS = new Set([
+    PRODUCTION_ORIGIN,
+    // Local development
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:4173',
+]);
+
+/**
+ * Return the origin to echo in Access-Control-Allow-Origin.
+ * If the request origin is not on the allowlist, fall back to the production
+ * origin — the browser will then block the credentialed request, which is the
+ * correct outcome.
+ */
+function resolveAllowedOrigin(requestOrigin) {
+    if (typeof requestOrigin === 'string' && ALLOWED_ORIGINS.has(requestOrigin)) {
+        return requestOrigin;
     }
-    if (typeof originHeaderValue === 'string' && originHeaderValue.startsWith('http')) {
-        return originHeaderValue;
-    }
-    return DEFAULT_ALLOWED_ORIGIN;
+    return PRODUCTION_ORIGIN;
 }
 
 export function setCors(req, res, options = {}) {
     const methods = options.methods || 'GET,OPTIONS';
     const headers = options.headers || 'Content-Type,Authorization';
-    const origin = options.origin || normalizeOrigin(req?.headers?.origin);
+
+    // Use caller-supplied origin only if it is already a known-safe value;
+    // otherwise derive it from the request.
+    const origin = (options.origin && ALLOWED_ORIGINS.has(options.origin))
+        ? options.origin
+        : resolveAllowedOrigin(req?.headers?.origin);
 
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
