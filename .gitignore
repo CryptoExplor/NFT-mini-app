@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Vite crash artifacts
+vite.config.js.timestamp-*
+
+.vercel
+.env*.local
+
+# Non-repo files
+ZUMP/
+.agent/
+.qoder/
+vite.config.js.timestamp-*
+
+contract-sol/
+AI_CONTEXT.md
+package-lock.json

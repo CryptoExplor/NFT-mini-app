@@ -1,0 +1,333 @@
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import { farcasterMiniApp } from '@farcaster/miniapp-wagmi-connector';
+import { watchAccount, switchChain, getAccount, disconnect as wagmiDisconnect, reconnect, connect as wagmiConnect } from '@wagmi/core';
+import { EVENTS, state as globalState } from './state.js';
+import { DEFAULT_CHAIN, SUPPORTED_CHAINS } from './utils/chain.js';
+
+// 1. Get Project ID
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+
+if (!projectId || projectId === 'REPLACE_ME') {
+    console.error('Missing VITE_WALLETCONNECT_PROJECT_ID in .env');
+}
+
+// 2. Configure Networks
+export const networks = [DEFAULT_CHAIN, ...SUPPORTED_CHAINS];
+
+// 3. Configure Base Builder Code (ERC-8021)
+// Using pre-encoded string provided by builder: bc_rqj8aj3n
+export const DATA_SUFFIX = '0x62635f72716a38616a336e0b0080218021802180218021802180218021';
+
+// 4. Create Wagmi Adapter with Farcaster support and Builder Code
+export const wagmiAdapter = new WagmiAdapter({
+    projectId,
+    networks,
+    ssr: false,
+    dataSuffix: DATA_SUFFIX,
+    connectors: [farcasterMiniApp()]
+});
+
+let currentUnwatch = null;
+let modalInstancePromise = null;
+
+async function getWalletModal() {
+    if (!modalInstancePromise) {
+        modalInstancePromise = (async () => {
+            const [{ createAppKit }, { base }] = await Promise.all([
+                import('@reown/appkit'),
+                import('@reown/appkit/networks')
+            ]);
+
+            return createAppKit({
+                adapters: [wagmiAdapter],
+                networks: [base],
+                projectId,
+                themeMode: 'dark',
+                features: {
+                    analytics: true,
+                    injected: true,
+                    email: false,
+                    socials: []
+                },
+                themeVariables: {
+                    '--w3m-accent': '#6366F1',
+                    '--w3m-border-radius-master': '1px'
+                },
+                metadata: {
+                    name: 'Base Mint',
+                    description: 'Mint NFTs on Base',
+                    url: typeof window !== 'undefined' ? window.location.origin : 'https://base-mintapp.vercel.app',
+                    icons: [typeof window !== 'undefined' ? window.location.origin + '/icon.png' : 'https://base-mintapp.vercel.app/icon.png']
+                },
+                allWallets: 'SHOW'
+            });
+        })();
+    }
+
+    return modalInstancePromise;
+}
+
+function normalizeConnectorLabel(connector) {
+    return `${connector?.id || ''} ${connector?.name || ''}`.toLowerCase();
+}
+
+function getPreferredMiniAppConnectors() {
+    const connectors = wagmiAdapter.wagmiConfig.connectors || [];
+    const host = globalState.platform?.host || 'web';
+
+    const isBaseConnector = (connector) => {
+        const label = normalizeConnectorLabel(connector);
+        return connector?.id === 'baseAccount' ||
+            label.includes('base account') ||
+            label.includes('coinbase');
+    };
+
+    const isMiniAppConnector = (connector) => {
+        const label = normalizeConnectorLabel(connector);
+        return connector?.id === 'farcaster' ||
+            connector?.id === 'farcasterMiniApp' ||
+            label.includes('farcaster') ||
+            label.includes('miniapp');
+    };
+
+    const baseConnectors = connectors.filter(isBaseConnector);
+    const miniAppConnectors = connectors.filter(isMiniAppConnector);
+    const ordered = host === 'base'
+        ? [...baseConnectors, ...miniAppConnectors]
+        : [...miniAppConnectors, ...baseConnectors];
+
+    const seen = new Set();
+    return ordered.filter((connector) => {
+        const key = `${connector?.id || ''}:${connector?.name || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+export async function connectMiniAppWalletSilently() {
+    if (!globalState.platform?.inMiniApp) return false;
+
+    const connectors = getPreferredMiniAppConnectors();
+    if (!connectors.length) return false;
+
+    for (const connector of connectors) {
+        try {
+            const result = await wagmiConnect(wagmiAdapter.wagmiConfig, { connector });
+            if (result?.accounts?.[0]) {
+                console.log(`✅ Connected via ${connector.name || connector.id || 'mini app connector'}`);
+                return true;
+            }
+        } catch (error) {
+            console.debug(`Mini app connect skipped for ${connector.name || connector.id || 'unknown connector'}:`, error?.message || error);
+        }
+    }
+
+    return false;
+}
+
+export async function initWallet() {
+    console.log('🔌 Initializing wallet connection...');
+
+    // 1. Get initial account state FIRST (synchronously)
+    const initialAccount = getAccount(wagmiAdapter.wagmiConfig);
+    console.log('Initial account state:', {
+        address: initialAccount.address,
+        isConnected: initialAccount.isConnected,
+        chainId: initialAccount.chainId,
+        connector: initialAccount.connector?.name
+    });
+
+    // 2. Update global state immediately with initial state
+    handleAccountChange(initialAccount);
+
+    // 3. Watch for future account changes
+    currentUnwatch = watchAccount(wagmiAdapter.wagmiConfig, {
+        onChange(account) {
+            console.log('📱 Account changed:', {
+                address: account.address,
+                isConnected: account.isConnected,
+                chainId: account.chainId,
+                connector: account.connector?.name
+            });
+            handleAccountChange(account);
+        }
+    });
+
+    // 4. Try to reconnect if there's a previous session (async, but we don't block)
+    try {
+        const reconnectResult = await reconnect(wagmiAdapter.wagmiConfig);
+        console.log('✅ Reconnected:', reconnectResult);
+
+        // After reconnect, get the latest account state
+        const updatedAccount = getAccount(wagmiAdapter.wagmiConfig);
+        if (updatedAccount.address !== initialAccount.address ||
+            updatedAccount.isConnected !== initialAccount.isConnected) {
+            console.log('🔄 Account state updated after reconnect');
+            handleAccountChange(updatedAccount);
+        }
+    } catch (error) {
+        console.warn('⚠️ Reconnect failed (this is normal if no previous session):', error);
+    }
+
+    // Log available connectors for debugging
+    console.log('Available connectors:', wagmiAdapter.wagmiConfig.connectors.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+    })));
+}
+
+function handleAccountChange(account) {
+    const wasConnected = globalState.wallet.isConnected;
+
+    // Update global state
+    globalState.wallet = {
+        address: account.address,
+        chainId: account.chainId,
+        isConnected: account.isConnected,
+        connector: account.connector
+    };
+
+    // Track wallet connect event (only on genuinely new user-initiated connection)
+    // Skip auto-reconnects on page refresh by checking sessionStorage
+    if (account.isConnected && !wasConnected && account.address) {
+        const trackedKey = `wallet_tracked_${account.address.toLowerCase()}`;
+        if (!sessionStorage.getItem(trackedKey)) {
+            sessionStorage.setItem(trackedKey, '1');
+            import('./lib/api.js').then(async ({ trackWalletConnect }) => {
+                let profile = null;
+                try {
+                    const { getMiniAppProfile } = await import('./utils/profile.js');
+                    profile = getMiniAppProfile();
+                } catch (_) { }
+                trackWalletConnect(account.address, profile ? {
+                    displayName: profile.displayName || profile.username || null,
+                    username: profile.username || null
+                } : null);
+            }).catch(() => { });
+        }
+    }
+
+    // Dispatch generic update event
+    document.dispatchEvent(new CustomEvent(EVENTS.WALLET_UPDATE, { detail: account }));
+
+    // Dispatch chain update if connected
+    if (account.isConnected && account.chainId) {
+        document.dispatchEvent(new CustomEvent(EVENTS.CHAIN_UPDATE, { detail: { chainId: account.chainId } }));
+    }
+}
+
+export async function connectWallet() {
+    const connected = await connectMiniAppWalletSilently();
+    if (connected) return;
+    const modal = await getWalletModal();
+    await modal.open();
+}
+
+export async function disconnectWallet() {
+    try {
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        console.log('Disconnecting from:', account.connector?.name);
+
+        if (account.connector) {
+            await wagmiDisconnect(wagmiAdapter.wagmiConfig, { connector: account.connector });
+        } else {
+            await wagmiDisconnect(wagmiAdapter.wagmiConfig);
+        }
+
+        // Clear all cached auth tokens to prevent stale sessions
+        import('./lib/game/matchmaking.js').then(m => { if (typeof m.clearBattleAuth === 'function') m.clearBattleAuth(); }).catch(() => {});
+        import('./lib/api.js').then(m => { if (typeof m.clearAuthToken === 'function') m.clearAuthToken(); }).catch(() => {});
+    } catch (error) {
+        console.error('Failed to disconnect:', error);
+    }
+}
+
+export function getCurrentAccount() {
+    return getAccount(wagmiAdapter.wagmiConfig);
+}
+
+export async function switchToBase() {
+    await switchChain(wagmiAdapter.wagmiConfig, { chainId: DEFAULT_CHAIN.id });
+}
+
+
+/**
+ * Game Ecosystem Utility
+ * Fetches all owned NFTs across the whitelisted collections
+ * using the existing OpenSea API client (src/lib/opensea.js) to populate the NFTSelectorModal.
+ */
+export async function fetchOwnedBattleNFTs(walletAddress) {
+    if (!walletAddress) return [];
+    console.log(`[Wallet] Fetching OpenSea NFTs on Base for ${walletAddress}...`);
+    try {
+        const { fetchNFTsByWallet } = await import('./lib/opensea.js');
+        const result = await fetchNFTsByWallet(walletAddress, {
+            chain: 'base',
+            limit: 200
+        });
+        const nfts = result.nfts || [];
+        const { normalizeFighter, normalizeItemStats, normalizeArenaStats } = await import('./lib/battle/metadataNormalizer.js');
+        const { COLLECTION_PROFILES, getRoleForSlug } = await import('./lib/battle/collectionProfiles.js');
+
+        const allowedSlugs = Object.keys(COLLECTION_PROFILES);
+
+        return nfts
+            .filter(nft => allowedSlugs.includes(nft.collection))
+            .map(nft => {
+                const traits = nft.traits || [];
+                let primaryTrait = 'Standard';
+                if (traits.length > 0) {
+                    const mapped = traits.find(t =>
+                        t.trait_type === 'Faction' ||
+                        t.trait_type === 'Mood' ||
+                        t.trait_type === 'Distortion'
+                    );
+                    if (mapped) primaryTrait = mapped.value;
+                    else primaryTrait = traits[0].value;
+                }
+
+                // Map OpenSea slug to engine known collection ID
+                let engineId = nft.collection;
+                if (nft.collection === 'baseheads-404') engineId = 'BASEHEADS_404';
+                else if (nft.collection === 'base-moods') engineId = 'BaseMoods';
+                else if (nft.collection === 'void-pfps') engineId = 'VOID_PFPS';
+                else if (nft.collection === 'neon-runes') engineId = 'neon-runes';
+                else if (nft.collection === 'base-invaders') engineId = 'BASE_INVADERS';
+
+                const role = getRoleForSlug(engineId) || 'UNKNOWN';
+
+                // Normalize stats so the selector can display real values
+                let stats = {};
+                try {
+                    if (role === 'FIGHTER') {
+                        stats = normalizeFighter(engineId, nft.identifier, traits);
+                    } else if (role === 'ITEM_BUFF') {
+                        stats = normalizeItemStats(engineId, nft.identifier, traits);
+                    } else if (role === 'ENVIRONMENT') {
+                        stats = normalizeArenaStats(engineId, nft.identifier, traits);
+                    }
+                } catch (e) {
+                    console.warn(`[Wallet] Could not normalize stats for ${engineId} #${nft.identifier}`, e);
+                }
+
+                return {
+                    id: `${nft.collection}:${nft.identifier}`,
+                    engineId,  // The ID the normalizer expects
+                    collectionName: nft.collection,
+                    nftId: nft.identifier,
+                    trait: primaryTrait,
+                    role,
+                    slotEligible: true,
+                    rawAttributes: traits,
+                    stats,
+                    passive: stats.passive || null,
+                    imageUrl: nft.image_url || nft.animation_url || null
+                };
+            });
+    } catch (e) {
+        console.error('[Wallet] Error fetching APIs from OpenSea wrapper:', e);
+        return [];
+    }
+}

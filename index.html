@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="base:app_id" content="69876c3e6dea3c7b8e149eb0" />
+  <title>Base Mint — NFT Battle Arena</title>
+  <meta name="description" content="Cross-collection NFT battle game on Base. Pick your fighter, enter the arena." />
+  <meta property="og:title" content="Base Mint — NFT Battle Arena" />
+  <meta property="og:description"
+    content="Cross-collection NFT battle game on Base. Pick your fighter, enter the arena." />
+  <meta property="og:image" content="https://base-mintapp.vercel.app/image.png" />
+
+  <!-- Farcaster Mini App Metadata -->
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"https://base-mintapp.vercel.app/image.png",
+    "button":{
+      "title":"Open Base Mint",
+      "action":{
+        "type":"launch_miniapp",
+        "name":"Base Mint — NFT Battle Arena",
+        "url":"https://base-mintapp.vercel.app",
+        "splashImageUrl":"https://base-mintapp.vercel.app/splash.png",
+        "splashBackgroundColor":"#1A1F3A"
+      }
+    }
+  }' />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+
+  <!-- Preconnect to critical origins -->
+  <link rel="preconnect" href="https://mainnet.base.org" crossorigin>
+  <link rel="dns-prefetch" href="https://mainnet.base.org">
+  <link rel="preconnect" href="https://relay.walletconnect.com" crossorigin>
+
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/site.webmanifest">
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="/icon.png">
+
+  <!-- CSS will be injected by Vite -->
+</head>
+
+<body class="min-h-screen text-white relative bg-slate-900">
+
+  <!-- Backgrounds -->
+  <div class="aurora-bg"></div>
+  <div class="aurora-glow"></div>
+  <div class="stars"></div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay"
+    style="position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:#0f0f23;transition:opacity 0.5s;"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-[#0f0f23] transition-opacity duration-500">
+    <div class="text-center" style="text-align:center;">
+      <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+        style="width:4rem;height:4rem;border:4px solid #6366f1;border-top-color:transparent;border-radius:50%;margin:0 auto 1rem;animation:spin 1s linear infinite;">
+      </div>
+      <h2
+        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 animate-pulse"
+        style="font-size:1.25rem;font-weight:700;background:linear-gradient(to right,#818cf8,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:pulse 2s cubic-bezier(0.4,0,0.6,1) infinite;">
+        Initializing...
+      </h2>
+    </div>
+  </div>
+  <style>
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: .5;
+      }
+    }
+  </style>
+
+  <!-- App Container - Pages render here dynamically -->
+  <div id="app"></div>
+
+  <!-- Toast notifications are created dynamically by ToastManager -->
+
+  <!-- Main JS entry point -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

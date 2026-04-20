@@ -1,0 +1,38 @@
+{
+  "framework": "vite",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "devCommand": "vite --port $PORT",
+  "headers": [
+    {
+      "source": "/(.*)\\.(png|jpg|jpeg|webp|avif|svg|ico)$",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/.well-known/farcaster.json",
+      "destination": "https://api.farcaster.xyz/miniapps/hosted-manifest/019c38fb-e520-a098-82f6-ce6cf8237fcd",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/share",
+      "destination": "/api/share"
+    },
+    {
+      "source": "/share/:slug",
+      "destination": "/api/share?slug=:slug"
+    },
+    {
+      "source": "/((?!api|src|assets|node_modules|public|@vite|@|.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
