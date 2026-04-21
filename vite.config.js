@@ -6,11 +6,30 @@ export default defineConfig(({ mode }) => ({
     target: 'esnext',
     outDir: 'dist',
     minify: 'esbuild',
+
+    commonjsOptions: {
+      // Exclude wagmi from CJS transformation entirely
+      ignore: ['@wagmi/core', '@wagmi/connectors'],
+    },
+
     rollupOptions: {
+      plugins: [
+        {
+          // Intercept @wagmi/core/tempo before Rollup's CJS resolver chokes on it
+          name: 'fix-wagmi-cjs-tempo',
+          resolveId(id) {
+            if (id.startsWith('@wagmi/core/tempo') || id === '@wagmi/core/tempo') {
+              return { id: '@wagmi/core', moduleSideEffects: false };
+            }
+          }
+        }
+      ],
       output: {
         manualChunks: {
           'vendor-viem': ['viem'],
-          'vendor-appkit': ['@reown/appkit', '@reown/appkit-adapter-wagmi'],
+          // Separate appkit from its wagmi adapter to avoid the CJS chain
+          'vendor-appkit': ['@reown/appkit'],
+          'vendor-appkit-wagmi': ['@reown/appkit-adapter-wagmi'],
           'vendor-farcaster': ['@farcaster/miniapp-sdk'],
           'collections': ['./src/lib/loadCollections.js'],
           'mint-helpers': ['./src/lib/mintHelpers.js'],
@@ -36,15 +55,8 @@ export default defineConfig(({ mode }) => ({
   },
 
   optimizeDeps: {
-    include: [
-      'viem',
-      '@reown/appkit',
-    ],
-    exclude: [
-      '@wagmi/core',
-      '@wagmi/connectors',
-      '@reown/appkit-adapter-wagmi',
-    ]
+    include: ['viem', '@reown/appkit'],
+    exclude: ['@wagmi/core', '@wagmi/connectors', '@reown/appkit-adapter-wagmi'],
   },
 
   plugins: [
@@ -57,17 +69,12 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
 
-  css: {
-    devSourcemap: true,
-  },
+  css: { devSourcemap: true },
 
   esbuild: {
     logOverride: { 'this-is-undefined-in-esm': 'silent' },
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
 
-  preview: {
-    port: 4173,
-    host: true
-  }
+  preview: { port: 4173, host: true }
 }));
