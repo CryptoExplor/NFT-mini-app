@@ -13,7 +13,6 @@ export default defineConfig(({ mode }) => ({
         // Code splitting configuration
         rollupOptions: {
             // Externalize optional deps we don't use
-            external: ['@solana/web3.js'],
             output: {
                 // Manual chunks for better caching
                 manualChunks: {
