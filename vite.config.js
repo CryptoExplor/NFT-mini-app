@@ -50,9 +50,11 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     include: [
       'viem',
-      '@wagmi/core',
       '@reown/appkit',
       '@reown/appkit-adapter-wagmi'
+    ],
+    exclude: [
+      '@wagmi/core'
     ]
   },
 
