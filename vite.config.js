@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import { ViteImageOptimizer } from 'vite-plugin-image-optimizer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => ({
   build: {
@@ -32,9 +36,13 @@ export default defineConfig(({ mode }) => ({
 
   resolve: {
     alias: [
+      // @wagmi/connectors imports { tempoWallet } from '@wagmi/core/tempo', but
+      // this subpath doesn't exist in the installed @wagmi/core version.
+      // Point it at a local stub that exports a no-op tempoWallet so Rollup
+      // can resolve the import without erroring at build time.
       {
-        find: /^@wagmi\/core\/tempo[_A-Za-z0-9]*$/,
-        replacement: '@wagmi/core',
+        find: /^@wagmi\/core\/tempo.*$/,
+        replacement: path.resolve(__dirname, 'src/shims/wagmi-tempo.js'),
       },
     ],
     dedupe: ['@wagmi/core', 'viem'],
@@ -53,16 +61,6 @@ export default defineConfig(({ mode }) => ({
   },
 
   plugins: [
-    {
-      name: 'fix-wagmi-tempo',
-      enforce: 'pre',
-      resolveId(id) {
-        if (/^@wagmi\/core\/tempo[_A-Za-z0-9]*$/.test(id)) {
-          return { id: '@wagmi/core', moduleSideEffects: false };
-        }
-      },
-    },
-
     ViteImageOptimizer({
       test: /\.(jpe?g|png|gif|tiff|webp|avif)$/i,
       png: { quality: 80 },
