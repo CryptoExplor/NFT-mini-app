@@ -17,9 +17,8 @@
     "preview": "vite preview",
     "analyze": "vite-bundle-visualizer"
   },
-  "overrides": {
-    "@wagmi/core": "^2.22.1",
-    "viem": "^2.45.1"
+  "engines": {
+    "node": ">=20.9.0 <21"
   },
   "dependencies": {
     "@base-org/account": "^2.4.0",
@@ -28,8 +27,8 @@
     "@farcaster/miniapp-core": "^0.5.1",
     "@farcaster/miniapp-sdk": "^0.2.3",
     "@farcaster/miniapp-wagmi-connector": "^1.1.1",
-    "@reown/appkit": "^1.8.18",
-    "@reown/appkit-adapter-wagmi": "^1.8.18",
+    "@reown/appkit": "^1.8.17",
+    "@reown/appkit-adapter-wagmi": "^1.8.17",
     "@vercel/kv": "^3.0.0",
     "@wagmi/core": "^2.22.1",
     "buffer": "^6.0.3",

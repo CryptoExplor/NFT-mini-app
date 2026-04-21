@@ -7,12 +7,9 @@ export default defineConfig(({ mode }) => ({
     outDir: 'dist',
     minify: 'esbuild',
 
-    // Layer 1: Tell @rollup/plugin-commonjs to treat @wagmi/core as ESM
-    // when CJS modules (like appkit-adapter-wagmi) try to require() it.
-    // This stops the tempo proxy file from being created in the first place.
     commonjsOptions: {
+      strictRequires: 'auto',
       esmExternals: ['@wagmi/core'],
-      ignore: ['@wagmi/core'],
     },
 
     rollupOptions: {
@@ -20,9 +17,6 @@ export default defineConfig(({ mode }) => ({
         manualChunks: {
           'vendor-viem': ['viem'],
           'vendor-appkit': ['@reown/appkit'],
-          // @reown/appkit-adapter-wagmi intentionally removed from manual chunks.
-          // Putting it in a manual chunk forces Rollup to resolve its CJS bundle
-          // independently, which is what triggers the tempo proxy creation.
           'vendor-farcaster': ['@farcaster/miniapp-sdk'],
           'collections': ['./src/lib/loadCollections.js'],
           'mint-helpers': ['./src/lib/mintHelpers.js'],
@@ -36,13 +30,10 @@ export default defineConfig(({ mode }) => ({
     assetsInlineLimit: 10240,
   },
 
-  // Layer 2: Alias regex catches any @wagmi/core/* deep import at resolution time,
-  // including @wagmi/core/tempo or @wagmi/core/tempo_HASH variants.
-  // Runs at enforce:'pre' level — before Vite's internal CJS resolver plugin.
   resolve: {
     alias: [
       {
-        find: /^@wagmi\/core\/.*/,
+        find: /^@wagmi\/core\/tempo[_A-Za-z0-9]*$/,
         replacement: '@wagmi/core',
       },
     ],
@@ -62,14 +53,11 @@ export default defineConfig(({ mode }) => ({
   },
 
   plugins: [
-    // Layer 3: enforce:'pre' resolveId hook — runs before ALL of Vite's internal
-    // plugins including commonjs--resolver. Intercepts any remaining /tempo paths
-    // that slip past layers 1 and 2.
     {
       name: 'fix-wagmi-tempo',
       enforce: 'pre',
       resolveId(id) {
-        if (id.startsWith('@wagmi/core/')) {
+        if (/^@wagmi\/core\/tempo[_A-Za-z0-9]*$/.test(id)) {
           return { id: '@wagmi/core', moduleSideEffects: false };
         }
       },
