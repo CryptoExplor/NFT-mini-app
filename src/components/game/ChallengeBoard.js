@@ -1,6 +1,7 @@
 import { $, shortenAddress } from '../../utils/dom.js';
 import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
+import { renderIcon } from '../../utils/icons.js';
 
 /**
  * Premium Challenge Board Component
@@ -204,9 +205,7 @@ export class ChallengeBoard {
                     <div class="absolute inset-0 bg-gradient-to-r from-red-500 to-orange-500 group-hover:from-red-600 group-hover:to-orange-600 transition-all"></div>
                     <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r from-red-400/20 to-orange-400/20 blur-xl"></div>
                     <span class="relative flex items-center gap-2 text-white">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
+                        ${renderIcon('SWORDS', 'w-5 h-5')}
                         Post New Challenge
                     </span>
                 </button>
@@ -244,10 +243,10 @@ export class ChallengeBoard {
                 <!-- Header: Type Badge + Time -->
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg ${isAi ? 'bg-red-500/15 text-red-400 border border-red-500/20' : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'}">
-                            ${isAi ? '🤖 AI' : '⚔️ PvP'}
+                        <span class="text-[10px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${isAi ? 'bg-red-500/15 text-red-400 border border-red-500/20' : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'}">
+                            ${isAi ? `${renderIcon('SKULL', 'w-3 h-3')} AI` : `${renderIcon('SWORDS', 'w-3 h-3')} PvP`}
                         </span>
-                        ${challenge.mintedToken ? '<span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">On-chain</span>' : ''}
+                        ${challenge.mintedToken ? `<span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">${renderIcon('TROPHY', 'w-3 h-3')} On-chain</span>` : ''}
                     </div>
                     <span class="text-[10px] text-slate-600">${formatTimestamp(challenge.timestamp)}</span>
                 </div>
@@ -271,10 +270,10 @@ export class ChallengeBoard {
 
                 <!-- Trait + Difficulty + Loadout Badges -->
                 <div class="flex items-center gap-2 mb-4 flex-wrap">
-                    <span class="text-[10px] px-2 py-0.5 rounded-md ${colors.badge} font-medium">${challenge.trait}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-md ${colors.badge} font-medium tracking-tight">${challenge.trait}</span>
                     ${isAi && challenge.difficulty ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-slate-400 border border-white/10 font-medium">${challenge.difficulty}</span>` : ''}
-                    ${challenge.loadout?.item ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 font-bold">🔮 ITEM</span>` : ''}
-                    ${challenge.loadout?.arena ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/20 font-bold">🌌 ARENA</span>` : ''}
+                    ${challenge.loadout?.item ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 font-bold flex items-center gap-1">${renderIcon('MAGIC', 'w-2.5 h-2.5')} ITEM</span>` : ''}
+                    ${challenge.loadout?.arena ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/20 font-bold flex items-center gap-1">${renderIcon('MAP', 'w-2.5 h-2.5')} ARENA</span>` : ''}
                 </div>
 
                 <!-- Stat Bars Preview -->
@@ -291,8 +290,8 @@ export class ChallengeBoard {
                     ${isAi
                 ? 'bg-red-500/10 hover:bg-red-500/25 text-red-300 border border-red-500/20 hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/10'
                 : 'bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/10'
-            }">
-                    ${isAi ? 'Fight AI' : 'Accept Challenge'}
+            } flex items-center justify-center gap-2">
+                    ${isAi ? `${renderIcon('SKULL', 'w-3.5 h-3.5')} FIGHT AI` : `${renderIcon('SWORDS', 'w-3.5 h-3.5')} ACCEPT CHALLENGE`}
                 </button>
             </div>
         `;

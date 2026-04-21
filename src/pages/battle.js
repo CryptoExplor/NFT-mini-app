@@ -19,6 +19,7 @@ import {
 } from '../lib/battle/loadoutSession.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
 import { trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
+import { renderIcon } from '../utils/icons.js';
 
 /** Inline toast for Farcaster miniapp (no browser alert) */
 function showBattleToast(message, type = 'error') {
@@ -49,9 +50,12 @@ export async function renderBattlePage() {
         <div class="page-container min-h-screen pb-24 relative overflow-x-hidden app-text bg-slate-900 transition-colors duration-300">
             <header class="glass-header sticky top-0 z-40 border-b border-white/5 safe-pt">
                 <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-orange-400">
-                        Battle Arena
-                    </h1>
+                    <div class="flex items-center gap-2">
+                        <span class="text-red-500">${renderIcon('SWORDS', 'w-6 h-6')}</span>
+                        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-orange-400">
+                            Battle Arena
+                        </h1>
+                    </div>
                     <div class="flex items-center gap-3">
                         ${renderThemeToggleButton('theme-toggle-battle')}
                         <button id="battle-connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform text-sm font-medium">
@@ -317,6 +321,54 @@ export async function renderBattlePage() {
 
     tabArena?.addEventListener('click', () => switchTab('arena'));
     tabStats?.addEventListener('click', () => switchTab('stats'));
+
+    const replayHandler = async (e) => {
+        const { battleId } = e.detail;
+        if (!battleId) return;
+
+        // Show generic loading
+        const container = $('#battle-container');
+        const originalContent = container.innerHTML;
+        container.innerHTML = `
+            <div class="mt-8 mb-6 text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
+                <div class="text-sm font-mono text-slate-400 uppercase tracking-widest">FETCHING REPLAY ${battleId.slice(-8)}...</div>
+            </div>
+        `;
+
+        try {
+            const res = await fetch(`/api/battle?action=replay&id=${battleId}`);
+            if (!res.ok) throw new Error('Replay not found');
+            const data = await res.json();
+
+            // Transition to Arena View
+            $('#challenge-board-view').classList.add('hidden');
+            $('#leaderboard-view').classList.add('hidden');
+            const arenaView = $('#arena-view');
+            arenaView.classList.remove('hidden');
+
+            renderCombatArena(data.p1, data.p2, () => {
+                // Return to stats on close
+                arenaView.classList.add('hidden');
+                switchTab('stats');
+            }, {
+                environment: data.options?.environment || null,
+                playerTeam: data.options?.playerTeam || [],
+                enemyTeam: data.options?.enemyTeam || [],
+                precomputedLogs: data.logs,
+                winner: data.result?.winner,
+                isReplay: true
+            });
+        } catch (err) {
+            console.error('Replay error:', err);
+            showBattleToast('Failed to load replay.');
+            container.innerHTML = originalContent;
+            switchTab('stats');
+        }
+    };
+
+    document.addEventListener('BATTLE_REPLAY_REQUEST', replayHandler);
+    window._battleReplayHandler = replayHandler;
 }
 
 function attachBattleEvents() {
@@ -365,5 +417,9 @@ export function cleanup() {
     if (walletHandler) {
         document.removeEventListener(EVENTS.WALLET_UPDATE, walletHandler);
         walletHandler = null;
+    }
+    if (window._battleReplayHandler) {
+        document.removeEventListener('BATTLE_REPLAY_REQUEST', window._battleReplayHandler);
+        delete window._battleReplayHandler;
     }
 }

@@ -41,7 +41,12 @@ async function handler(req, res) {
         res.setHeader('Cache-Control', 'public, s-maxage=86400');
 
         return res.status(200).json({
-            record,
+            p1: record.players.p1,
+            p2: record.players.p2,
+            options: record.options || {},
+            logs: record.logs || [], 
+            result: record.result || {},
+            battleId: record.battleId
         });
     } catch (error) {
         console.error('[Battle Replay] GET failed:', error.message);

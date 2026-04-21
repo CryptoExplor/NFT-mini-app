@@ -159,6 +159,29 @@ export function handleBattleWon(pipe, event, { weekNum }) {
     }
 }
 
+/** battle_result_v2 — modern V2 battle tracker */
+export function handleBattleResultV2(pipe, event, { weekNum }) {
+    const { wallet, metadata } = event;
+    const isAi = metadata?.isAi ?? true;
+    const won = metadata?.won ?? false;
+
+    // Global Stats
+    pipe.hincrby('stats:global', 'battle_total', 1);
+    if (won) pipe.hincrby('stats:global', 'battle_wins', 1);
+
+    if (wallet && wallet !== 'anonymous') {
+        pipe.hincrby(`user:${wallet}:profile`, 'battle_total', 1);
+        if (won) {
+            pipe.hincrby(`user:${wallet}:profile`, 'battle_wins', 1);
+            pipe.zincrby('leaderboard:battle_wins:all_time', 1, wallet);
+            pipe.zincrby(`leaderboard:battle_wins:week:${weekNum}`, 1, wallet);
+            // Battle points bonus
+            pipe.hincrby(`user:${wallet}:profile`, 'total_points', 5);
+            pipe.zincrby('leaderboard:points', 5, wallet);
+        }
+    }
+}
+
 /**
  * mint_success — most complex handler
  * OPTIMIZED: merged profile hset calls, removed per-collection gas leaderboard
@@ -475,6 +498,9 @@ export async function processEvent(kv, event, opts = {}) {
             break;
         case 'battle_won':
             handleBattleWon(pipe, event, helpers);
+            break;
+        case 'battle_result_v2':
+            handleBattleResultV2(pipe, event, helpers);
             break;
         default:
             break;

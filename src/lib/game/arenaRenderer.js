@@ -1,6 +1,7 @@
 import { $ } from '../../utils/dom.js';
 import { simulateBattle } from './engine.js';
 import { createShareCard, getFarcasterShareUrl } from '../../components/game/BattleShareCard.js';
+import { renderIcon } from '../../utils/icons.js';
 
 /**
  * Premium Combat Arena Renderer
@@ -245,6 +246,16 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
         </div>
     `;
 
+    // REPLAY STYLES
+    if (options.isReplay) {
+        const title = $('#victory-text');
+        if (title) title.textContent = 'REPLAY OVER';
+        const returnBtn = $('#return-board-btn');
+        if (returnBtn) returnBtn.textContent = 'End Replay';
+        const shareBtn = $('#share-battle-btn');
+        if (shareBtn) shareBtn.classList.add('hidden');
+    }
+
     // Spawn background particles
     const battlefield = $('#battlefield');
     if (battlefield) spawnParticles(battlefield, 25);
@@ -334,8 +345,8 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
             // Log entry
             if (logContainer) {
                 logContainer.innerHTML += `<div class="text-slate-500 flex items-center gap-2">
-                    <span class="text-blue-400">⟡</span>
-                    <span>${log.target} <span class="text-blue-400 font-bold">DODGED</span> ${log.attacker}'s attack!</span>
+                    <span class="text-blue-400">${renderIcon('HISTORY', 'w-3 h-3')}</span>
+                    <span>${log.target} <span class="text-blue-400 font-bold italic tracking-tighter">DODGED</span> ${log.attacker}'s attack!</span>
                 </div>`;
             }
         } else {
@@ -374,14 +385,14 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
 
             // Combat log entry
             const color = log.isCrit ? 'text-yellow-400' : 'text-slate-300';
-            const critBadge = log.isCrit ? '<span class="text-[10px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-300 ml-1">CRIT</span>' : '';
-            const healText = log.healing > 0 ? ` <span class="text-emerald-400">(+${log.healing} HP)</span>` : '';
-            const icon = isPlayerAttacking ? '⚔️' : '🗡️';
+            const critBadge = log.isCrit ? `<span class="text-[9px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-300 ml-1 font-bold flex items-center gap-1">${renderIcon('CRIT', 'w-2 h-2')} CRIT</span>` : '';
+            const healText = log.healing > 0 ? ` <span class="text-emerald-400 font-bold flex items-center gap-1 inline-flex">${renderIcon('DAMAGE', 'w-2.5 h-2.5')} +${log.healing} HP</span>` : '';
+            const icon = isPlayerAttacking ? renderIcon('SWORDS', 'w-3 h-3 text-indigo-400') : renderIcon('SWORDS', 'w-3 h-3 text-red-400');
 
             if (logContainer) {
-                logContainer.innerHTML += `<div class="${color} flex items-start gap-2">
-                    <span class="flex-shrink-0">${icon}</span>
-                    <span>${log.attacker} dealt <b>${log.damage}</b> dmg to ${log.target}${critBadge}${healText}</span>
+                logContainer.innerHTML += `<div class="${color} flex items-start gap-2 border-l-2 border-transparent hover:border-white/5 pl-1 transition-colors">
+                    <span class="flex-shrink-0 mt-0.5">${icon}</span>
+                    <span class="leading-tight">${log.attacker} dealt <b class="text-white">${log.damage}</b> dmg to ${log.target}${critBadge}${healText}</span>
                 </div>`;
             }
         }

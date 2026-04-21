@@ -1,4 +1,5 @@
 import { $, shortenAddress } from '../../utils/dom.js';
+import { renderIcon } from '../../utils/icons.js';
 
 /**
  * Premium Match Preview Modal
@@ -6,12 +7,12 @@ import { $, shortenAddress } from '../../utils/dom.js';
  */
 
 const STAT_CONFIG = [
-    { key: 'hp', label: 'HP', max: 250, color: '#10b981', icon: '❤️' },
-    { key: 'atk', label: 'ATK', max: 50, color: '#ef4444', icon: '⚔️' },
-    { key: 'def', label: 'DEF', max: 50, color: '#3b82f6', icon: '🛡️' },
-    { key: 'spd', label: 'SPD', max: 50, color: '#f59e0b', icon: '⚡' },
-    { key: 'crit', label: 'CRIT', max: 0.75, color: '#fbbf24', icon: '💥', isPercent: true },
-    { key: 'dodge', label: 'DODGE', max: 0.75, color: '#8b5cf6', icon: '💨', isPercent: true },
+    { key: 'hp', label: 'HP', max: 250, color: '#10b981', iconName: 'HEART' },
+    { key: 'atk', label: 'ATK', max: 50, color: '#ef4444', iconName: 'SWORDS' },
+    { key: 'def', label: 'DEF', max: 50, color: '#3b82f6', iconName: 'SHIELD' },
+    { key: 'spd', label: 'SPD', max: 50, color: '#f59e0b', iconName: 'DASH' },
+    { key: 'crit', label: 'CRIT', max: 0.75, color: '#fbbf24', iconName: 'CRIT', isPercent: true },
+    { key: 'dodge', label: 'DODGE', max: 0.75, color: '#8b5cf6', iconName: 'HISTORY', isPercent: true },
 ];
 
 function formatStat(value, isPercent = false) {
@@ -52,9 +53,7 @@ export class MatchPreviewModal {
             <!-- Header -->
             <div class="flex items-center justify-between mb-6">
                 <button id="back-to-board-btn" class="flex items-center gap-2 p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 group-hover:-translate-x-0.5 transition-transform">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                    </svg>
+                    ${renderIcon('CHEVRON_LEFT', 'w-5 h-5 group-hover:-translate-x-0.5 transition-transform')}
                     <span class="text-sm text-slate-400">Back</span>
                 </button>
                 <div class="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">Match Preview</div>
@@ -106,8 +105,8 @@ export class MatchPreviewModal {
                 <!-- Enemy Side -->
                 <div class="relative p-6 rounded-2xl md:rounded-l-none bg-gradient-to-bl from-red-950/30 to-slate-900/60 border border-red-500/20 backdrop-blur-sm flex flex-col items-center">
                     <!-- Opponent badge -->
-                    <div class="text-[10px] uppercase tracking-[0.2em] font-bold mb-4 ${this.enemyData.isAi ? 'text-red-400' : 'text-orange-400'}">
-                        ${this.enemyData.isAi ? '🤖 AI Opponent' : '⚔️ Opponent'}
+                    <div class="text-[10px] uppercase tracking-[0.2em] font-bold mb-4 flex items-center gap-1.5 ${this.enemyData.isAi ? 'text-red-400' : 'text-orange-400'}">
+                        ${this.enemyData.isAi ? `${renderIcon('SKULL', 'w-3 h-3')} AI Opponent` : `${renderIcon('SWORDS', 'w-3 h-3')} Opponent`}
                     </div>
 
                     <!-- Avatar -->
@@ -143,8 +142,8 @@ export class MatchPreviewModal {
                     class="${this.playerData
                 ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(239,68,68,0.4)] active:scale-[0.97]'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            } px-14 py-4 rounded-2xl font-black text-xl transition-all duration-200">
-                    ${this.playerData ? (this.enemyData.isAi ? '⚔️ START AI BATTLE' : '⚔️ START BATTLE') : 'SELECT FIGHTER TO BATTLE'}
+            } px-14 py-4 rounded-2xl font-black text-xl transition-all duration-200 flex items-center gap-3">
+                    ${this.playerData ? (this.enemyData.isAi ? `${renderIcon('SWORDS', 'w-6 h-6')} START AI BATTLE` : `${renderIcon('SWORDS', 'w-6 h-6')} START BATTLE`) : 'SELECT FIGHTER TO BATTLE'}
                 </button>
             </div>
         `;
@@ -236,10 +235,10 @@ export class MatchPreviewModal {
         const textClass = isPlayer ? 'text-indigo-200' : 'text-red-200';
 
         if (loadout.item) {
-            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.item.collectionName}">🔮 ITEM</span>`);
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.item.collectionName}">${renderIcon('MAGIC', 'w-2.5 h-2.5')} ITEM</span>`);
         }
         if (loadout.arena) {
-            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.arena.collectionName}">🌌 ARENA</span>`);
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.arena.collectionName}">${renderIcon('MAP', 'w-2.5 h-2.5')} ARENA</span>`);
         }
         if (loadout.teamSnapshot && loadout.teamSnapshot.length > 0) {
             badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.teamSnapshot.length} Allies">🤝 TEAM SYNERGY</span>`);

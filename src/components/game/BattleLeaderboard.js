@@ -152,22 +152,25 @@ export class BattleLeaderboard {
             <div class="mt-8 mb-6">
                 <!-- Stats Cards -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    ${this._statCard('⚔️', 'Battles', stats.total, 'indigo')}
-                    ${this._statCard('🏆', 'Wins', stats.wins, 'emerald')}
-                    ${this._statCard('💀', 'Losses', stats.losses, 'red')}
-                    ${this._statCard('📊', 'Win Rate', `${stats.winRate}%`, stats.winRate >= 50 ? 'emerald' : 'orange')}
+                    ${this._statCard(renderIcon('SWORDS', 'w-5 h-5'), 'Battles', stats.total, 'indigo')}
+                    ${this._statCard(renderIcon('TROPHY', 'w-5 h-5'), 'Wins', stats.wins, 'emerald')}
+                    ${this._statCard(renderIcon('SKULL', 'w-5 h-5'), 'Losses', stats.losses, 'red')}
+                    ${this._statCard(renderIcon('CHART', 'w-5 h-5'), 'Win Rate', `${stats.winRate}%`, stats.winRate >= 50 ? 'emerald' : 'orange')}
                 </div>
 
                 <!-- Extra Stats Row -->
                 <div class="grid grid-cols-3 gap-3 mb-6">
-                    ${this._statCard('💥', 'Total Dmg', stats.totalDmg.toLocaleString(), 'orange')}
-                    ${this._statCard('🎯', 'Crits', stats.totalCrits, 'yellow')}
-                    ${this._statCard('🥇', 'Best Fighter', stats.bestFighter, 'purple')}
+                    ${this._statCard(renderIcon('DAMAGE', 'w-5 h-5'), 'Total Dmg', stats.totalDmg.toLocaleString(), 'orange')}
+                    ${this._statCard(renderIcon('CRIT', 'w-5 h-5'), 'Crits', stats.totalCrits, 'yellow')}
+                    ${this._statCard(renderIcon('FLAME', 'w-5 h-5'), 'Best Fighter', stats.bestFighter, 'purple')}
                 </div>
 
                 <!-- Recent Battles -->
                 <div class="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4">
-                    <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 mb-3 font-bold">Verifiable History</h3>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Verifiable History</h3>
+                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">SERVER SYNCED</span>
+                    </div>
                     <div class="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar">
                         ${stats.history.length === 0
                 ? '<div class="text-slate-600 text-sm text-center py-6">No battles yet. Challenge an opponent!</div>'
@@ -177,12 +180,13 @@ export class BattleLeaderboard {
                 </div>
             </div>
         `;
+        this._attachReplayEvents(stats.history);
     }
 
-    _statCard(icon, label, value, color) {
+    _statCard(iconHtml, label, value, color) {
         return `
-            <div class="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-${color}-500/20 p-3 text-center">
-                <div class="text-lg mb-0.5">${icon}</div>
+            <div class="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-${color}-500/20 p-3 text-center group hover:border-${color}-500/40 transition-colors">
+                <div class="flex justify-center text-${color}-400 mb-1 group-hover:scale-110 transition-transform">${iconHtml}</div>
                 <div class="text-lg font-black text-${color}-400">${value}</div>
                 <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">${label}</div>
             </div>
@@ -194,21 +198,46 @@ export class BattleLeaderboard {
         const badge = won
             ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-bold">WIN</span>'
             : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-bold">LOSS</span>';
-        const aiTag = battle.isAi ? '<span class="text-[9px] px-1 py-0.5 rounded bg-orange-500/15 text-orange-400 ml-1">AI</span>' : '';
+        const aiTag = battle.isAi ? '<span class="text-[9px] px-1 py-0.5 rounded bg-orange-500/15 text-orange-400 ml-1 font-mono">AI</span>' : '';
         const timeAgo = this._timeAgo(battle.timestamp);
 
         return `
-            <div class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/[0.03] transition-colors">
+            <div class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/[0.03] group transition-colors">
                 <div class="flex items-center gap-2 min-w-0">
                     ${badge}${aiTag}
-                    <span class="text-sm text-slate-300 truncate">${battle.playerName} <span class="text-slate-600">vs</span> ${battle.enemyName}</span>
+                    <span class="text-sm text-slate-300 truncate font-medium">vs ${battle.enemyName}</span>
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
-                    <span class="text-[10px] text-slate-500 font-mono">${battle.rounds}R</span>
-                    <span class="text-[10px] text-slate-600">${timeAgo}</span>
+                    <span class="text-[10px] text-slate-500 font-mono hidden md:inline-block">${battle.rounds} ROUNDS</span>
+                    ${this.renderReplayButton(battle.id)}
+                    <span class="text-[10px] text-slate-600 font-mono min-w-[30px] text-right">${timeAgo}</span>
                 </div>
             </div>
         `;
+    }
+
+    renderReplayButton(battleId) {
+        return `
+            <button class="replay-btn flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 text-xs font-bold transition-all active:scale-95 group" data-battle-id="${battleId}">
+                ${renderIcon('PLAY', 'w-3.5 h-3.5 group-hover:scale-110 transition-transform')}
+                WATCH
+            </button>
+        `;
+    }
+
+    _attachReplayEvents(history) {
+        document.querySelectorAll('.replay-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const battleId = btn.getAttribute('data-battle-id');
+                const battle = history.find(h => h.id === battleId);
+                if (!battle) return;
+
+                // Fire custom event to battle page to show replay
+                document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', {
+                    detail: { battleId: battle.id }
+                }));
+            });
+        });
     }
 
     _timeAgo(ts) {

@@ -165,6 +165,8 @@ function toGlobalStats(raw, uniqueWallets) {
     const totalAttempts = parseInt(raw.total_attempts, 10) || 0;
     const totalVolume = parseFloat(raw.total_volume) || 0;
     const totalGas = parseFloat(raw.total_gas) || 0;
+    const battleTotal = parseInt(raw.battle_total, 10) || 0;
+    const battleWins = parseInt(raw.battle_wins, 10) || 0;
 
     return {
         totalViews,
@@ -172,6 +174,9 @@ function toGlobalStats(raw, uniqueWallets) {
         totalAttempts,
         totalVolume: totalVolume.toFixed(6),
         totalGas: totalGas.toFixed(6),
+        battleTotal,
+        battleWins,
+        battleWinRate: battleTotal > 0 ? ((battleWins / battleTotal) * 100).toFixed(1) : '0.0',
         successRate: totalAttempts > 0 ? ((totalMints / totalAttempts) * 100).toFixed(1) : '0.0',
         conversionRate: totalViews > 0 ? ((totalMints / totalViews) * 100).toFixed(1) : '0.0',
         totalConnects: parseInt(raw.total_connects, 10) || 0,

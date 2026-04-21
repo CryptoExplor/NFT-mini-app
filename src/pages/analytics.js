@@ -96,10 +96,9 @@ export async function renderAnalyticsPage(params) {
                     <div class="flex items-center gap-2 flex-wrap">
                         ${renderThemeToggleButton('theme-toggle-analytics')}
                         <button class="analytics-tab analytics-tab-active" data-type="mints">🏆 Mints</button>
-                        <button class="analytics-tab" data-type="volume">💰 Volume</button>
-                        <button class="analytics-tab" data-type="gas">⛽ Gas</button>
-                        <button class="analytics-tab" data-type="reputation">⭐ Reputation</button>
+                        <button class="analytics-tab" data-type="battle_wins">⚔️ Wins</button>
                         <button class="analytics-tab" data-type="points">🪙 Points</button>
+                        <button class="analytics-tab" data-type="volume">💰 Volume</button>
                     </div>
                 </div>
             </header>
@@ -110,17 +109,17 @@ export async function renderAnalyticsPage(params) {
 
                 ${renderWalletInsights(userStats, state.wallet)}
 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     ${summaryCard('👁️', 'Total Views', stats.totalViews || 0, 'indigo')}
                     ${summaryCard('💎', 'Total Mints', stats.totalMints || 0, 'green')}
                     ${summaryCard('🎯', 'Success Rate', `${stats.successRate || 0}%`, 'yellow')}
                     ${summaryCard('📈', 'Conversion', `${stats.conversionRate || 0}%`, 'purple')}
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    ${summaryCard('⚡', 'Total Events', stats.totalEvents || 0, 'cyan')}
-                    ${summaryCard('🔗', 'Unique Wallets', stats.uniqueWallets || stats.totalConnects || 0, 'blue')}
-                    ${summaryCard('💸', 'Total Volume', `${parseFloat(stats.totalVolume || 0).toFixed(4)} ETH`, 'emerald')}
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    ${summaryCard('⚔️', 'Total Battles', stats.battleTotal || 0, 'cyan')}
+                    ${summaryCard('🏆', 'Arena Wins', stats.battleWins || 0, 'emerald')}
+                    ${summaryCard('📊', 'Arena Win Rate', `${stats.battleWinRate || 0}%`, 'blue')}
                     ${summaryCard('🔴', 'Collections Live', liveCount, 'red')}
                 </div>
 
