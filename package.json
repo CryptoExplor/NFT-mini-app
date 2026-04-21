@@ -17,9 +17,6 @@
     "preview": "vite preview",
     "analyze": "vite-bundle-visualizer"
   },
-  "engines": {
-    "node": ">=20.9.0 <21"
-  },
   "dependencies": {
     "@base-org/account": "^2.4.0",
     "@base-org/account-ui": "^1.0.1",
