@@ -71,7 +71,7 @@ export default defineConfig(({ mode }) => ({
     plugins: [
         // Image optimization
         ViteImageOptimizer({
-            test: /\.(jpe?g|png|gif|tiff|webp|svg|avif)$/i,
+            test: /\.(jpe?g|png|gif|tiff|webp|avif)$/i,
             png: {
                 quality: 80,
             },
