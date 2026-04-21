@@ -7,29 +7,22 @@ export default defineConfig(({ mode }) => ({
     outDir: 'dist',
     minify: 'esbuild',
 
+    // Layer 1: Tell @rollup/plugin-commonjs to treat @wagmi/core as ESM
+    // when CJS modules (like appkit-adapter-wagmi) try to require() it.
+    // This stops the tempo proxy file from being created in the first place.
     commonjsOptions: {
-      // Exclude wagmi from CJS transformation entirely
-      ignore: ['@wagmi/core', '@wagmi/connectors'],
+      esmExternals: ['@wagmi/core'],
+      ignore: ['@wagmi/core'],
     },
 
     rollupOptions: {
-      plugins: [
-        {
-          // Intercept @wagmi/core/tempo before Rollup's CJS resolver chokes on it
-          name: 'fix-wagmi-cjs-tempo',
-          resolveId(id) {
-            if (id.startsWith('@wagmi/core/tempo') || id === '@wagmi/core/tempo') {
-              return { id: '@wagmi/core', moduleSideEffects: false };
-            }
-          }
-        }
-      ],
       output: {
         manualChunks: {
           'vendor-viem': ['viem'],
-          // Separate appkit from its wagmi adapter to avoid the CJS chain
           'vendor-appkit': ['@reown/appkit'],
-          'vendor-appkit-wagmi': ['@reown/appkit-adapter-wagmi'],
+          // @reown/appkit-adapter-wagmi intentionally removed from manual chunks.
+          // Putting it in a manual chunk forces Rollup to resolve its CJS bundle
+          // independently, which is what triggers the tempo proxy creation.
           'vendor-farcaster': ['@farcaster/miniapp-sdk'],
           'collections': ['./src/lib/loadCollections.js'],
           'mint-helpers': ['./src/lib/mintHelpers.js'],
@@ -43,7 +36,16 @@ export default defineConfig(({ mode }) => ({
     assetsInlineLimit: 10240,
   },
 
+  // Layer 2: Alias regex catches any @wagmi/core/* deep import at resolution time,
+  // including @wagmi/core/tempo or @wagmi/core/tempo_HASH variants.
+  // Runs at enforce:'pre' level — before Vite's internal CJS resolver plugin.
   resolve: {
+    alias: [
+      {
+        find: /^@wagmi\/core\/.*/,
+        replacement: '@wagmi/core',
+      },
+    ],
     dedupe: ['@wagmi/core', 'viem'],
   },
 
@@ -60,6 +62,19 @@ export default defineConfig(({ mode }) => ({
   },
 
   plugins: [
+    // Layer 3: enforce:'pre' resolveId hook — runs before ALL of Vite's internal
+    // plugins including commonjs--resolver. Intercepts any remaining /tempo paths
+    // that slip past layers 1 and 2.
+    {
+      name: 'fix-wagmi-tempo',
+      enforce: 'pre',
+      resolveId(id) {
+        if (id.startsWith('@wagmi/core/')) {
+          return { id: '@wagmi/core', moduleSideEffects: false };
+        }
+      },
+    },
+
     ViteImageOptimizer({
       test: /\.(jpe?g|png|gif|tiff|webp|avif)$/i,
       png: { quality: 80 },
