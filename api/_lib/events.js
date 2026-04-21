@@ -28,7 +28,8 @@ export const VALID_EVENTS = [
     'battle_previewed',
     'battle_started',
     'battle_won',
-    'battle_lost'
+    'battle_lost',
+    'battle_result_v2'
 ];
 
 // Funnel steps (ordered)

@@ -15,14 +15,14 @@
  * Returns: { winner, logs, seed, summary }
  */
 
-import { withCors } from '../_lib/cors.js';
-import { verifyAuth } from '../_lib/authMiddleware.js';
+import { withCors } from '../cors.js';
+import { verifyAuth } from '../authMiddleware.js';
 import {
     getChallengeAtomic,
     deleteChallengeAtomic,
     incrementBattleWins,
     saveBattleRecord,
-} from '../_lib/kv.js';
+} from '../kv.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -97,8 +97,8 @@ async function handler(req, res) {
 
         // 5. Simulate battle server-side
         // Dynamic import to keep bundle lean (engine is heavy)
-        const { simulateBattle, summarizeReplay } = await import('../../src/lib/game/engine.js');
-        const { createPRNG } = await import('../../src/lib/battle/prng.js');
+        const { simulateBattle, summarizeReplay } = await import('../../../src/lib/game/engine.js');
+        const { createPRNG } = await import('../../../src/lib/battle/prng.js');
 
         const prng = createPRNG(seed);
 

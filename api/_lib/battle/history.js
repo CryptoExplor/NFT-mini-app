@@ -6,8 +6,8 @@
  * Used to populate the player's match history.
  */
 
-import { withCors } from '../_lib/cors.js';
-import { getUserBattleHistory } from '../_lib/kv.js';
+import { withCors } from '../cors.js';
+import { getUserBattleHistory } from '../kv.js';
 
 async function handler(req, res) {
     if (req.method !== 'GET') {

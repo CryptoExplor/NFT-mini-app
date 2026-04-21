@@ -7,7 +7,7 @@
  */
 
 import { kv } from '@vercel/kv';
-import { withCors } from '../_lib/cors.js';
+import { withCors } from '../cors.js';
 
 import { randomBytes } from 'crypto';
 

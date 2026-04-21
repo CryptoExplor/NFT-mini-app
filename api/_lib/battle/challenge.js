@@ -7,12 +7,12 @@
  *   { fighter, item?, arena?, teamSnapshot, schemaVersion }
  */
 
-import { withCors } from '../_lib/cors.js';
-import { verifyAuth } from '../_lib/authMiddleware.js';
+import { withCors } from '../cors.js';
+import { verifyAuth } from '../authMiddleware.js';
 import {
     setChallengeAtomic,
     listActiveChallenges,
-} from '../_lib/kv.js';
+} from '../kv.js';
 
 const CHALLENGE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 

@@ -10,7 +10,7 @@
  */
 
 import { kv } from '@vercel/kv';
-import { withCors } from '../_lib/cors.js';
+import { withCors } from '../cors.js';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { SignJWT } from 'jose';

@@ -7,8 +7,8 @@
  * the combat logs client-side in a deterministic, verifiable manner.
  */
 
-import { withCors } from '../_lib/cors.js';
-import { getBattleRecord } from '../_lib/kv.js';
+import { withCors } from '../cors.js';
+import { getBattleRecord } from '../kv.js';
 
 async function handler(req, res) {
     if (req.method !== 'GET') {
