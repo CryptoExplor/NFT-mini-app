@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { kv } from './_lib/kv.js';
 import { setCors } from './_lib/cors.js';
 
 // NOTE: loadCollections uses import.meta.env (Vite-only) which doesn't exist in
