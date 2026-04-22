@@ -27,6 +27,8 @@ export const VALID_EVENTS = [
     'battle_challenge_posted',
     'battle_previewed',
     'battle_started',
+    'battle_started_v2',      // V2: fired when a battle begins (AI or PvP)
+    'battle_loadout_built',   // V2: fired when fighter + item + arena selected
     'battle_won',
     'battle_lost',
     'battle_result_v2'
@@ -502,6 +504,19 @@ export async function processEvent(kv, event, opts = {}) {
         case 'battle_result_v2':
             handleBattleResultV2(pipe, event, helpers);
             break;
+        case 'battle_started_v2': {
+            // Track battle starts globally and per-user
+            pipe.hincrby('stats:global', 'battle_started', 1);
+            if (event.wallet && event.wallet !== 'anonymous') {
+                pipe.hincrby(`user:${event.wallet}:profile`, 'battle_started', 1);
+            }
+            break;
+        }
+        case 'battle_loadout_built': {
+            // Track how many loadouts are assembled (engagement metric)
+            pipe.hincrby('stats:global', 'battle_loadouts_built', 1);
+            break;
+        }
         default:
             break;
     }
