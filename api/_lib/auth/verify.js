@@ -9,7 +9,7 @@
  * Returns: { token: string, address: string, expiresIn: number }
  */
 
-import { kv } from '@vercel/kv';
+import { kv } from '../kv.js';
 import { withCors } from '../cors.js';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';

@@ -6,7 +6,7 @@
  * Nonce expires after 5 minutes. One nonce per address at a time.
  */
 
-import { kv } from '@vercel/kv';
+import { kv } from '../kv.js';
 import { withCors } from '../cors.js';
 
 import { randomBytes } from 'crypto';

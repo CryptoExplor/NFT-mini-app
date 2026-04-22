@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { kv } from './_lib/kv.js';
 import { requireAdmin } from './_lib/authMiddleware.js';
 import { setCors } from './_lib/cors.js';
 

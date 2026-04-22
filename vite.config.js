@@ -84,7 +84,7 @@ export default defineConfig(({ mode }) => ({
   css: { devSourcemap: true },
 
   esbuild: {
-    logOverride: { 
+    logOverride: {
       'this-is-undefined-in-esm': 'silent',
       'sourcemap-error': 'silent'
     },
