@@ -47,12 +47,16 @@ async function init() {
     // ⚡ STEP 0: Call ready() IMMEDIATELY — before ANY async work.
     // This dismisses the Farcaster mobile splash screen ASAP.
     // Uses the statically imported SDK — no dynamic import delay.
+    // Timeout prevents this from blocking init on localhost (browser context, no frame).
     try {
-        await farcasterSdk.actions.ready({ disableNativeGestures: true });
+        await Promise.race([
+            farcasterSdk.actions.ready({ disableNativeGestures: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+        ]);
         console.log('✅ Farcaster ready() fired');
     } catch (e) {
-        // Not in Farcaster or SDK not available — totally fine
-        console.log('ℹ️ Farcaster ready() skipped (not in frame)');
+        // Not in Farcaster, SDK not available, or timed out — totally fine
+        console.log('ℹ️ Farcaster ready() skipped (not in frame or timed out)');
     }
 
     // Step 1: Initialize Farcaster context in background (lightweight)
