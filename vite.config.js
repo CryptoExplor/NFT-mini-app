@@ -13,15 +13,26 @@ export default defineConfig(({ mode }) => ({
 
     commonjsOptions: {
       strictRequires: 'auto',
-      esmExternals: ['@wagmi/core'],
+      esmExternals: ['@wagmi/core', 'eventemitter3'],
     },
 
     rollupOptions: {
+      onwarn(warning, warn) {
+        // Silence harmless sourcemap warnings from third-party libraries
+        if (
+          warning.code === 'SOURCEMAP_ERROR' &&
+          (warning.message.includes('@reown') || warning.message.includes('@walletconnect'))
+        ) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         manualChunks: {
           'vendor-viem': ['viem'],
           'vendor-appkit': ['@reown/appkit'],
           'vendor-farcaster': ['@farcaster/miniapp-sdk'],
+          'vendor-utils': ['eventemitter3', 'object-hash'],
           'collections': ['./src/lib/loadCollections.js'],
           'mint-helpers': ['./src/lib/mintHelpers.js'],
         },
@@ -56,7 +67,7 @@ export default defineConfig(({ mode }) => ({
   },
 
   optimizeDeps: {
-    include: ['viem', '@reown/appkit'],
+    include: ['viem', '@reown/appkit', 'eventemitter3'],
     exclude: ['@wagmi/core', '@wagmi/connectors', '@reown/appkit-adapter-wagmi'],
   },
 
@@ -73,7 +84,10 @@ export default defineConfig(({ mode }) => ({
   css: { devSourcemap: true },
 
   esbuild: {
-    logOverride: { 'this-is-undefined-in-esm': 'silent' },
+    logOverride: { 
+      'this-is-undefined-in-esm': 'silent',
+      'sourcemap-error': 'silent'
+    },
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
 
