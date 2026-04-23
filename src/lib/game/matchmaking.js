@@ -201,3 +201,62 @@ export function clearBattleAuth() {
     battleAuthToken = null;
     tokenExpiry = 0;
 }
+
+/**
+ * Record an AI battle result on the server.
+ * AI battles are simulated locally — this persists them so they appear
+ * in the verifiable history tab.
+ *
+ * Fire-and-forget: auth failure or network error is swallowed so the
+ * battle UI is never blocked.
+ *
+ * @param {string} walletAddress
+ * @param {{ playerStats, enemyStats, result, loadout }} battle
+ */
+export async function recordAiBattle(walletAddress, { seed, playerStats, enemyStats, result, loadout, extras, logs }) {
+    if (!walletAddress) return;
+
+    try {
+        const token = await getBattleToken(walletAddress);
+
+        // If no seed provided, fallback to deterministic (though battle.js should provide it)
+        const finalSeed = seed || `ai:${walletAddress}:${playerStats.name}:${enemyStats.name}:${Date.now()}`;
+
+        await fetch('/api/battle?action=record', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                seed: finalSeed,
+                p1: {
+                    name: playerStats.name,
+                    stats: playerStats,
+                    item: loadout?.item?.stats || null,
+                    arena: loadout?.arena?.stats || null,
+                    team: loadout?.teamSnapshot || [],
+                },
+                p2: {
+                    name: enemyStats.name,
+                    stats: enemyStats,
+                },
+                options: { isAiBattle: true },
+                result: {
+                    winnerSide: result.winnerSide,
+                    winnerName: result.winner,
+                    rounds: result.totalRounds || 0,
+                },
+                // Pre-computed stats so the leaderboard doesn't re-simulate with the wrong engine
+                extras: extras || null,
+                // Store logs for replays
+                logs: logs || []
+            }),
+        });
+
+    } catch (err) {
+        // Non-blocking — never surface to user
+        console.warn('[recordAiBattle] Failed to persist AI battle result:', err.message);
+    }
+}
+

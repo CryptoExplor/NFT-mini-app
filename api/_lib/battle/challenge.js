@@ -13,6 +13,7 @@ import {
     setChallengeAtomic,
     listActiveChallenges,
 } from '../kv.js';
+import hash from 'object-hash';
 
 const CHALLENGE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -89,13 +90,27 @@ async function handler(req, res) {
         }
 
         try {
+            // Rate limit: 1 active challenge per wallet
+            const activeChallenges = await listActiveChallenges();
+            const existing = activeChallenges.find(c => c.player === auth.address);
+
+            if (existing) {
+                return res.status(400).json({
+                    code: 'CHALLENGE_LIMIT_EXCEEDED',
+                    message: 'You already have an active challenge. Complete or wait for it to expire before posting a new one.',
+                    challengeId: existing.id
+                });
+            }
+
             const challengeId = generateChallengeId();
             const timestamp = Date.now();
             const expiresAt = timestamp + CHALLENGE_EXPIRY_MS;
 
             // Compute snapshot hash for anti-tamper verification
-            const snapshotData = JSON.stringify(loadout) + JSON.stringify(fighterStats || {});
-            const snapshotHash = await computeHash(snapshotData);
+            const snapshotHash = await computeHash({
+                loadout,
+                stats: fighterStats || loadout.fighter?.stats || {}
+            });
 
             const challengeRecord = {
                 id: challengeId,
@@ -108,6 +123,7 @@ async function handler(req, res) {
                 isAi: false,
                 schemaVersion: 'battle-loadout-v1',
             };
+
 
             await setChallengeAtomic(challengeId, challengeRecord);
 
@@ -131,23 +147,8 @@ async function handler(req, res) {
     });
 }
 
-/**
- * Simple hash function for snapshot integrity.
- * Uses Web Crypto API available in Vercel Edge/Node.
- */
 async function computeHash(data) {
-    // Node.js crypto fallback
-    try {
-        const { createHash } = await import('crypto');
-        return createHash('sha256').update(data).digest('hex');
-    } catch {
-        // Browser/edge fallback
-        const encoder = new TextEncoder();
-        const buffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-        return Array.from(new Uint8Array(buffer))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-    }
+    return hash(data, { algorithm: 'sha256' });
 }
 
 export default withCors(handler);

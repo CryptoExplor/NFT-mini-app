@@ -11,7 +11,7 @@ const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_R
         token: process.env.KV_REST_API_TOKEN || '',
     });
 
-// Named export for backward compatibility with @vercel/kv style imports
+// Named export for backward compatibility with existing API routes
 export { redis as kv };
 
 const CHALLENGE_HASH_KEY = 'challenges:active';
@@ -109,7 +109,6 @@ export async function incrementBattleWins(winnerAddress, timeframe = 'all_time')
  * Get battle leaderboard.
  */
 export async function getBattleLeaderboard(timeframe = 'all_time', limit = 50) {
-    // Upstash zrange signature: zrange(key, start, stop, { rev: true, withScores: true })
     const results = await redis.zrange(
         `leaderboard:battle_wins:${timeframe}`,
         0,
@@ -118,18 +117,15 @@ export async function getBattleLeaderboard(timeframe = 'all_time', limit = 50) {
     );
 
     const entries = [];
-    // Upstash returns [ { member: '...', score: 10 }, ... ] when withScores is true
-    if (results && results.length > 0) {
-        for (let i = 0; i < results.length; i += 2) {
-            // Standard Redis behavior for zrange withScores (some clients return flat array, others objects)
-            // We handle both for robustness
-            const member = results[i]?.member || results[i];
-            const score = results[i]?.score || results[i + 1];
+    if (results && Array.isArray(results)) {
+        for (const item of results) {
+            const address = item?.member || item;
+            const wins = item?.score !== undefined ? item.score : 0;
             
-            if (member !== undefined && score !== undefined) {
+            if (address && typeof address === 'string') {
                 entries.push({
-                    address: member,
-                    wins: Number(score),
+                    address,
+                    wins: Number(wins),
                 });
             }
         }
@@ -165,25 +161,31 @@ export async function saveBattleRecord(record) {
 
     const serialized = JSON.stringify(fullRecord);
 
-    // Save using pipeline
     const pipe = redis.pipeline();
-    
+    // Replay record (expires in 30 days)
     pipe.set(`battle:${battleId}`, serialized, { ex: 30 * 86400 });
     
+    // User history lists
     const p1Address = String(record.players.p1.id).toLowerCase();
-    pipe.lpush(`history:user:${p1Address}`, serialized);
-    pipe.ltrim(`history:user:${p1Address}`, 0, 49);
+    const p1IsAi = p1Address.startsWith('ai:');
+    
+    if (!p1IsAi) {
+        pipe.lpush(`history:user:${p1Address}`, serialized);
+        pipe.ltrim(`history:user:${p1Address}`, 0, 49);
+    }
     
     const p2Address = String(record.players.p2.id).toLowerCase();
-    if (p1Address !== p2Address) {
+    const p2IsAi = p2Address.startsWith('ai:');
+
+    if (!p2IsAi && p1Address !== p2Address) {
         pipe.lpush(`history:user:${p2Address}`, serialized);
         pipe.ltrim(`history:user:${p2Address}`, 0, 49);
     }
     
     await pipe.exec();
-    
     return battleId;
 }
+
 
 /**
  * Fetch a user's recent verifiable battle history.
@@ -202,4 +204,3 @@ export async function getBattleRecord(battleId) {
     if (!raw) return null;
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
-

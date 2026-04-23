@@ -47,11 +47,11 @@ export async function verifyAuth(req) {
 /**
  * Extract and verify auth from request.
  * Supports: Bearer token in Authorization header
- * Fallback: wallet query param (backward compat, read-only)
+ * Fallback: wallet query param (unauthenticated, limited access)
  *
  * @returns {{ wallet: string, isAdmin: boolean, authenticated: boolean }}
  */
-export async function requireAuth(req) {
+export async function getAuthContext(req) {
     // Try JWT first
     const authHeader = req.headers?.authorization;
     if (authHeader?.startsWith('Bearer ')) {
@@ -71,12 +71,15 @@ export async function requireAuth(req) {
     return null;
 }
 
+/** @deprecated Use getAuthContext instead */
+export const requireAuth = getAuthContext;
+
 /**
  * Require admin-level JWT authentication.
  * @returns {{ wallet: string, isAdmin: boolean }} or null
  */
 export async function requireAdmin(req) {
-    const auth = await requireAuth(req);
+    const auth = await getAuthContext(req);
     if (!auth || !auth.authenticated) return null;
 
     // Check JWT claims

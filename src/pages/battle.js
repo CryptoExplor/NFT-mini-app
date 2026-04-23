@@ -10,7 +10,7 @@ import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { applyLayer } from '../lib/battle/metadataNormalizer.js';
-import { postChallenge } from '../lib/game/matchmaking.js';
+import { postChallenge, recordAiBattle } from '../lib/game/matchmaking.js';
 import {
     getCurrentBattleLoadout,
     getCurrentBattleSelection,
@@ -119,7 +119,7 @@ export async function renderBattlePage() {
                 }
 
                 const isAi = !!previewModal.enemyData?.isAi;
-                let replayLogs, winner, winnerSide;
+                let replayLogs, winner, winnerSide, battleSeed;
 
                 // V2 Analytics: track battle start
                 trackBattleStarted(state.wallet?.address, {
@@ -137,20 +137,29 @@ export async function renderBattlePage() {
                         throw new Error('V2 ERROR: engineV2.js failed to load');
                     }
 
+                    // Generate deterministic AI seed
+                    const walletAddress = state.wallet?.address || 'Anonymous';
+                    const fighterId = `${selectedLoadout?.fighter?.collectionSlug || 'unknown'}_${selectedLoadout?.fighter?.tokenId || '0'}`;
+                    const enemyId = `ai:${previewModal.enemyData.name}`;
+                    battleSeed = `ai:${walletAddress}:${fighterId}:${enemyId}`;
+
                     // Pass full V2 loadout context
                     const loadout = selectedLoadout || {};
                     const battleResult = simulateBattleV2(playerCombatStats, enemyCombatStats, {
+                        seed: battleSeed,
                         isAiBattle: true,
                         aiWinRate: previewModal.enemyData.aiWinRate || 0.6,
                         playerItem: loadout.item?.stats || null,
                         environment: loadout.arena?.stats || null,
                         playerTeam: loadout.teamSnapshot || [],
                     });
+
                     const summary = summarizeReplay(battleResult);
                     replayLogs = battleResult.logs;
                     winner = summary.winner;
                     winnerSide = summary.winnerSide || battleResult.winnerSide || null;
                 } else {
+
                     // ── PvP Battles: resolve via secure server API ──
                     const walletAddress = state.wallet?.address || 'Anonymous';
                     const { resolveFight } = await import('../lib/game/matchmaking.js');
@@ -186,6 +195,30 @@ export async function renderBattlePage() {
                         crits: logs.filter(l => l.isCrit).length,
                         dodges: logs.filter(l => l.isDodge).length
                     });
+
+                    // Persist AI battle to server so it appears in verifiable history
+                    if (isAi && state.wallet?.address) {
+                        const loadout = getCurrentBattleLoadout();
+                        recordAiBattle(state.wallet.address, {
+                            seed: battleSeed,
+                            playerStats: playerCombatStats,
+                            enemyStats: enemyCombatStats,
+                            result: {
+                                winnerSide,
+                                winner,
+                                totalRounds,
+                            },
+                            loadout,
+                            // Pre-computed stats stored so leaderboard doesn't need to re-simulate
+                            extras: {
+                                p1Dmg,
+                                p2Dmg,
+                                crits: logs.filter(l => l.isCrit).length,
+                            },
+                            // Store logs for replays
+                            logs: logs,
+                        }).catch(() => {}); // fire-and-forget
+                    }
                     // V2 Analytics: track battle result
                     trackBattleResult(state.wallet?.address, {
                         won: playerWon,
@@ -306,13 +339,13 @@ export async function renderBattlePage() {
         const boardEl = $('#challenge-board-view');
         const lbEl = $('#leaderboard-view');
         if (tab === 'arena') {
-            boardEl.classList.remove('hidden');
-            lbEl.classList.add('hidden');
+            boardEl?.classList.remove('hidden');
+            lbEl?.classList.add('hidden');
             tabArena.className = `px-4 py-2 rounded-xl text-sm font-bold ${activeTabClass} transition-all`;
             tabStats.className = `px-4 py-2 rounded-xl text-sm font-bold ${inactiveTabClass} hover:bg-white/[0.06] transition-all`;
         } else {
-            boardEl.classList.add('hidden');
-            lbEl.classList.remove('hidden');
+            boardEl?.classList.add('hidden');
+            lbEl?.classList.remove('hidden');
             leaderboard.render();
             tabStats.className = `px-4 py-2 rounded-xl text-sm font-bold ${activeTabClass} transition-all`;
             tabArena.className = `px-4 py-2 rounded-xl text-sm font-bold ${inactiveTabClass} hover:bg-white/[0.06] transition-all`;
@@ -326,15 +359,15 @@ export async function renderBattlePage() {
         const { battleId } = e.detail;
         if (!battleId) return;
 
-        // Show generic loading
-        const container = $('#battle-container');
-        const originalContent = container.innerHTML;
-        container.innerHTML = `
-            <div class="mt-8 mb-6 text-center py-12">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
-                <div class="text-sm font-mono text-slate-400 uppercase tracking-widest">FETCHING REPLAY ${battleId.slice(-8)}...</div>
+        // Show loading overlay
+        const app = $('#app');
+        app.insertAdjacentHTML('beforeend', `
+            <div id="battle-loading-overlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md">
+                <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-orange-400 animate-pulse">Fetching Replay...</h2>
+                <div class="text-[10px] font-mono text-slate-400 mt-2">ID: ${battleId.slice(0, 8)}...</div>
             </div>
-        `;
+        `);
 
         try {
             const res = await fetch(`/api/battle?action=replay&id=${battleId}`);
@@ -342,14 +375,16 @@ export async function renderBattlePage() {
             const data = await res.json();
 
             // Transition to Arena View
-            $('#challenge-board-view').classList.add('hidden');
-            $('#leaderboard-view').classList.add('hidden');
+            $('#battle-loading-overlay')?.remove();
+            
+            $('#challenge-board-view')?.classList.add('hidden');
+            $('#leaderboard-view')?.classList.add('hidden');
             const arenaView = $('#arena-view');
-            arenaView.classList.remove('hidden');
+            arenaView?.classList.remove('hidden');
 
             renderCombatArena(data.p1, data.p2, () => {
                 // Return to stats on close
-                arenaView.classList.add('hidden');
+                arenaView?.classList.add('hidden');
                 switchTab('stats');
             }, {
                 environment: data.options?.environment || null,
@@ -361,8 +396,8 @@ export async function renderBattlePage() {
             });
         } catch (err) {
             console.error('Replay error:', err);
+            $('#battle-loading-overlay')?.remove();
             showBattleToast('Failed to load replay.');
-            container.innerHTML = originalContent;
             switchTab('stats');
         }
     };

@@ -1,5 +1,5 @@
 import { kv } from './_lib/kv.js';
-import { requireAuth } from './_lib/authMiddleware.js';
+import { getAuthContext } from './_lib/authMiddleware.js';
 import { setCors } from './_lib/cors.js';
 
 export default async function handler(req, res) {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     // This alone saves ~50-70% of KV reads from repeat page loads
     res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=90');
 
-    const auth = await requireAuth(req);
+    const auth = await getAuthContext(req);
     const requestedWallet = typeof req.query?.wallet === 'string' ? req.query.wallet : '';
     const normalizedWallet = String(auth?.wallet || requestedWallet || '').toLowerCase();
 

@@ -4,6 +4,9 @@
  *
  * Fetches the most recent verifiable battle schemas stored in KV.
  * Used to populate the player's match history.
+ *
+ * NOTE: This endpoint is unauthenticated by design to allow public inspection
+ * of the global leaderboard and player match profiles.
  */
 
 import { withCors } from '../cors.js';

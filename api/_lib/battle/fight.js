@@ -23,6 +23,7 @@ import {
     incrementBattleWins,
     saveBattleRecord,
 } from '../kv.js';
+import hash from 'object-hash';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -80,8 +81,11 @@ async function handler(req, res) {
         const attackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
         const defenderStats = defenderLoadout.fighter.stats || {};
 
-        const snapshotData = JSON.stringify(challenge.loadout) + JSON.stringify(attackerStats);
-        const snapshotHash = await computeHash(snapshotData);
+        // Use object-hash for deterministic verification
+        const snapshotHash = hash({
+            loadout: challenge.loadout,
+            stats: attackerStats
+        }, { algorithm: 'sha256' });
 
         if (snapshotHash !== challenge.snapshotHash) {
             return res.status(409).json({
@@ -133,12 +137,15 @@ async function handler(req, res) {
         });
 
         // 9. Save Verifiable Battle Record (Seed-First Schema)
+        const attackerName = challenge.loadout?.fighter?.name || `Fighter ${attackerId}`;
+        const defenderName = defenderLoadout.fighter.name || `Fighter ${defenderId}`;
+
         const battleRecord = {
             seed,
             players: {
                 p1: {
                     id: challenge.player,
-                    name: `Challenger ${attackerId}`,
+                    name: attackerName,
                     stats: attackerStats,
                     item: challenge.loadout?.item?.stats || null,
                     arena: challenge.loadout?.arena?.stats || null,
@@ -146,7 +153,7 @@ async function handler(req, res) {
                 },
                 p2: {
                     id: auth.address,
-                    name: `Defender ${defenderId}`,
+                    name: defenderName,
                     stats: defenderStats,
                     item: defenderLoadout.item?.stats || null,
                     arena: null, 
@@ -160,8 +167,11 @@ async function handler(req, res) {
                 winnerSide: battleResult.winnerSide || summary.winnerSide,
                 winnerName: summary.winner,
                 rounds: battleResult.totalRounds || summary.totalRounds
-            }
+            },
+            // CRITICAL: Persist logs so WATCH/Replay works from the history tab
+            logs: battleResult.logs
         };
+
 
         const generatedBattleId = await saveBattleRecord(battleRecord).catch(err => {
             console.error('[Fight] KV Battle Record save failed:', err.message);
@@ -199,16 +209,7 @@ async function handler(req, res) {
 }
 
 async function computeHash(data) {
-    try {
-        const { createHash } = await import('crypto');
-        return createHash('sha256').update(data).digest('hex');
-    } catch {
-        const encoder = new TextEncoder();
-        const buffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-        return Array.from(new Uint8Array(buffer))
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
-    }
+    return hash(data, { algorithm: 'sha256' });
 }
 
 export default withCors(handler);

@@ -1,6 +1,7 @@
 import { $ } from '../../utils/dom.js';
 import { getAccount } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
+import { renderIcon } from '../../utils/icons.js';
 
 const HISTORY_KEY = 'battle_history';
 
@@ -56,45 +57,69 @@ export async function getBattleStats(walletAddress) {
         for (const record of rawHistory) {
             if (!record.seed || !record.players) continue;
 
-            const prng = createPRNG(record.seed);
             const p1 = record.players.p1;
             const p2 = record.players.p2;
+            const isAiBattle = record.options?.isAiBattle || false;
+            const isWalletP1 = p1.id?.toLowerCase() === walletAddress.toLowerCase();
 
-            const battleResult = simulateBattle(
-                { name: p1.name, ...p1.stats },
-                { name: p2.name, ...p2.stats },
-                prng,
-                {
-                    playerItem: p1.item,
-                    enemyItem: p2.item,
-                    environment: p1.arena,
-                    playerTeam: p1.team || [],
-                    enemyTeam: p2.team || [],
-                    isAiBattle: record.options?.isAiBattle || false
+            let resolvedWinnerSide;
+            let battleDmg = 0;
+            let battleCrits = 0;
+            let totalRounds = 0;
+
+            if (isAiBattle) {
+                // ── AI battles: trust server-stored result ──
+                // AI battles use engineV2.js locally; re-simulating with engine.js (V1)
+                // produces a different winner. The stored result is the authoritative truth.
+                resolvedWinnerSide = record.result?.winnerSide;
+                totalRounds = record.result?.rounds || 0;
+
+                // Read pre-computed stats stored at record time (via recordAiBattle extras)
+                const extras = record.extras || {};
+                battleDmg = isWalletP1 ? (extras.p1Dmg || 0) : (extras.p2Dmg || 0);
+                battleCrits = extras.crits || 0;
+            } else {
+                // ── PvP battles: re-simulate from seed for cryptographic verification ──
+                const prng = createPRNG(record.seed);
+                const battleResult = simulateBattle(
+                    { name: p1.name, ...p1.stats },
+                    { name: p2.name, ...p2.stats },
+                    prng,
+                    {
+                        playerItem: p1.item,
+                        enemyItem: p2.item,
+                        environment: p1.arena,
+                        playerTeam: p1.team || [],
+                        enemyTeam: p2.team || [],
+                        isAiBattle: false
+                    }
+                );
+
+                // Verifiability check (only meaningful for PvP with deterministic V1 engine)
+                if (battleResult.winnerSide !== record.result?.winnerSide) {
+                    console.warn(`[Verifiability] Check Failed! Battle ${record.battleId} server winner ${record.result?.winnerSide} mismatches simulation ${battleResult.winnerSide}`);
                 }
-            );
 
-            // Verifiability check warning
-            if (battleResult.winnerSide !== record.result?.winnerSide) {
-                console.warn(`[Verifiability] Check Failed! Battle ${record.battleId} server winner ${record.result?.winnerSide} mismatches simulation ${battleResult.winnerSide}`);
+                resolvedWinnerSide = battleResult.winnerSide;
+                totalRounds = battleResult.totalRounds;
+
+                // Derive dmg/crits from re-simulated logs
+                const myName = isWalletP1 ? p1.name : p2.name;
+                const myLogs = battleResult.logs.filter(l => l.attacker === myName);
+                battleDmg = myLogs.reduce((s, l) => s + (l.damage || 0), 0);
+                battleCrits = myLogs.filter(l => l.isCrit).length;
             }
 
-            // Figure out if current wallet won
-            const isWalletP1 = p1.id?.toLowerCase() === walletAddress.toLowerCase();
-            const walletWon = (isWalletP1 && battleResult.winnerSide === 'P1') || (!isWalletP1 && battleResult.winnerSide === 'P2');
-            
-            if (walletWon) wins++; else losses++;
+            // Determine outcome for current wallet
+            const walletWon = (isWalletP1 && resolvedWinnerSide === 'P1') ||
+                              (!isWalletP1 && resolvedWinnerSide === 'P2');
 
-            // Recreate damage stats via deterministic logs
-            const myName = isWalletP1 ? p1.name : p2.name;
-            const myLogs = battleResult.logs.filter(l => l.attacker === myName);
-            
-            const battleDmg = myLogs.reduce((s, l) => s + (l.damage || 0), 0);
-            const battleCrits = myLogs.filter(l => l.isCrit).length;
+            if (walletWon) wins++; else losses++;
 
             totalDmg += battleDmg;
             totalCrits += battleCrits;
 
+            const myName = isWalletP1 ? p1.name : p2.name;
             if (walletWon) {
                 winnerCounts[myName] = (winnerCounts[myName] || 0) + 1;
             }
@@ -104,8 +129,8 @@ export async function getBattleStats(walletAddress) {
                 playerName: myName,
                 enemyName: isWalletP1 ? p2.name : p1.name,
                 playerWon: walletWon,
-                isAi: record.options?.isAiBattle || false,
-                rounds: battleResult.totalRounds,
+                isAi: isAiBattle,
+                rounds: totalRounds,
                 playerDmg: battleDmg,
                 crits: battleCrits,
                 timestamp: record.createdAt || Date.now()
