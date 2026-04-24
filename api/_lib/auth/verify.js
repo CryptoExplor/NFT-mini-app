@@ -164,10 +164,15 @@ async function handler(req, res) {
             .setSubject(parsed.address)
             .sign(JWT_SECRET);
 
+        // Define cookie expiration to match JWT (1 hour)
+        const maxAge = 60 * 60; 
+
+        // Set HttpOnly, Secure, SameSite=None cookie for the JWT
+        res.setHeader('Set-Cookie', `jwt=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`);
+
         return res.status(200).json({
-            token,
             address: parsed.address,
-            expiresIn: JWT_EXPIRY_SECONDS,
+            domain: parsed.domain
         });
     } catch (error) {
         console.error('[Auth Verify] Error:', error.message);

@@ -34,11 +34,24 @@ export async function verifyJWT(token) {
  */
 export async function verifyAuth(req) {
     const authHeader = req.headers?.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-        return { valid: false, error: 'Missing or invalid Authorization header' };
+    let token = null;
+
+    // 1. Try Cookie
+    const cookieHeader = req.headers?.cookie || '';
+    const cookieMatch = cookieHeader.match(/(?:^|;)\s*jwt=([^;]+)/);
+    if (cookieMatch) {
+        token = cookieMatch[1];
+    }
+    
+    // 2. Fallback to Authorization header
+    if (!token && authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
     }
 
-    const token = authHeader.slice(7);
+    if (!token) {
+        return { valid: false, error: 'Missing or invalid Authentication' };
+    }
+
     const decoded = await verifyJWT(token);
 
     if (!decoded) {
@@ -58,14 +71,31 @@ export async function verifyAuth(req) {
 export async function getAuthContext(req, { allowQueryFallback = false } = {}) {
     // Try JWT first
     const authHeader = req.headers?.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.slice(7);
-        const decoded = await verifyJWT(token);
-        if (decoded) {
-            return { ...decoded, authenticated: true };
-        }
+    let token = null;
+
+    // 1. Try Cookie
+    const cookieHeader = req.headers?.cookie || '';
+    const cookieMatch = cookieHeader.match(/(?:^|;)\s*jwt=([^;]+)/);
+    if (cookieMatch) {
+        token = cookieMatch[1];
     }
 
+    // 2. Fallback to Authorization header
+    if (!token && authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
+    }
+
+    if (token) {
+        const decoded = await verifyJWT(token);
+        if (decoded) {
+            return {
+                wallet: decoded.wallet,
+                isAdmin: decoded.isAdmin,
+                authenticated: true
+            };
+        }
+    } 
+    
     if (!allowQueryFallback) {
         return null;
     }

@@ -307,55 +307,56 @@ function getCampaign() {
 // AUTH (EIP-4361 SIWE)
 // ============================================
 
-let authToken = null;
+let authSession = null;
 
 /**
- * Store auth token (call after successful verify)
+ * Store auth session info (call after successful verify)
  */
-export function setAuthToken(token) {
-    authToken = token;
-    try { sessionStorage.setItem('auth_token', token); } catch { }
+export function setAuthToken(sessionData) {
+    authSession = sessionData;
+    try { sessionStorage.setItem('auth_session', JSON.stringify(sessionData)); } catch { }
 }
 
 /**
- * Get stored auth token (auto-clears if expired)
+ * Get stored auth session (auto-clears if expired)
  */
 export function getAuthToken() {
-    if (authToken) {
-        if (isTokenExpired(authToken)) {
+    if (authSession) {
+        if (isTokenExpired(authSession.expiresAt)) {
             clearAuthToken();
             return null;
         }
-        return authToken;
+        return authSession;
     }
-    try { authToken = sessionStorage.getItem('auth_token'); } catch { }
-    if (authToken && isTokenExpired(authToken)) {
+    try { 
+        const stored = sessionStorage.getItem('auth_session');
+        if (stored) authSession = JSON.parse(stored);
+    } catch { }
+    
+    if (authSession && isTokenExpired(authSession.expiresAt)) {
         clearAuthToken();
         return null;
     }
-    return authToken;
+    return authSession;
 }
 
 /**
- * Check if a JWT is expired (without verifying signature)
+ * Check if the session is expired
  */
-function isTokenExpired(token) {
-    try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        if (!payload.exp) return false;
-        // 30s buffer to avoid edge-case races
-        return (payload.exp * 1000) < (Date.now() - 30_000);
-    } catch {
-        return true; // Malformed token = treat as expired
-    }
+function isTokenExpired(expiresAtMs) {
+    if (!expiresAtMs) return true;
+    // 30s buffer to avoid edge-case races
+    return expiresAtMs < (Date.now() - 30_000);
 }
 
 /**
- * Clear auth token (logout)
+ * Clear auth session (logout)
  */
 export function clearAuthToken() {
-    authToken = null;
-    try { sessionStorage.removeItem('auth_token'); } catch { }
+    authSession = null;
+    try { sessionStorage.removeItem('auth_session'); } catch { }
+    // Optionally call logout endpoint to clear HttpOnly cookie
+    fetch(`${API_BASE}/api/auth?action=logout`, { credentials: 'include' }).catch(() => {});
 }
 
 /**
@@ -374,11 +375,16 @@ export async function verifySignature(message, signature) {
     const response = await fetch(`${API_BASE}/api/auth?action=verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, signature })
+        body: JSON.stringify({ message, signature }),
+        credentials: 'include'
     });
     if (!response.ok) throw new Error('Verification failed');
     const data = await response.json();
-    if (data.token) setAuthToken(data.token);
+    if (data.address) {
+        // Assume 1 hour expiry (same as backend maxAge)
+        data.expiresAt = Date.now() + 60 * 60 * 1000;
+        setAuthToken(data);
+    }
     return data;
 }
 
@@ -390,13 +396,14 @@ export async function getAdminData(action = 'overview', target = null) {
         const params = new URLSearchParams({ action });
         if (target) params.set('target', target);
 
-        const headers = {};
-        const token = getAuthToken();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+        // Verify auth session exists locally first
+        if (!getAuthToken()) {
+            return { error: 'Unauthorized', status: 401 };
         }
 
-        const response = await fetch(`${API_BASE}/api/admin?${params}`, { headers });
+        const response = await fetch(`${API_BASE}/api/admin?${params}`, { 
+            credentials: 'include' 
+        });
         const contentType = response.headers.get('content-type') || '';
         const payload = contentType.includes('application/json')
             ? await response.json()
@@ -424,13 +431,12 @@ export async function getAdminData(action = 'overview', target = null) {
  */
 export async function downloadCSV(type) {
     try {
-        const token = getAuthToken();
-        if (!token) {
+        if (!getAuthToken()) {
             return { success: false, error: 'Unauthorized', status: 401 };
         }
 
         const response = await fetch(`${API_BASE}/api/export?type=${type}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            credentials: 'include'
         });
 
         if (!response.ok) {

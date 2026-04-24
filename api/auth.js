@@ -9,9 +9,12 @@ export default async function handler(req, res) {
             return nonce(req, res);
         case 'verify':
             return verify(req, res);
+        case 'logout':
+            res.setHeader('Set-Cookie', 'jwt=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0');
+            return res.status(200).json({ success: true });
         default:
             return res.status(404).json({ 
-                error: 'Endpoint not found. Valid actions: nonce, verify', 
+                error: 'Endpoint not found. Valid actions: nonce, verify, logout', 
                 code: 'NOT_FOUND' 
             });
     }
