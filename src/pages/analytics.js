@@ -1,15 +1,17 @@
 import { loadCollections } from '../lib/loadCollections.js';
 import { router } from '../lib/router.js';
 import {
+    getBattleHistory,
     getLeaderboard,
     getUserStats,
 } from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
-import { escapeHtml } from '../utils/html.js';
+import { escapeHtml, sanitizeUrl } from '../utils/html.js';
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 import { getMiniAppProfile, getMiniAppProfileLabel } from '../utils/profile.js';
+import { renderIcon } from '../utils/icons.js';
 import {
     clearAdminSession,
     exportAdminCsv,
@@ -48,6 +50,7 @@ export async function renderAnalyticsPage(params) {
     const collections = loadCollections();
     const app = document.getElementById('app');
     if (!app) return;
+    const defaultLeaderboardType = slug ? 'mints' : 'battle_wins';
 
     // Clean up previous listeners + intervals
     teardownAnalyticsPage();
@@ -56,18 +59,21 @@ export async function renderAnalyticsPage(params) {
     app.innerHTML = `
         <div class="min-h-screen bg-slate-900 app-text p-6 pb-24">
             <div class="max-w-6xl mx-auto text-center py-20">
-                <div class="text-4xl mb-4 animate-spin inline-block">⚡</div>
+                <div class="text-indigo-400 inline-flex mb-4 animate-spin">${renderIcon('CHART', 'w-10 h-10')}</div>
                 <p class="opacity-60">Loading analytics...</p>
             </div>
         </div>
     `;
 
     // Fetch data in parallel
-    const [leaderboardData, userStats] = await Promise.all([
-        getLeaderboard({ collection: slug || undefined }).catch(() => null),
+    const [leaderboardData, userStats, syncedBattleHistory] = await Promise.all([
+        getLeaderboard({ type: defaultLeaderboardType, collection: slug || undefined }).catch(() => null),
         state.wallet?.isConnected
             ? getUserStats(state.wallet.address).catch(() => null)
-            : Promise.resolve(null)
+            : Promise.resolve(null),
+        state.wallet?.isConnected && !slug
+            ? getBattleHistory(state.wallet.address, 50).catch(() => [])
+            : Promise.resolve([])
     ]);
     if (currentRender !== renderVersion) return;
 
@@ -79,26 +85,27 @@ export async function renderAnalyticsPage(params) {
     const recentActivity = leaderboardData?.recentActivity || [];
     const socialProof = leaderboardData?.socialProof || [];
     const liveCount = collections.filter(c => c.status.toLowerCase() === 'live').length;
+    const battleAnalytics = !slug ? buildBattleAnalytics(state.wallet?.address, syncedBattleHistory) : null;
 
     app.innerHTML = `
         <div class="min-h-screen bg-slate-900 app-text p-4 md:p-6 pb-24">
             <header class="max-w-6xl mx-auto mb-8">
                 <button id="back-home-btn" class="text-indigo-400 mb-3 hover:underline flex items-center gap-2 text-sm">
-                    <span>←</span> Back Home
+                    <span>${renderIcon('CHEVRON_LEFT', 'w-4 h-4')}</span> Back Home
                 </button>
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                     <div>
                         <h1 class="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">
-                            ${slug ? `${slug} Analytics` : 'Mint Intelligence'}
+                            ${slug ? `${escapeHtml(slug)} Analytics` : 'Arena Intelligence'}
                         </h1>
-                        <p class="text-sm opacity-50 mt-1">Real-time insights • Powered by Vercel KV</p>
+                        <p class="text-sm opacity-50 mt-1">${slug ? 'Collection funnel + mint telemetry' : 'Battle-first telemetry for web, Farcaster, and Base miniapps'}</p>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
                         ${renderThemeToggleButton('theme-toggle-analytics')}
-                        <button class="analytics-tab analytics-tab-active" data-type="mints">🏆 Mints</button>
-                        <button class="analytics-tab" data-type="battle_wins">⚔️ Wins</button>
-                        <button class="analytics-tab" data-type="points">🪙 Points</button>
-                        <button class="analytics-tab" data-type="volume">💰 Volume</button>
+                        <button class="analytics-tab ${defaultLeaderboardType === 'mints' ? 'analytics-tab-active' : ''} inline-flex items-center gap-2" data-type="mints">${renderIcon('TROPHY', 'w-4 h-4')} Mints</button>
+                        <button class="analytics-tab ${defaultLeaderboardType === 'battle_wins' ? 'analytics-tab-active' : ''} inline-flex items-center gap-2" data-type="battle_wins">${renderIcon('SWORDS', 'w-4 h-4')} Wins</button>
+                        <button class="analytics-tab ${defaultLeaderboardType === 'points' ? 'analytics-tab-active' : ''} inline-flex items-center gap-2" data-type="points">${renderIcon('COIN', 'w-4 h-4')} Points</button>
+                        <button class="analytics-tab ${defaultLeaderboardType === 'volume' ? 'analytics-tab-active' : ''} inline-flex items-center gap-2" data-type="volume">${renderIcon('CHART', 'w-4 h-4')} Volume</button>
                     </div>
                 </div>
             </header>
@@ -109,24 +116,26 @@ export async function renderAnalyticsPage(params) {
 
                 ${renderWalletInsights(userStats, state.wallet)}
 
+                ${!slug ? renderBattleOverview(battleAnalytics) : ''}
+
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    ${summaryCard('👁️', 'Total Views', stats.totalViews || 0, 'indigo')}
-                    ${summaryCard('💎', 'Total Mints', stats.totalMints || 0, 'green')}
-                    ${summaryCard('🎯', 'Success Rate', `${stats.successRate || 0}%`, 'yellow')}
-                    ${summaryCard('📈', 'Conversion', `${stats.conversionRate || 0}%`, 'purple')}
+                    ${summaryCard(renderAnalyticsIcon('EYE', 'text-indigo-300'), 'Total Views', stats.totalViews || 0, 'indigo')}
+                    ${summaryCard(renderAnalyticsIcon('GEM', 'text-green-300'), 'Total Mints', stats.totalMints || 0, 'green')}
+                    ${summaryCard(renderAnalyticsIcon('TARGET', 'text-yellow-300'), 'Success Rate', `${stats.successRate || 0}%`, 'yellow')}
+                    ${summaryCard(renderAnalyticsIcon('CHART', 'text-purple-300'), 'Conversion', `${stats.conversionRate || 0}%`, 'purple')}
                 </div>
 
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    ${summaryCard('⚔️', 'Total Battles', stats.battleTotal || 0, 'cyan')}
-                    ${summaryCard('🏆', 'Arena Wins', stats.battleWins || 0, 'emerald')}
-                    ${summaryCard('📊', 'Arena Win Rate', `${stats.battleWinRate || 0}%`, 'blue')}
-                    ${summaryCard('🔴', 'Collections Live', liveCount, 'red')}
+                    ${summaryCard(renderAnalyticsIcon('SWORDS', 'text-cyan-300'), 'Total Battles', stats.battleTotal || 0, 'cyan')}
+                    ${summaryCard(renderAnalyticsIcon('TROPHY', 'text-emerald-300'), 'Arena Wins', stats.battleWins || 0, 'emerald')}
+                    ${summaryCard(renderAnalyticsIcon('CHART', 'text-blue-300'), 'Arena Win Rate', `${stats.battleWinRate || 0}%`, 'blue')}
+                    ${summaryCard(renderAnalyticsIcon('MAP', 'text-red-300'), 'Collections Live', liveCount, 'red')}
                 </div>
 
                 <div class="glass-card p-5 rounded-2xl border border-white/10">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 gap-2">
                         <h3 class="text-lg font-bold flex items-center gap-2">
-                            <span class="text-orange-400">🔥</span> Conversion Funnel
+                            ${renderAnalyticsIcon('FLAME', 'text-orange-400')} Conversion Funnel
                         </h3>
                         <div class="text-sm">
                             <span class="opacity-50">Overall:</span>
@@ -141,7 +150,7 @@ export async function renderAnalyticsPage(params) {
 
                     <div class="lg:col-span-2 glass-card p-5 rounded-2xl border border-white/10">
                         <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                            <span class="text-yellow-400">🏆</span> Top Minters
+                            ${renderAnalyticsIcon('TROPHY', 'text-yellow-400')} Leaderboard
                             <span class="text-xs font-normal opacity-40 ml-auto">All Time</span>
                         </h3>
                         <div class="overflow-x-auto" id="leaderboard-container">
@@ -165,12 +174,14 @@ export async function renderAnalyticsPage(params) {
 
                 <div class="glass-card p-5 rounded-2xl border border-white/10">
                     <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                        <span class="text-blue-400">📊</span> Collection Performance
+                        ${renderAnalyticsIcon('CHART', 'text-blue-400')} Collection Performance
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         ${renderCollectionStats(collectionStats)}
                     </div>
                 </div>
+
+                ${!slug ? renderBattleHistorySection(battleAnalytics) : ''}
 
                 ${renderMintHistory(userStats)}
 
@@ -238,7 +249,7 @@ export async function renderAnalyticsPage(params) {
                 if (feedEl) {
                     feedEl.innerHTML = renderActivityFeed(freshData.recentActivity);
                     // Flash the feed status
-                    updateFeedStatus('updated ✓');
+                    updateFeedStatus('updated');
                     if (feedStatusTimeout) clearTimeout(feedStatusTimeout);
                     feedStatusTimeout = setTimeout(() => updateFeedStatus('auto-refresh 10s'), 2000);
                 }
@@ -341,6 +352,212 @@ function summaryCard(icon, label, value, color) {
     `;
 }
 
+function renderAnalyticsIcon(iconName, colorClass = 'text-indigo-300', size = 'w-5 h-5') {
+    return `<span class="${colorClass} inline-flex">${renderIcon(iconName, size)}</span>`;
+}
+
+function getLocalBattleHistoryFallback() {
+    try {
+        return JSON.parse(localStorage.getItem('battle_history') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function buildBattleAnalytics(walletAddress, syncedBattleHistory = []) {
+    const wallet = String(walletAddress || '').toLowerCase();
+    const remoteEntries = Array.isArray(syncedBattleHistory)
+        ? syncedBattleHistory.map((record) => normalizeSyncedBattleRecord(record, wallet)).filter(Boolean)
+        : [];
+
+    const source = remoteEntries.length > 0 ? 'synced' : 'local';
+    const entries = remoteEntries.length > 0
+        ? remoteEntries
+        : getLocalBattleHistoryFallback().map(normalizeLocalBattleRecord).filter(Boolean);
+
+    const total = entries.length;
+    const wins = entries.filter((entry) => entry.playerWon).length;
+    const losses = total - wins;
+    const aiBattles = entries.filter((entry) => entry.isAi).length;
+    const pvpBattles = total - aiBattles;
+    const totalDamage = entries.reduce((sum, entry) => sum + (entry.playerDmg || 0), 0);
+    const totalCrits = entries.reduce((sum, entry) => sum + (entry.crits || 0), 0);
+    const totalDodges = entries.reduce((sum, entry) => sum + (entry.dodges || 0), 0);
+    const totalRounds = entries.reduce((sum, entry) => sum + (entry.rounds || 0), 0);
+    const averageRounds = total > 0 ? (totalRounds / total).toFixed(1) : '0.0';
+    const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+    const fighterWins = {};
+    for (const entry of entries) {
+        if (!entry.playerWon) continue;
+        fighterWins[entry.playerName] = (fighterWins[entry.playerName] || 0) + 1;
+    }
+    const bestFighter = Object.entries(fighterWins).sort((a, b) => b[1] - a[1])[0]?.[0] || 'No winner yet';
+
+    const sortedEntries = [...entries].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    let streak = 0;
+    for (const entry of sortedEntries) {
+        if (!entry.playerWon) break;
+        streak += 1;
+    }
+
+    return {
+        source,
+        total,
+        wins,
+        losses,
+        aiBattles,
+        pvpBattles,
+        totalDamage,
+        totalCrits,
+        totalDodges,
+        averageRounds,
+        winRate,
+        bestFighter,
+        streak,
+        recent: sortedEntries.slice(0, 8),
+    };
+}
+
+function normalizeSyncedBattleRecord(record, wallet) {
+    const p1 = record?.players?.p1;
+    const p2 = record?.players?.p2;
+    if (!p1?.name || !p2?.name) return null;
+
+    const isWalletP1 = wallet && String(p1.id || '').toLowerCase() === wallet;
+    const side = isWalletP1 ? 'P1' : 'P2';
+    const opponent = isWalletP1 ? p2 : p1;
+    const logs = Array.isArray(record.logs) ? record.logs : [];
+
+    return {
+        id: record.battleId || '',
+        playerName: isWalletP1 ? p1.name : p2.name,
+        enemyName: opponent?.name || 'Unknown Opponent',
+        playerWon: record.result?.winnerSide === side,
+        isAi: Boolean(record.options?.isAiBattle),
+        rounds: record.result?.rounds || logs[logs.length - 1]?.round || 0,
+        playerDmg: logs.filter((log) => log.attackerSide === side).reduce((sum, log) => sum + (log.damage || 0), 0),
+        enemyDmg: logs.filter((log) => log.attackerSide !== side).reduce((sum, log) => sum + (log.damage || 0), 0),
+        crits: logs.filter((log) => log.attackerSide === side && log.isCrit).length,
+        dodges: logs.filter((log) => log.targetSide === side && log.isDodge).length,
+        timestamp: record.createdAt || Date.now(),
+        canReplay: Boolean(record.battleId),
+    };
+}
+
+function normalizeLocalBattleRecord(record) {
+    if (!record) return null;
+    return {
+        id: record.id || '',
+        playerName: record.playerName || 'You',
+        enemyName: record.enemyName || 'Unknown Opponent',
+        playerWon: Boolean(record.playerWon),
+        isAi: Boolean(record.isAi),
+        rounds: record.rounds || 0,
+        playerDmg: record.playerDmg || 0,
+        enemyDmg: record.enemyDmg || 0,
+        crits: record.crits || 0,
+        dodges: record.dodges || 0,
+        timestamp: record.timestamp || Date.now(),
+        canReplay: false,
+    };
+}
+
+function renderBattleOverview(battleAnalytics) {
+    if (!battleAnalytics) return '';
+
+    const sourceBadge = battleAnalytics.source === 'synced'
+        ? '<span class="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono">SYNCED</span>'
+        : '<span class="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">LOCAL FALLBACK</span>';
+
+    return `
+        <section class="glass-card p-5 rounded-2xl border border-red-500/20 bg-gradient-to-r from-red-500/5 via-orange-500/5 to-transparent">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+                <div>
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        ${renderAnalyticsIcon('SWORDS', 'text-red-400')} Arena Overview
+                    </h3>
+                    <p class="text-sm opacity-50 mt-1">Cross-device battle performance and replay-ready match history.</p>
+                </div>
+                ${sourceBadge}
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                ${summaryCard(renderAnalyticsIcon('SWORDS', 'text-red-300'), 'Battles', battleAnalytics.total, 'red')}
+                ${summaryCard(renderAnalyticsIcon('TROPHY', 'text-emerald-300'), 'Wins', battleAnalytics.wins, 'emerald')}
+                ${summaryCard(renderAnalyticsIcon('CHART', 'text-cyan-300'), 'Win Rate', `${battleAnalytics.winRate}%`, 'cyan')}
+                ${summaryCard(renderAnalyticsIcon('SKULL', 'text-orange-300'), 'AI / PvP', `${battleAnalytics.aiBattles}/${battleAnalytics.pvpBattles}`, 'yellow')}
+                ${summaryCard(renderAnalyticsIcon('DAMAGE', 'text-orange-300'), 'Damage', battleAnalytics.totalDamage.toLocaleString(), 'purple')}
+                ${summaryCard(renderAnalyticsIcon('FLAME', 'text-pink-300'), 'Streak', battleAnalytics.streak, 'blue')}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                    <div class="text-xs uppercase opacity-50 mb-1">Best Fighter</div>
+                    <div class="font-semibold text-white/90 truncate">${escapeHtml(battleAnalytics.bestFighter)}</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                    <div class="text-xs uppercase opacity-50 mb-1">Average Rounds</div>
+                    <div class="font-semibold text-cyan-300">${battleAnalytics.averageRounds}</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                    <div class="text-xs uppercase opacity-50 mb-1">Crits / Dodges</div>
+                    <div class="font-semibold text-yellow-300">${battleAnalytics.totalCrits} / ${battleAnalytics.totalDodges}</div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function renderBattleHistorySection(battleAnalytics) {
+    if (!battleAnalytics) return '';
+
+    return `
+        <section class="glass-card p-5 rounded-2xl border border-white/10">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    ${renderAnalyticsIcon('HISTORY', 'text-indigo-400')} Recent Arena Matches
+                </h3>
+                <span class="text-xs opacity-40">${battleAnalytics.recent.length} recent</span>
+            </div>
+            <div class="space-y-2">
+                ${battleAnalytics.recent.length === 0
+                    ? '<div class="text-center py-8 text-sm opacity-40">No arena matches yet. Start a fight to populate synced history.</div>'
+                    : battleAnalytics.recent.map(renderBattleHistoryRow).join('')}
+            </div>
+        </section>
+    `;
+}
+
+function renderBattleHistoryRow(entry) {
+    const resultBadge = entry.playerWon
+        ? '<span class="text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 font-bold">WIN</span>'
+        : '<span class="text-[10px] px-2 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/20 font-bold">LOSS</span>';
+    const modeBadge = entry.isAi
+        ? '<span class="text-[10px] px-2 py-1 rounded bg-orange-500/15 text-orange-300 border border-orange-500/20 font-mono">AI</span>'
+        : '<span class="text-[10px] px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 font-mono">PVP</span>';
+    const replayLink = entry.canReplay
+        ? `<a href="/battle?replay=${encodeURIComponent(entry.id)}" class="flex items-center gap-1 rounded-lg bg-indigo-500/10 px-2.5 py-1.5 text-xs font-semibold text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors">${renderIcon('PLAY', 'w-3.5 h-3.5')} Watch</a>`
+        : '<span class="text-[10px] px-2 py-1 rounded border border-white/10 text-slate-500 font-mono">LOCAL</span>';
+
+    return `
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                ${resultBadge}
+                ${modeBadge}
+                <span class="font-medium text-white/90">vs ${escapeHtml(entry.enemyName)}</span>
+                <span class="text-xs opacity-40">${entry.rounds} rounds</span>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap text-xs opacity-70">
+                <span>${entry.playerDmg.toLocaleString()} dmg</span>
+                <span>${entry.crits} crits</span>
+                <span>${getTimeAgo(entry.timestamp)}</span>
+                ${replayLink}
+            </div>
+        </div>
+    `;
+}
+
 // ========== SOCIAL PROOF TICKER ==========
 
 function renderSocialProof(messages) {
@@ -358,8 +575,8 @@ function renderSocialProof(messages) {
 function renderSocialProofItems(messages) {
     return messages.map(m => `
         <div class="flex items-center gap-2 text-sm whitespace-nowrap animate-fade-in">
-            <span>${m.icon}</span>
-            <span class="font-medium">${m.text}</span>
+            ${renderAnalyticsIcon('FLAME', 'text-amber-300', 'w-4 h-4')}
+            <span class="font-medium">${escapeHtml(m.text || '')}</span>
         </div>
         <span class="text-white/20 mx-2">•</span>
     `).join('');
@@ -371,7 +588,7 @@ function renderPointsSection(userStats) {
     const rankings = userStats.rankings || {};
 
     // AFTER: prefer hash value; fall back to zscore
-    const score = profile.totalPoints ?? rankings.points?.score ?? 0;
+    const score = Number(profile.totalPoints ?? profile.total_points ?? rankings.points?.score ?? 0) || 0;
     const rank = rankings.points?.rank || 'Unranked';
     const streak = profile.streak || 0;
 
@@ -385,7 +602,7 @@ function renderPointsSection(userStats) {
     return `
       <div class="glass-card p-5 rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/5 to-amber-500/5 mt-4">
         <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-          <span class="text-yellow-400">🪙</span> Your Points
+          ${renderAnalyticsIcon('COIN', 'text-yellow-400')} Your Points
         </h3>
         <div class="grid grid-cols-2 gap-4">
           <div>
@@ -429,7 +646,7 @@ function renderWalletInsights(userStats, wallet) {
                     <h2 class="text-lg font-bold">Connect wallet to see your stats</h2>
                     <p class="opacity-50 text-sm">Track your rank, streak, and contribution</p>
                 </div>
-                <div class="text-3xl opacity-20">🔒</div>
+                <div class="opacity-20 text-slate-500">${renderIcon('SHIELD', 'w-10 h-10')}</div>
             </div>
         `;
     }
@@ -440,7 +657,7 @@ function renderWalletInsights(userStats, wallet) {
     const viewerIdentity = getViewerIdentity(wallet.address);
     const safePrimaryLabel = escapeHtml(viewerIdentity.primaryLabel || shortenAddress(wallet.address));
     const safeWalletLabel = escapeHtml(viewerIdentity.walletLabel || shortenAddress(wallet.address));
-    const safeAvatarUrl = escapeHtml(viewerIdentity.avatarUrl || '');
+    const safeAvatarUrl = sanitizeUrl(viewerIdentity.avatarUrl || '');
     const showSecondaryWallet = Boolean(viewerIdentity.profileLabel && viewerIdentity.walletLabel);
     const avatarHtml = safeAvatarUrl
         ? `<img src="${safeAvatarUrl}" alt="Profile avatar" class="w-4 h-4 rounded-full object-cover">`
@@ -457,11 +674,11 @@ function renderWalletInsights(userStats, wallet) {
                         ${avatarHtml}
                         <span class="text-xs font-normal truncate max-w-[140px]">${safePrimaryLabel}</span>
                         ${showSecondaryWallet ? `<span class="text-[10px] opacity-50 font-mono hidden sm:inline">${safeWalletLabel}</span>` : ''}
-                        <a href="https://basescan.org/address/${wallet.address}" target="_blank" rel="noopener noreferrer" class="text-xs opacity-40 hover:opacity-100 transition" title="View on Explorer">↗</a>
+                        <a href="https://basescan.org/address/${wallet.address}" target="_blank" rel="noopener noreferrer" class="text-xs opacity-40 hover:opacity-100 transition inline-flex" title="View on Explorer">${renderIcon('EXTERNAL', 'w-3.5 h-3.5')}</a>
                     </div>
                     ${insights.badge ? `<span class="text-xs bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-200 border border-yellow-500/20 px-2 py-0.5 rounded-full shadow-sm">${insights.badge}</span>` : ''}
                     ${insights.activityLevel ? `<span class="text-xs bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-indigo-200 px-2 py-0.5 rounded-full">${insights.activityLevel}</span>` : ''}
-                    ${profile.streak > 0 ? `<span class="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">🔥 ${profile.streak} day streak</span>` : ''}
+                    ${profile.streak > 0 ? `<span class="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full inline-flex items-center gap-1">${renderIcon('FLAME', 'w-3.5 h-3.5')} ${profile.streak} day streak</span>` : ''}
                 </h2>
             </div>
 
@@ -512,7 +729,7 @@ function renderWalletInsights(userStats, wallet) {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 ${profile.mintContribution ? `
                     <div class="bg-white/5 rounded-xl p-3 border border-white/5">
-                        <div class="text-xs opacity-50 mb-1">🏆 Your Contribution</div>
+                        <div class="text-xs opacity-50 mb-1 flex items-center gap-1">${renderIcon('TROPHY', 'w-3.5 h-3.5')} Your Contribution</div>
                         <div class="text-lg font-bold text-indigo-400">
                             ${profile.mintContribution}%
                             <span class="text-xs font-normal opacity-50">of all mints</span>
@@ -521,7 +738,7 @@ function renderWalletInsights(userStats, wallet) {
                 ` : ''}
                 ${profile.volumeContribution ? `
                     <div class="bg-white/5 rounded-xl p-3 border border-white/5">
-                        <div class="text-xs opacity-50 mb-1">💸 Revenue Share</div>
+                        <div class="text-xs opacity-50 mb-1 flex items-center gap-1">${renderIcon('CHART', 'w-3.5 h-3.5')} Revenue Share</div>
                         <div class="text-lg font-bold text-emerald-400">
                             ${profile.volumeContribution}%
                             <span class="text-xs font-normal opacity-50">of total volume</span>
@@ -530,13 +747,13 @@ function renderWalletInsights(userStats, wallet) {
                 ` : ''}
                 ${profile.favoriteCollection ? `
                     <div class="bg-white/5 rounded-xl p-3 border border-white/5">
-                        <div class="text-xs opacity-50 mb-1">❤️ Favorite Collection</div>
-                        <div class="text-lg font-bold text-pink-400 truncate">${profile.favoriteCollection}</div>
+                        <div class="text-xs opacity-50 mb-1 flex items-center gap-1">${renderIcon('STAR', 'w-3.5 h-3.5')} Favorite Collection</div>
+                        <div class="text-lg font-bold text-pink-400 truncate">${escapeHtml(profile.favoriteCollection)}</div>
                         <div class="text-[10px] opacity-40">${profile.favoriteCollectionMints || 0} mints</div>
                     </div>
                 ` : `
                     <div class="bg-white/5 rounded-xl p-3 border border-white/5">
-                        <div class="text-xs opacity-50 mb-1">❤️ Favorite Collection</div>
+                        <div class="text-xs opacity-50 mb-1 flex items-center gap-1">${renderIcon('STAR', 'w-3.5 h-3.5')} Favorite Collection</div>
                         <div class="text-sm font-medium opacity-40">Mint to discover!</div>
                     </div>
                 `}
@@ -556,12 +773,12 @@ function renderEnhancedFunnel(funnel) {
 
     const maxCount = Math.max(...funnel.map(s => s.count), 1);
     const icons = {
-        page_view: '📄',
-        wallet_connect: '🔗',
-        collection_view: '👁️',
-        mint_click: '👆',
-        tx_sent: '📤',
-        mint_success: '✅'
+        page_view: 'EYE',
+        wallet_connect: 'LINK',
+        collection_view: 'FOLDER',
+        mint_click: 'CURSOR',
+        tx_sent: 'EXTERNAL',
+        mint_success: 'CHECK'
     };
 
     // Horizontal funnel flow
@@ -570,17 +787,18 @@ function renderEnhancedFunnel(funnel) {
             <div class="flex flex-col gap-3">
                 ${funnel.map((step, i) => {
         const width = Math.max((step.count / maxCount) * 100, 12);
-        const icon = icons[step.step] || '📌';
+        const icon = icons[step.step] || 'CHART';
         const isLast = i === funnel.length - 1;
         const dropOffColor = parseFloat(step.dropOff || 0) > 50 ? 'text-red-400' : parseFloat(step.dropOff || 0) > 25 ? 'text-yellow-400' : 'text-green-400';
+        const safeStepLabel = escapeHtml(step.label || step.step.replace(/_/g, ' '));
 
         return `
                         <div class="relative">
                             <div class="flex items-center gap-3">
-                                <div class="w-8 text-center text-lg flex-shrink-0">${icon}</div>
+                                <div class="w-8 text-center flex-shrink-0 text-indigo-300 inline-flex justify-center">${renderIcon(icon, 'w-4 h-4')}</div>
                                 <div class="flex-1 min-w-0">
                                     <div class="flex justify-between text-xs mb-1">
-                                        <span class="font-medium">${step.label || step.step.replace(/_/g, ' ')}</span>
+                                        <span class="font-medium">${safeStepLabel}</span>
                                         <div class="flex gap-3">
                                             <span class="font-mono font-bold">${step.count.toLocaleString()}</span>
                                             ${i > 0 ? `
@@ -612,7 +830,11 @@ function renderLeaderboard(leaderboard) {
         return '<div class="text-center py-8 opacity-30">No leaderboard data yet. Start minting!</div>';
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = [
+        renderAnalyticsIcon('TROPHY', 'text-yellow-300', 'w-4 h-4'),
+        renderAnalyticsIcon('STAR', 'text-slate-300', 'w-4 h-4'),
+        renderAnalyticsIcon('GEM', 'text-amber-300', 'w-4 h-4')
+    ];
     const viewerIdentity = getViewerIdentity(state.wallet?.address || '');
     const safeViewerPrimaryLabel = escapeHtml(viewerIdentity.primaryLabel || '');
 
@@ -669,6 +891,8 @@ function renderActivityFeed(activity) {
         const wallet = String(item.wallet || '');
         const isMe = wallet.toLowerCase() === (state.wallet?.address || '').toLowerCase();
         const shortWallet = wallet.length >= 10 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : 'Unknown';
+        const safeCollection = escapeHtml(item.collection || 'Unknown');
+        const safeTxHash = encodeURIComponent(String(item.txHash || ''));
         const walletLabel = isMe && viewerIdentity.profileLabel
             ? `<span>${escapeHtml(viewerIdentity.primaryLabel)}</span>`
             : escapeHtml(shortWallet);
@@ -676,7 +900,7 @@ function renderActivityFeed(activity) {
             <div class="flex items-center gap-3 p-2.5 bg-white/5 rounded-xl border border-white/5 hover:border-green-500/20 transition-all animate-fade-in">
                 <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0"></div>
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate">${item.collection || 'Unknown'}</div>
+                    <div class="text-sm font-medium truncate">${safeCollection}</div>
                     <div class="text-[10px] opacity-50 font-mono">
                         ${walletLabel}
                         <span class="mx-1">•</span>
@@ -685,8 +909,8 @@ function renderActivityFeed(activity) {
                     </div>
                 </div>
                 ${item.txHash ? `
-                    <a href="https://basescan.org/tx/${item.txHash}" target="_blank" rel="noopener noreferrer"
-                       class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0">↗</a>
+                    <a href="https://basescan.org/tx/${safeTxHash}" target="_blank" rel="noopener noreferrer"
+                       class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0 inline-flex">${renderIcon('EXTERNAL', 'w-3.5 h-3.5')}</a>
                 ` : ''}
             </div>
         `;
@@ -703,20 +927,21 @@ function renderCollectionStats(collections) {
     return collections.map(col => {
         const maxViews = Math.max(...collections.map(c => c.views), 1);
         const barWidth = Math.max((col.views / maxViews) * 100, 5);
+        const safeSlug = escapeHtml(col.slug || 'unknown');
 
         return `
-            <div class="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-indigo-500/20 transition-all cursor-pointer" data-slug="${col.slug}">
+            <div class="p-3 bg-white/5 rounded-xl border border-white/5 hover:border-indigo-500/20 transition-all cursor-pointer" data-slug="${safeSlug}">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="font-bold text-sm truncate flex-1">${col.slug}</span>
+                    <span class="font-bold text-sm truncate flex-1">${safeSlug}</span>
                     <span class="text-xs opacity-50 ml-2">${col.successRate}% success</span>
                 </div>
                 <div class="w-full bg-white/5 rounded-full h-2 mb-2 overflow-hidden">
                     <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" style="width: ${barWidth}%"></div>
                 </div>
                 <div class="flex gap-4 text-xs opacity-60">
-                    <span>👁️ ${col.views} views</span>
-                    <span>💎 ${col.mints} mints</span>
-                    ${col.volume > 0 ? `<span>💸 ${col.volume.toFixed(4)} ETH</span>` : ''}
+                    <span class="inline-flex items-center gap-1">${renderIcon('EYE', 'w-3.5 h-3.5')} ${col.views} views</span>
+                    <span class="inline-flex items-center gap-1">${renderIcon('GEM', 'w-3.5 h-3.5')} ${col.mints} mints</span>
+                    ${col.volume > 0 ? `<span class="inline-flex items-center gap-1">${renderIcon('CHART', 'w-3.5 h-3.5')} ${col.volume.toFixed(4)} ETH</span>` : ''}
                 </div>
             </div>
         `;
@@ -734,26 +959,30 @@ function renderMintHistory(userStats) {
     return `
         <div class="glass-card p-5 rounded-2xl border border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5">
             <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                <span class="text-green-400">💎</span> Your Mint History
+                ${renderAnalyticsIcon('GEM', 'text-green-400')} Your Mint History
                 <span class="text-xs font-normal opacity-40 ml-auto">${mints.length} mints</span>
             </h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                ${mints.map(mint => `
+                ${mints.map(mint => {
+        const safeCollection = escapeHtml(mint.collection || 'Unknown Collection');
+        const safeTxHash = encodeURIComponent(String(mint.txHash || ''));
+        return `
                     <div class="p-3 bg-white/5 rounded-xl border border-white/5 flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-lg flex-shrink-0">💎</div>
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-green-300 flex-shrink-0">${renderIcon('GEM', 'w-5 h-5')}</div>
                         <div class="flex-1 min-w-0">
-                            <div class="text-sm font-bold truncate">${mint.collection || 'Unknown Collection'}</div>
+                            <div class="text-sm font-bold truncate">${safeCollection}</div>
                             <div class="text-[10px] opacity-50 font-mono">
                                 ${mint.timestamp ? new Date(mint.timestamp).toLocaleDateString() : ''}
                                 ${mint.txHash ? ` • ${mint.txHash.slice(0, 10)}...` : ''}
                             </div>
                         </div>
                         ${mint.txHash ? `
-                            <a href="https://basescan.org/tx/${mint.txHash}" target="_blank" rel="noopener noreferrer"
-                               class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0">↗</a>
+                            <a href="https://basescan.org/tx/${safeTxHash}" target="_blank" rel="noopener noreferrer"
+                               class="p-1 hover:bg-white/10 rounded-lg opacity-40 hover:opacity-100 transition text-xs flex-shrink-0 inline-flex">${renderIcon('EXTERNAL', 'w-3.5 h-3.5')}</a>
                         ` : ''}
                     </div>
-                `).join('')}
+                `;
+    }).join('')}
             </div>
         </div>
     `;
@@ -766,28 +995,31 @@ function renderJourneyTimeline(userStats) {
 
     const journey = userStats.journey;
     const eventIcons = {
-        page_view: '👁️', collection_view: '📂', mint_click: '👆',
-        mint_attempt: '⏳', tx_sent: '📤', mint_success: '✅',
-        mint_failure: '❌', wallet_connect: '🔗', gallery_view: '🖼️', click: '👆'
+        page_view: 'EYE', collection_view: 'FOLDER', mint_click: 'CURSOR',
+        mint_attempt: 'HISTORY', tx_sent: 'EXTERNAL', mint_success: 'CHECK',
+        mint_failure: 'XMARK', wallet_connect: 'LINK', gallery_view: 'IMAGE', click: 'CURSOR'
     };
 
     return `
         <div class="glass-card p-5 rounded-2xl border border-white/10">
             <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
-                <span class="text-blue-400">🗺️</span> Your Journey
+                ${renderAnalyticsIcon('HISTORY', 'text-blue-400')} Your Journey
                 <span class="text-xs font-normal opacity-40 ml-auto">Last ${journey.length} events</span>
             </h3>
             <div class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                 ${journey.map((event) => {
         const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
         const safeTimestamp = event?.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'unknown';
+        const safeEventType = escapeHtml(eventType.replace(/_/g, ' '));
+        const safeCollection = event.collection ? escapeHtml(event.collection) : '';
+        const safePage = event.page ? escapeHtml(event.page) : '';
         return `
                     <div class="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
-                        <div class="text-base flex-shrink-0">${eventIcons[eventType] || '📌'}</div>
+                        <div class="text-base flex-shrink-0 text-indigo-300 inline-flex">${renderIcon(eventIcons[eventType] || 'CHART', 'w-4 h-4')}</div>
                         <div class="flex-1 min-w-0">
-                            <span class="text-sm font-medium">${eventType.replace(/_/g, ' ')}</span>
-                            ${event.collection ? `<span class="text-xs opacity-50 ml-2">${event.collection}</span>` : ''}
-                            ${event.page ? `<span class="text-xs opacity-50 ml-2">${event.page}</span>` : ''}
+                            <span class="text-sm font-medium">${safeEventType}</span>
+                            ${safeCollection ? `<span class="text-xs opacity-50 ml-2">${safeCollection}</span>` : ''}
+                            ${safePage ? `<span class="text-xs opacity-50 ml-2">${safePage}</span>` : ''}
                         </div>
                         <div class="text-[10px] opacity-40 font-mono flex-shrink-0">
                             ${safeTimestamp}
@@ -818,7 +1050,7 @@ function renderAdminPanel(wallet, slug) {
     if (!adminHintAllowed) return '';
 
     const hasToken = hasAdminSession();
-    const scopeHint = slug ? `<span class="text-[10px] opacity-50">Scoped to ${slug}</span>` : '';
+    const scopeHint = slug ? `<span class="text-[10px] opacity-50">Scoped to ${escapeHtml(slug)}</span>` : '';
 
     return `
         <div class="glass-card p-5 rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/5 to-orange-500/5">

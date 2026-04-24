@@ -10,6 +10,7 @@ import { applyMiniAppAvatar, getMiniAppProfile, getMiniAppProfileLabel, getWalle
 import { bindBottomNavEvents, renderBottomNav } from '../components/BottomNav.js';
 import { bindThemeToggleEvents, renderThemeToggleButton } from '../components/ThemeToggle.js';
 import { formatCountdown } from '../utils/time.js';
+import { renderIcon } from '../utils/icons.js';
 
 // Lazy wallet module loader
 let _walletMod = null;
@@ -158,10 +159,9 @@ export async function renderHomePage() {
                 <!-- Inner Glow -->
                 <div class="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-indigo-300 group-hover:text-white transition-colors relative z-10 translate-x-[1px]">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m13.5 16.3-5.06-3.04m5.06-4.52-5.06 3.04" />
-                </svg>
+                <span class="text-indigo-300 group-hover:text-white transition-colors relative z-10 translate-x-[1px]">
+                  ${renderIcon('SHARE', 'w-5 h-5')}
+                </span>
                 
                 <!-- Orbiting Glow (subtle) -->
                 <div class="absolute inset-0 rounded-full border border-indigo-500/0 group-hover:border-indigo-500/50 group-hover:animate-pulse transition-all"></div>
@@ -170,9 +170,9 @@ export async function renderHomePage() {
             <!-- Mobile Profile Button (Person Icon) -->
             <button id="mobile-profile-btn" class="sm:hidden glass-card w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors overflow-hidden" aria-label="Open profile menu" title="Open profile menu">
                 <img id="mobile-profile-avatar" class="w-full h-full rounded-full object-cover hidden" alt="Profile avatar">
-                <svg id="mobile-profile-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                </svg>
+                <span id="mobile-profile-icon" class="text-indigo-300">
+                  ${renderIcon('PROFILE', 'w-6 h-6')}
+                </span>
             </button>
           </div>
         </div>
@@ -184,17 +184,15 @@ export async function renderHomePage() {
           <div class="absolute right-0 top-0 bottom-0 w-full max-w-xs bg-[#0f172a] border-l border-white/10 p-6 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col justify-center gap-6" id="profile-content">
               
               <button id="close-profile-btn" class="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full transition-colors" aria-label="Close profile menu" title="Close profile menu">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <span class="text-indigo-300">
+                  ${renderIcon('CLOSE', 'w-6 h-6')}
+                </span>
               </button>
 
               <div class="glass-card p-4 rounded-2xl flex items-center gap-3">
                   <img id="profile-avatar" class="w-11 h-11 rounded-full object-cover hidden" alt="Profile avatar">
                   <div id="profile-avatar-fallback" class="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 opacity-80">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                      </svg>
+                      <span class="opacity-80">${renderIcon('PROFILE', 'w-6 h-6')}</span>
                   </div>
                   <div class="min-w-0">
                       <div class="text-xs uppercase tracking-wide opacity-60">${profileSourceLabel}</div>
@@ -207,9 +205,9 @@ export async function renderHomePage() {
                   <div class="flex items-center gap-4">
                       <span class="text-lg font-bold">Analytics</span>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
+                  <span class="opacity-50 group-hover:translate-x-1 transition-transform">
+                      ${renderIcon('CHEVRON_RIGHT', 'w-5 h-5')}
+                  </span>
               </button>
 
               <!-- My NFTs -->
@@ -217,9 +215,9 @@ export async function renderHomePage() {
                   <div class="flex items-center gap-4">
                       <span class="text-lg font-bold">My NFTs</span>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
+                  <span class="opacity-50 group-hover:translate-x-1 transition-transform">
+                      ${renderIcon('CHEVRON_RIGHT', 'w-5 h-5')}
+                  </span>
               </button>
 
               <!-- Wallet -->
@@ -230,9 +228,9 @@ export async function renderHomePage() {
                           ${getWalletIdentityLabel(state.wallet)}
                       </span>
                   </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
+                  <span class="opacity-50 group-hover:translate-x-1 transition-transform">
+                      ${renderIcon('CHEVRON_RIGHT', 'w-5 h-5')}
+                  </span>
               </button>
           </div>
       </div>
@@ -276,7 +274,7 @@ export async function renderHomePage() {
                        id="search-input" 
                        placeholder="Search collections..."
                        class="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-indigo-500/50 transition-colors pl-10">
-                <span class="absolute left-3 top-2.5 opacity-50">🔍</span>
+                <span class="absolute left-3 top-2.5 opacity-50 inline-flex">${renderIcon('EYE', 'w-4 h-4')}</span>
              </div>
              
              <div class="flex gap-3 w-full md:w-auto">
@@ -348,10 +346,9 @@ function renderCollectionCard(collection) {
                   aria-label="Share ${collection.name}"
                   title="Share ${collection.name}"
                   onclick="event.stopPropagation();">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-white translate-x-[0.5px]">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM18 5.28a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM7.5 12a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="m13.5 16.3-5.06-3.04m5.06-4.52-5.06 3.04" />
-              </svg>
+              <span class="text-white translate-x-[0.5px]">
+                ${renderIcon('SHARE', 'w-4 h-4')}
+              </span>
           </button>
         </div>
         

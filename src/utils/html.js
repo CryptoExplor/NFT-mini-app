@@ -6,3 +6,19 @@ export function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+export function sanitizeUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    try {
+        const parsed = new URL(raw, window.location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            return parsed.toString();
+        }
+    } catch {
+        return '';
+    }
+
+    return '';
+}

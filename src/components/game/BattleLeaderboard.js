@@ -5,6 +5,10 @@ import { renderIcon } from '../../utils/icons.js';
 
 const HISTORY_KEY = 'battle_history';
 
+export function getReplayHref(battleId) {
+    return `/battle?replay=${encodeURIComponent(battleId)}`;
+}
+
 /**
  * Save a battle result to localStorage (legacy - kept for quick optimistic UI, though server is source of truth)
  */
@@ -30,32 +34,60 @@ export function saveBattleResult(result) {
 }
 
 /**
- * Get Verifiable battle stats from API and recreate logs using deterministic engine.
+ * Read the legacy local history for optimistic UI / offline fallback.
+ */
+function getLegacyBattleStats() {
+    try {
+        const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]').map((battle) => ({
+            ...battle,
+            canReplay: false,
+        }));
+        const wins = history.filter((battle) => battle.playerWon).length;
+        const losses = history.filter((battle) => !battle.playerWon).length;
+        const total = history.length;
+        const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+        const totalDmg = history.reduce((sum, battle) => sum + (battle.playerDmg || 0), 0);
+        const totalCrits = history.reduce((sum, battle) => sum + (battle.crits || 0), 0);
+
+        const winnerCounts = {};
+        history.filter((battle) => battle.playerWon).forEach((battle) => {
+            winnerCounts[battle.playerName] = (winnerCounts[battle.playerName] || 0) + 1;
+        });
+
+        const bestFighter = Object.entries(winnerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+        return { wins, losses, total, winRate, totalDmg, totalCrits, bestFighter, history, source: 'local' };
+    } catch (_) {
+        return { wins: 0, losses: 0, total: 0, winRate: 0, totalDmg: 0, totalCrits: 0, bestFighter: 'None', history: [], source: 'local' };
+    }
+}
+
+/**
+ * Get verifiable battle stats from API and recreate logs using deterministic engine.
  */
 export async function getBattleStats(walletAddress) {
     try {
-        // Fallback to empty if no wallet is connected
         if (!walletAddress) {
-            return { wins: 0, losses: 0, total: 0, winRate: 0, totalDmg: 0, totalCrits: 0, bestFighter: 'None', history: [] };
+            return getLegacyBattleStats();
         }
 
         const { getBattleHistory } = await import('../../lib/game/matchmaking.js');
         const rawHistory = await getBattleHistory(walletAddress);
 
-        // If backend fails or is empty, we fall back to empty
+        // If backend fails or is empty, keep the local optimistic history visible.
         if (!rawHistory || !rawHistory.length) {
-             return { wins: 0, losses: 0, total: 0, winRate: 0, totalDmg: 0, totalCrits: 0, bestFighter: 'None', history: [] };
+            return getLegacyBattleStats();
         }
 
         const { simulateBattle } = await import('../../lib/game/engine.js');
         const { createPRNG } = await import('../../lib/battle/prng.js');
 
-        let wins = 0, losses = 0, total = rawHistory.length, totalDmg = 0, totalCrits = 0;
+        let wins = 0, losses = 0, total = 0, totalDmg = 0, totalCrits = 0;
         const winnerCounts = {};
         const history = [];
 
         for (const record of rawHistory) {
             if (!record.seed || !record.players) continue;
+            total++;
 
             const p1 = record.players.p1;
             const p2 = record.players.p2;
@@ -133,7 +165,8 @@ export async function getBattleStats(walletAddress) {
                 rounds: totalRounds,
                 playerDmg: battleDmg,
                 crits: battleCrits,
-                timestamp: record.createdAt || Date.now()
+                timestamp: record.createdAt || Date.now(),
+                canReplay: Boolean(record.battleId),
             });
         }
 
@@ -143,10 +176,10 @@ export async function getBattleStats(walletAddress) {
         const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
         const bestFighter = Object.entries(winnerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
 
-        return { wins, losses, total, winRate, totalDmg, totalCrits, bestFighter, history };
+        return { wins, losses, total, winRate, totalDmg, totalCrits, bestFighter, history, source: 'synced' };
     } catch (err) {
         console.error("Leaderboard Stats Error:", err);
-        return { wins: 0, losses: 0, total: 0, winRate: 0, totalDmg: 0, totalCrits: 0, bestFighter: 'None', history: [] };
+        return getLegacyBattleStats();
     }
 }
 
@@ -173,6 +206,10 @@ export class BattleLeaderboard {
         const account = getAccount(wagmiAdapter.wagmiConfig);
         const stats = await getBattleStats(account?.address);
 
+        const sourceBadge = stats.source === 'synced'
+            ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">SERVER SYNCED</span>'
+            : '<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">LOCAL FALLBACK</span>';
+
         container.innerHTML = `
             <div class="mt-8 mb-6">
                 <!-- Stats Cards -->
@@ -194,7 +231,7 @@ export class BattleLeaderboard {
                 <div class="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Verifiable History</h3>
-                        <span class="text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">SERVER SYNCED</span>
+                        ${sourceBadge}
                     </div>
                     <div class="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar">
                         ${stats.history.length === 0
@@ -234,7 +271,7 @@ export class BattleLeaderboard {
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
                     <span class="text-[10px] text-slate-500 font-mono hidden md:inline-block">${battle.rounds} ROUNDS</span>
-                    ${this.renderReplayButton(battle.id)}
+                    ${battle.canReplay ? this.renderReplayButton(battle.id) : '<span class="text-[9px] px-2 py-1 rounded border border-white/10 text-slate-500 font-mono">LOCAL</span>'}
                     <span class="text-[10px] text-slate-600 font-mono min-w-[30px] text-right">${timeAgo}</span>
                 </div>
             </div>
@@ -243,10 +280,15 @@ export class BattleLeaderboard {
 
     renderReplayButton(battleId) {
         return `
-            <button class="replay-btn flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 text-xs font-bold transition-all active:scale-95 group" data-battle-id="${battleId}">
-                ${renderIcon('PLAY', 'w-3.5 h-3.5 group-hover:scale-110 transition-transform')}
-                WATCH
-            </button>
+            <div class="flex items-center gap-1.5">
+                <button class="replay-btn flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 text-xs font-bold transition-all active:scale-95 group" data-battle-id="${battleId}">
+                    ${renderIcon('PLAY', 'w-3.5 h-3.5 group-hover:scale-110 transition-transform')}
+                    WATCH
+                </button>
+                <a href="${getReplayHref(battleId)}" class="flex items-center justify-center p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 transition-colors" aria-label="Open shareable replay link">
+                    ${renderIcon('EXTERNAL', 'w-3.5 h-3.5')}
+                </a>
+            </div>
         `;
     }
 

@@ -209,17 +209,3 @@ Base Mint evolves into a **full NFT gaming platform on Base** — where any NFT 
 ## 📄 License
 
 MIT
-
-
-
-remove local storage to kv storage so user get sync his history across devices,
-review analytics page to make it ready for V2, and change all emoji to svg icons so app looks premium,
-and other improvements you think of
-
-
-Remaining open item
-Spectator Mode — left as [ ] in the roadmap. This requires a new route (/battle?replay=<seed>), a KV-stored replay record, and a read-only arena renderer. It's a standalone feature, not a polish item. Want me to tackle it?
-
-
-
-

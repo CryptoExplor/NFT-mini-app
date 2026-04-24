@@ -207,7 +207,7 @@ export async function getUserStats(wallet) {
         // Allow relative paths in dev
         // if (!API_BASE && import.meta.env.DEV) { ... }
 
-        const response = await fetch(`${API_BASE}/api/user?wallet=${wallet}`);
+        const response = await fetch(`${API_BASE}/api/user?wallet=${encodeURIComponent(wallet)}`);
 
         // Check content type before parsing
         const contentType = response.headers.get("content-type");
@@ -221,6 +221,58 @@ export async function getUserStats(wallet) {
         console.error('Failed to fetch user stats:', error);
         return { rank: '-', totalMints: 0, favCollection: '-', error: 'API_ERROR' };
     }
+}
+
+/**
+ * Get synced battle history for a wallet.
+ * Public by design so battle profiles and replays can be shared across devices.
+ */
+export async function getBattleHistory(wallet, limit = 50) {
+    if (!wallet) return [];
+    try {
+        const params = new URLSearchParams({
+            address: wallet,
+            limit: String(limit || 50)
+        });
+
+        const response = await fetch(`${API_BASE}/api/battle?action=history&${params}`);
+        const contentType = response.headers.get('content-type') || '';
+
+        if (!response.ok || !contentType.includes('application/json')) {
+            console.warn(`Battle History API unavailable (status: ${response.status}, type: ${contentType})`);
+            return [];
+        }
+
+        const data = await response.json();
+        return Array.isArray(data?.history) ? data.history : [];
+    } catch (error) {
+        console.error('Failed to fetch battle history:', error);
+        return [];
+    }
+}
+
+/**
+ * Get a single replay record by battle id.
+ */
+export async function getBattleReplay(battleId) {
+    if (!battleId) throw new Error('Missing battleId');
+
+    const params = new URLSearchParams({
+        action: 'replay',
+        id: battleId
+    });
+
+    const response = await fetch(`${API_BASE}/api/battle?${params}`);
+    if (!response.ok) {
+        throw new Error('Replay not found');
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new Error('Replay response was not JSON');
+    }
+
+    return await response.json();
 }
 
 // ============================================

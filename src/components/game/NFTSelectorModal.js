@@ -1,4 +1,5 @@
 import { $ } from '../../utils/dom.js';
+import { renderIcon } from '../../utils/icons.js';
 
 /**
  * Premium NFT Fighter Selector
@@ -14,11 +15,11 @@ const STAT_CONFIG = [
 ];
 
 const PASSIVE_META = {
-    'GHOST_STEP': { icon: '👻', color: 'text-purple-400 bg-purple-500/15 border-purple-500/20' },
-    'IRON_WALL': { icon: '🛡️', color: 'text-blue-400 bg-blue-500/15 border-blue-500/20' },
-    'DRAIN': { icon: '🩸', color: 'text-red-400 bg-red-500/15 border-red-500/20' },
-    'BERSERKER': { icon: '🔥', color: 'text-orange-400 bg-orange-500/15 border-orange-500/20' },
-    'REGEN_BURST': { icon: '💚', color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/20' },
+    'GHOST_STEP': { icon: renderIcon('GHOST', 'w-4 h-4'), color: 'text-purple-400 bg-purple-500/15 border-purple-500/20' },
+    'IRON_WALL': { icon: renderIcon('SHIELD', 'w-4 h-4'), color: 'text-blue-400 bg-blue-500/15 border-blue-500/20' },
+    'DRAIN': { icon: renderIcon('DRAIN', 'w-4 h-4'), color: 'text-red-400 bg-red-500/15 border-red-500/20' },
+    'BERSERKER': { icon: renderIcon('FLAME', 'w-4 h-4'), color: 'text-orange-400 bg-orange-500/15 border-orange-500/20' },
+    'REGEN_BURST': { icon: renderIcon('HEART', 'w-4 h-4'), color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/20' },
 };
 
 export class NFTSelectorModal {
@@ -61,7 +62,7 @@ export class NFTSelectorModal {
         this.container.innerHTML = `
             <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div class="p-8 text-center bg-slate-900 border border-red-500/20 rounded-2xl max-w-sm shadow-2xl">
-                    <div class="text-3xl mb-3">🔌</div>
+                    <div class="text-3xl mb-3 text-red-500">${renderIcon('PLUG', 'w-10 h-10 mx-auto')}</div>
                     <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
                     <p class="text-sm text-slate-400">${msg}</p>
                 </div>
@@ -126,9 +127,7 @@ export class NFTSelectorModal {
                             <p class="text-xs sm:text-sm text-slate-400 mt-1">Combine Fighter + Item + Arena for maximum synergy.</p>
                         </div>
                         <button id="close-selector-btn" class="p-2 hover:bg-white/10 rounded-xl transition-colors text-white/50 hover:text-white">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            ${renderIcon('CLOSE', 'w-6 h-6')}
                         </button>
                     </div>
 
@@ -208,7 +207,7 @@ export class NFTSelectorModal {
         if (items.length === 0) {
             return `
                 <div class="text-center py-12">
-                    <div class="text-4xl mb-3 opacity-50">📭</div>
+                    <div class="text-slate-500 mb-3 opacity-30">${renderIcon('BOX', 'w-14 h-14 mx-auto')}</div>
                     <h3 class="text-lg font-bold text-slate-300 mb-1">No ${this.activeTab}s Found</h3>
                     <p class="text-sm text-slate-500">You don't hold any NFTs matching this role.</p>
                 </div>
@@ -254,9 +253,7 @@ export class NFTSelectorModal {
                     ` : ''}
                     ${isSelected ? `
                         <div class="absolute top-2 left-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white/20">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
-                              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
+                            ${renderIcon('CHECKMARK', 'h-4 w-4 text-white')}
                         </div>
                     ` : ''}
                 </div>

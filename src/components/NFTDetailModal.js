@@ -4,13 +4,8 @@
  */
 
 import { getExplorerUrl } from '../utils/chain.js';
-
-// HTML escape to prevent XSS from NFT metadata
-function esc(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
+import { escapeHtml, sanitizeUrl } from '../utils/html.js';
+import { renderIcon } from '../utils/icons.js';
 
 /**
  * Show the NFT detail modal
@@ -29,12 +24,17 @@ export function showNFTDetailModal(nft, chain = 'base') {
         ? `${nft.contract.slice(0, 6)}...${nft.contract.slice(-4)}`
         : 'N/A';
 
-    const safeName = esc(nft.name || 'Unnamed');
-    const safeCollection = esc(nft.collection || 'Unknown Collection');
-    const safeDescription = esc(nft.description || '');
-    const safeIdentifier = esc(nft.identifier || '');
-    const safeStandard = esc(nft.token_standard || 'erc721');
-    const safeContract = esc(shortenedContract);
+    const safeName = escapeHtml(nft.name || 'Unnamed');
+    const safeCollection = escapeHtml(nft.collection || 'Unknown Collection');
+    const safeDescription = escapeHtml(nft.description || '');
+    const safeIdentifier = escapeHtml(nft.identifier || '');
+    const safeStandard = escapeHtml(nft.token_standard || 'erc721');
+    const safeContract = escapeHtml(shortenedContract);
+    const safeChain = escapeHtml(chain);
+    const safeContractTitle = escapeHtml(nft.contract || '');
+    const safeAnimationUrl = sanitizeUrl(nft.animation_url || '');
+    const safeImageUrl = sanitizeUrl(nft.image_url || '/placeholder.png') || '/placeholder.png';
+    const safeOpenSeaUrl = sanitizeUrl(nft.opensea_url || '');
 
     const overlay = document.createElement('div');
     overlay.id = 'nft-detail-modal';
@@ -53,10 +53,10 @@ export function showNFTDetailModal(nft, chain = 'base') {
                 <!-- Left: Image -->
                 <div class="nft-modal-image-section">
                     <div class="nft-modal-image-container">
-                        ${nft.animation_url
-            ? `<video src="${nft.animation_url}" poster="${nft.image_url}" autoplay loop muted playsinline class="nft-modal-image"></video>`
-            : `<img src="${nft.image_url || '/placeholder.png'}"
-                                    alt="${nft.name}"
+                        ${safeAnimationUrl
+            ? `<video src="${safeAnimationUrl}" poster="${safeImageUrl}" autoplay loop muted playsinline class="nft-modal-image"></video>`
+            : `<img src="${safeImageUrl}"
+                                    alt="${safeName}"
                                     class="nft-modal-image"
                                     onerror="this.src='/placeholder.png'" />`
         }
@@ -85,9 +85,9 @@ export function showNFTDetailModal(nft, chain = 'base') {
                             <div class="nft-traits-grid">
                                 ${nft.traits.map(t => `
                                     <div class="trait-badge">
-                                        <div class="trait-type">${esc(t.trait_type)}</div>
-                                        <div class="trait-value">${esc(String(t.value))}</div>
-                                        ${t.trait_count ? `<div class="trait-rarity">${esc(String(t.trait_count))} have this</div>` : ''}
+                                        <div class="trait-type">${escapeHtml(t.trait_type)}</div>
+                                        <div class="trait-value">${escapeHtml(String(t.value))}</div>
+                                        ${t.trait_count ? `<div class="trait-rarity">${escapeHtml(String(t.trait_count))} have this</div>` : ''}
                                     </div>
                                 `).join('')}
                             </div>
@@ -100,7 +100,7 @@ export function showNFTDetailModal(nft, chain = 'base') {
                         <div class="nft-detail-rows">
                             <div class="nft-detail-row">
                                 <span class="opacity-50">Contract</span>
-                                <a href="${contractUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline font-mono text-sm" title="${esc(nft.contract || '')}">${safeContract}</a>
+                                <a href="${contractUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline font-mono text-sm" title="${safeContractTitle}">${safeContract}</a>
                             </div>
                             <div class="nft-detail-row">
                                 <span class="opacity-50">Token ID</span>
@@ -112,20 +112,20 @@ export function showNFTDetailModal(nft, chain = 'base') {
                             </div>
                             <div class="nft-detail-row">
                                 <span class="opacity-50">Chain</span>
-                                <span class="text-sm capitalize">${esc(chain)}</span>
+                                <span class="text-sm capitalize">${safeChain}</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Action Buttons -->
                     <div class="nft-modal-actions">
-                        ${nft.opensea_url ? `
-                            <a href="${nft.opensea_url}" target="_blank" class="nft-action-btn nft-action-primary">
-                                <span>🌊</span> View on OpenSea
+                        ${safeOpenSeaUrl ? `
+                            <a href="${safeOpenSeaUrl}" target="_blank" rel="noopener noreferrer" class="nft-action-btn nft-action-primary">
+                                <span>${renderIcon('EXTERNAL', 'w-4 h-4')}</span> View on OpenSea
                             </a>
                         ` : ''}
-                        <a href="${tokenUrl}" target="_blank" class="nft-action-btn nft-action-secondary">
-                            <span>🔍</span> Block Explorer
+                        <a href="${tokenUrl}" target="_blank" rel="noopener noreferrer" class="nft-action-btn nft-action-secondary">
+                            <span>${renderIcon('EYE', 'w-4 h-4')}</span> Block Explorer
                         </a>
                     </div>
                 </div>

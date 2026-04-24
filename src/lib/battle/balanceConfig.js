@@ -124,8 +124,24 @@ export const SNAPSHOT = {
 // ── Live Balance Overrides ───────────────────────────────────────
 // Fetch balance patches from CDN without redeployment.
 // Set VITE_BALANCE_CONFIG_URL in .env to enable.
+// Optionally set VITE_BALANCE_CONFIG_SHA256 to require an exact payload checksum.
 // Falls back to bundled defaults if fetch fails.
 let _overridesApplied = false;
+
+function normalizeExpectedSha256(value) {
+    return String(value || '').trim().toLowerCase().replace(/^sha256:/, '');
+}
+
+async function sha256Hex(input) {
+    const cryptoApi = globalThis?.crypto;
+    if (!cryptoApi?.subtle) {
+        throw new Error('crypto.subtle unavailable for balance integrity check');
+    }
+
+    const encoded = new TextEncoder().encode(input);
+    const digest = await cryptoApi.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export async function loadBalanceOverrides() {
     if (_overridesApplied) return;
@@ -134,6 +150,9 @@ export async function loadBalanceOverrides() {
     const url = typeof import.meta !== 'undefined'
         ? import.meta.env?.VITE_BALANCE_CONFIG_URL
         : null;
+    const expectedSha256 = typeof import.meta !== 'undefined'
+        ? normalizeExpectedSha256(import.meta.env?.VITE_BALANCE_CONFIG_SHA256)
+        : '';
 
     if (!url) return; // No CDN configured, use bundled values
 
@@ -141,30 +160,41 @@ export async function loadBalanceOverrides() {
         const res = await fetch(url, { cache: 'no-cache' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        const overrides = await res.json();
+        const rawConfig = await res.text();
+        if (expectedSha256) {
+            const actualSha256 = await sha256Hex(rawConfig);
+            if (actualSha256 !== expectedSha256) {
+                throw new Error('Checksum mismatch for live balance config');
+            }
+        }
+
+        const overrides = JSON.parse(rawConfig);
+        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+            throw new Error('Invalid balance config payload');
+        }
 
         // Merge STAT_CAPS overrides
         if (overrides.STAT_CAPS) {
             for (const [key, val] of Object.entries(overrides.STAT_CAPS)) {
-                if (key in STAT_CAPS && typeof val === 'number') STAT_CAPS[key] = val;
+                if (key in STAT_CAPS && typeof val === 'number' && Number.isFinite(val)) STAT_CAPS[key] = val;
             }
         }
 
         // Merge STAT_FLOORS overrides
         if (overrides.STAT_FLOORS) {
             for (const [key, val] of Object.entries(overrides.STAT_FLOORS)) {
-                if (key in STAT_FLOORS && typeof val === 'number') STAT_FLOORS[key] = val;
+                if (key in STAT_FLOORS && typeof val === 'number' && Number.isFinite(val)) STAT_FLOORS[key] = val;
             }
         }
 
         // Merge COMBAT overrides
         if (overrides.COMBAT) {
             for (const [key, val] of Object.entries(overrides.COMBAT)) {
-                if (key in COMBAT && typeof val === 'number') COMBAT[key] = val;
+                if (key in COMBAT && typeof val === 'number' && Number.isFinite(val)) COMBAT[key] = val;
             }
         }
 
-        console.log('[BalanceConfig] Live overrides applied from CDN');
+        console.log(`[BalanceConfig] Live overrides applied from CDN${expectedSha256 ? ' (checksum verified)' : ' (unsigned)'}`);
     } catch (err) {
         console.warn('[BalanceConfig] CDN fetch failed, using bundled defaults:', err.message);
     }

@@ -15,7 +15,7 @@ import {
 } from '../kv.js';
 import hash from 'object-hash';
 
-const CHALLENGE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CHALLENGE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 function generateChallengeId() {
     return `ch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

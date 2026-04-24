@@ -3,10 +3,9 @@
  * Connects to global Vercel KV backend to load and post challenges.
  */
 
-// We import ARENA for the expiry time fallback just in case
-import { ARENA } from '../battle/balanceConfig.js';
 import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
+import { getBattleHistory as fetchBattleHistory } from '../api.js';
 
 let battleAuthToken = null;
 let tokenExpiry = 0;
@@ -147,17 +146,7 @@ export async function resolveFight(challengeId, attackerAddress, loadout) {
  * Get battle history for a player
  */
 export async function getBattleHistory(walletAddress) {
-    if (!walletAddress) return [];
-    try {
-        const res = await fetch(`/api/battle?action=history&address=${walletAddress}`);
-        if (!res.ok) throw new Error('Failed to fetch history');
-
-        const data = await res.json();
-        return data.history || [];
-    } catch (e) {
-        console.error('Failed to load global matching history', e);
-        return [];
-    }
+    return fetchBattleHistory(walletAddress, 50);
 }
 
 /**

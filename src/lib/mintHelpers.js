@@ -10,7 +10,7 @@ import { wagmiAdapter, DATA_SUFFIX } from '../wallet.js';
 import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
-import { encodePacked, keccak256, encodeFunctionData } from 'viem';
+import { encodePacked, keccak256, encodeFunctionData, getAddress, isAddress } from 'viem';
 import { cache } from '../utils/cache.js';
 
 // ============================================
@@ -764,13 +764,27 @@ export function getMintTypeLabel(mintPolicy) {
  * Verify if an address is on the allowlist using Merkle proofs
  */
 export async function verifyAllowlist(address, proof, merkleRoot) {
-    if (!proof || !merkleRoot) return false;
+    if (!Array.isArray(proof) || proof.length === 0 || !merkleRoot || !isAddress(address)) return false;
 
-    // WARNING: This is a mock implementation that always returns true.
-    // In production, use a library like merkletreejs to verify Merkle proofs.
-    console.warn('[verifyAllowlist] Using mock implementation — always returns true. Implement proper Merkle proof verification for production.');
-    const leaf = keccak256(address);
-    return true;
+    try {
+        const normalizedAddress = getAddress(address);
+        const normalizedRoot = String(merkleRoot).toLowerCase();
+        if (!/^0x[a-f0-9]{64}$/.test(normalizedRoot)) return false;
+        let computedHash = keccak256(encodePacked(['address'], [normalizedAddress]));
+
+        for (const sibling of proof) {
+            const normalizedSibling = String(sibling || '').toLowerCase();
+            if (!/^0x[a-f0-9]{64}$/.test(normalizedSibling)) return false;
+
+            const [left, right] = [computedHash, normalizedSibling].sort((a, b) => a.localeCompare(b));
+            computedHash = keccak256(`0x${left.slice(2)}${right.slice(2)}`);
+        }
+
+        return computedHash === normalizedRoot;
+    } catch (error) {
+        console.warn('[verifyAllowlist] Verification failed:', error?.message || error);
+        return false;
+    }
 }
 
 /**

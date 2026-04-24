@@ -31,6 +31,7 @@ function parseSiweMessage(message) {
     try {
         const siwe = new SiweMessage(message);
         return {
+            domain: siwe.domain,
             address: siwe.address?.toLowerCase(),
             nonce: siwe.nonce,
             chainId: siwe.chainId,
@@ -89,6 +90,32 @@ async function handler(req, res) {
             return res.status(400).json({
                 code: 'INVALID_MESSAGE',
                 message: 'Could not parse SIWE message (missing address or nonce)',
+            });
+        }
+
+        const requestHost = req.headers['x-forwarded-host'] || req.headers.host || null;
+        const inferredProto = requestHost && /^localhost[:]|^127\.0\.0\.1[:]/.test(requestHost) ? 'http' : 'https';
+        const requestProto = req.headers['x-forwarded-proto'] || inferredProto;
+        const requestOrigin = req.headers.origin || (requestHost ? `${requestProto}://${requestHost}` : null);
+
+        if (parsed.domain && requestHost && parsed.domain !== requestHost) {
+            return res.status(401).json({
+                code: 'INVALID_DOMAIN',
+                message: 'SIWE domain does not match this host',
+            });
+        }
+
+        if (parsed.uri && requestOrigin && parsed.uri !== requestOrigin) {
+            return res.status(401).json({
+                code: 'INVALID_URI',
+                message: 'SIWE URI does not match this origin',
+            });
+        }
+
+        if (parsed.expirationTime && Date.parse(parsed.expirationTime) <= Date.now()) {
+            return res.status(401).json({
+                code: 'MESSAGE_EXPIRED',
+                message: 'SIWE message has expired',
             });
         }
 

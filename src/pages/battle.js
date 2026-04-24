@@ -18,7 +18,7 @@ import {
     saveLastBattleSelection,
 } from '../lib/battle/loadoutSession.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
-import { trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
+import { getBattleReplay, trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
 import { renderIcon } from '../utils/icons.js';
 
 /** Inline toast for Farcaster miniapp (no browser alert) */
@@ -36,6 +36,22 @@ function showBattleToast(message, type = 'error') {
 }
 
 let walletHandler = null;
+
+function getReplayIdFromUrl() {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('replay') || '';
+}
+
+function setReplayIdInUrl(battleId) {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (battleId) {
+        url.searchParams.set('replay', battleId);
+    } else {
+        url.searchParams.delete('replay');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+}
 
 export async function renderBattlePage() {
     // Force dark mode on battle arena entry
@@ -109,6 +125,7 @@ export async function renderBattlePage() {
             `);
 
             try {
+                setReplayIdInUrl('');
                 const selectedLoadout = getCurrentBattleLoadout();
                 if (!selectedLoadout) {
                     $('#battle-loading-overlay')?.remove();
@@ -182,6 +199,9 @@ export async function renderBattlePage() {
                     const p1Dmg = logs.filter(l => l.attackerSide === 'P1').reduce((s, l) => s + (l.damage || 0), 0);
                     const p2Dmg = logs.filter(l => l.attackerSide === 'P2').reduce((s, l) => s + (l.damage || 0), 0);
                     const expectedPlayerSide = isAi ? 'P1' : 'P2';
+                    const playerDmg = expectedPlayerSide === 'P1' ? p1Dmg : p2Dmg;
+                    const enemyDmg = expectedPlayerSide === 'P1' ? p2Dmg : p1Dmg;
+                    const playerCrits = logs.filter(l => l.attackerSide === expectedPlayerSide && l.isCrit).length;
                     const playerWon = winnerSide ? winnerSide === expectedPlayerSide : winner === playerCombatStats.name;
                     const totalRounds = logs[logs.length - 1]?.round || 1;
                     saveBattleResult({
@@ -190,9 +210,9 @@ export async function renderBattlePage() {
                         playerWon,
                         isAi: isAi,
                         rounds: totalRounds,
-                        playerDmg: p1Dmg,
-                        enemyDmg: p2Dmg,
-                        crits: logs.filter(l => l.isCrit).length,
+                        playerDmg,
+                        enemyDmg,
+                        crits: playerCrits,
                         dodges: logs.filter(l => l.isDodge).length
                     });
 
@@ -339,6 +359,7 @@ export async function renderBattlePage() {
         const boardEl = $('#challenge-board-view');
         const lbEl = $('#leaderboard-view');
         if (tab === 'arena') {
+            setReplayIdInUrl('');
             boardEl?.classList.remove('hidden');
             lbEl?.classList.add('hidden');
             tabArena.className = `px-4 py-2 rounded-xl text-sm font-bold ${activeTabClass} transition-all`;
@@ -370,9 +391,8 @@ export async function renderBattlePage() {
         `);
 
         try {
-            const res = await fetch(`/api/battle?action=replay&id=${battleId}`);
-            if (!res.ok) throw new Error('Replay not found');
-            const data = await res.json();
+            const data = await getBattleReplay(battleId);
+            setReplayIdInUrl(battleId);
 
             // Transition to Arena View
             $('#battle-loading-overlay')?.remove();
@@ -404,6 +424,12 @@ export async function renderBattlePage() {
 
     document.addEventListener('BATTLE_REPLAY_REQUEST', replayHandler);
     window._battleReplayHandler = replayHandler;
+
+    const replayId = getReplayIdFromUrl();
+    if (replayId) {
+        switchTab('stats');
+        setTimeout(() => replayHandler({ detail: { battleId: replayId } }), 0);
+    }
 }
 
 function attachBattleEvents() {

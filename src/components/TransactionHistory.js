@@ -1,6 +1,6 @@
-
 import { getStoredTransactions } from '../lib/mintHelpers.js';
 import { getExplorerUrl } from '../utils/chain.js';
+import { escapeHtml } from '../utils/html.js';
 
 export function renderTransactionHistory() {
   const transactions = getStoredTransactions();
@@ -13,21 +13,27 @@ export function renderTransactionHistory() {
         <span>📜</span> Recent Transactions
       </h3>
       <div class="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-        ${transactions.map(tx => `
+        ${transactions.map((tx) => {
+          const collectionName = escapeHtml(tx.collectionName || 'Unknown Collection');
+          const txHash = encodeURIComponent(String(tx.hash || ''));
+          const explorerHref = `${getExplorerUrl(tx.chainId)}/tx/${txHash}`;
+          return `
           <div class="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
             <div>
-              <div class="font-medium text-sm">${tx.collectionName}</div>
+              <div class="font-medium text-sm">${collectionName}</div>
               <div class="text-[10px] opacity-50">${new Date(tx.timestamp).toLocaleString()}</div>
             </div>
             <div class="flex items-center gap-3">
-               <a href="${getExplorerUrl(tx.chainId)}/tx/${tx.hash}" 
+               <a href="${explorerHref}" 
                   target="_blank"
+                  rel="noopener noreferrer"
                   class="text-indigo-400 hover:text-indigo-300 text-xs font-medium bg-indigo-500/10 px-2 py-1 rounded">
                  View →
                </a>
             </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     </div>
   `;

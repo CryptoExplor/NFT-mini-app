@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => ({
 
     commonjsOptions: {
       strictRequires: 'auto',
-      esmExternals: ['@wagmi/core', 'eventemitter3'],
+      esmExternals: ['@wagmi/core', 'eventemitter3', 'dayjs', 'dayjs/locale/en'],
     },
 
     rollupOptions: {
@@ -67,8 +67,22 @@ export default defineConfig(({ mode }) => ({
   },
 
   optimizeDeps: {
-    include: ['viem', '@reown/appkit', 'eventemitter3'],
-    exclude: ['@wagmi/core', '@wagmi/connectors', '@reown/appkit-adapter-wagmi'],
+    // Pre-bundle ALL heavy deps so Vite serves them as a single cached file in dev mode.
+    // Previously excluded packages caused hundreds of unbundled ESM requests on cold start,
+    // which is what made the loading screen hang on localhost but not on Vercel (prod bundle).
+    include: [
+      'viem',
+      '@reown/appkit',
+      '@reown/appkit-adapter-wagmi',
+      '@wagmi/core',
+      '@wagmi/connectors',
+      'eventemitter3',
+      'dayjs',
+      'dayjs/locale/en',
+    ],
+    esbuildOptions: {
+      sourcemap: false,
+    },
   },
 
   plugins: [
@@ -81,7 +95,7 @@ export default defineConfig(({ mode }) => ({
     }),
   ],
 
-  css: { devSourcemap: true },
+  css: { devSourcemap: false },
 
   esbuild: {
     logOverride: {

@@ -15,7 +15,7 @@ const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_R
 export { redis as kv };
 
 const CHALLENGE_HASH_KEY = 'challenges:active';
-const CHALLENGE_TTL_SECONDS = 86400; // 24 hours
+const CHALLENGE_TTL_SECONDS = 3600; // 1 hour
 
 /**
  * Store a challenge atomically.

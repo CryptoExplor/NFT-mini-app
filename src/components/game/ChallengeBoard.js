@@ -2,6 +2,7 @@ import { $, shortenAddress } from '../../utils/dom.js';
 import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
 import { renderIcon } from '../../utils/icons.js';
+import { escapeHtml, sanitizeUrl } from '../../utils/html.js';
 
 /**
  * Premium Challenge Board Component
@@ -232,6 +233,13 @@ export class ChallengeBoard {
         const colors = getColors(challenge.collectionName);
         const stats = challenge.stats || {};
         const delay = index * 0.08;
+        const safeCollectionName = escapeHtml(challenge.collectionName || challenge.collectionId || 'Unknown');
+        const safeTokenId = escapeHtml(challenge.nftId || challenge.tokenId || '?');
+        const safeTrait = escapeHtml(challenge.trait || 'Unknown');
+        const safeDifficulty = escapeHtml(challenge.difficulty || '');
+        const safePlayerAddress = escapeHtml(challenge.player || challenge.creator || '');
+        const safeShortAddress = escapeHtml(shortenAddress(challenge.player || challenge.creator || ''));
+        const safeImageUrl = sanitizeUrl(challenge.imageUrl || '');
 
         return `
             <div class="group p-5 rounded-2xl bg-gradient-to-b ${colors.gradient} backdrop-blur-sm border ${colors.border} hover:shadow-lg hover:${colors.glow} transition-all duration-300 relative overflow-hidden animate-fade-in"
@@ -255,23 +263,23 @@ export class ChallengeBoard {
                 <div class="flex items-center gap-4 mb-4">
                     <div class="w-14 h-14 rounded-xl bg-slate-800/80 border border-white/5 overflow-hidden flex-shrink-0 flex items-center justify-center">
                         ${challenge.imageUrl
-                ? `<img src="${challenge.imageUrl}" class="w-full h-full object-cover" alt="NFT" />`
+                ? `<img src="${safeImageUrl}" class="w-full h-full object-cover" alt="NFT" />`
                 : `<span class="text-xl font-black ${isAi ? 'text-red-400/50' : 'text-indigo-400/50'}">${isAi ? 'AI' : '#'}</span>`
             }
                     </div>
                     <div class="min-w-0 flex-1">
-                        <h3 class="font-bold text-sm truncate text-white/90">${challenge.collectionName || challenge.collectionId || 'Unknown'} #${challenge.nftId || challenge.tokenId || '?'}</h3>
+                        <h3 class="font-bold text-sm truncate text-white/90">${safeCollectionName} #${safeTokenId}</h3>
                         ${isAi
                 ? `<p class="text-[11px] text-red-400/60 font-semibold uppercase tracking-wider">AI Opponent</p>`
-                : `<p class="text-[11px] text-slate-500 font-mono truncate" title="${challenge.player || challenge.creator}">${shortenAddress(challenge.player || challenge.creator)}</p>`
+                : `<p class="text-[11px] text-slate-500 font-mono truncate" title="${safePlayerAddress}">${safeShortAddress}</p>`
             }
                     </div>
                 </div>
 
                 <!-- Trait + Difficulty + Loadout Badges -->
                 <div class="flex items-center gap-2 mb-4 flex-wrap">
-                    <span class="text-[10px] px-2 py-0.5 rounded-md ${colors.badge} font-medium tracking-tight">${challenge.trait}</span>
-                    ${isAi && challenge.difficulty ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-slate-400 border border-white/10 font-medium">${challenge.difficulty}</span>` : ''}
+                    <span class="text-[10px] px-2 py-0.5 rounded-md ${colors.badge} font-medium tracking-tight">${safeTrait}</span>
+                    ${isAi && challenge.difficulty ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-slate-400 border border-white/10 font-medium">${safeDifficulty}</span>` : ''}
                     ${challenge.loadout?.item ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 font-bold flex items-center gap-1">${renderIcon('MAGIC', 'w-2.5 h-2.5')} ITEM</span>` : ''}
                     ${challenge.loadout?.arena ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/20 font-bold flex items-center gap-1">${renderIcon('MAP', 'w-2.5 h-2.5')} ARENA</span>` : ''}
                 </div>

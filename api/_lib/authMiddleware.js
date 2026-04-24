@@ -12,8 +12,12 @@ export async function verifyJWT(token) {
         }
         const secret = new TextEncoder().encode(process.env.JWT_SECRET);
         const { payload } = await jwtVerify(token, secret);
+        const wallet = String(payload.sub || payload.address || payload.wallet || '').toLowerCase();
+        if (!/^0x[a-f0-9]{40}$/i.test(wallet)) {
+            return null;
+        }
         return {
-            wallet: payload.wallet || payload.address || payload.sub,
+            wallet,
             isAdmin: payload.isAdmin || false
         };
     } catch {
@@ -47,11 +51,11 @@ export async function verifyAuth(req) {
 /**
  * Extract and verify auth from request.
  * Supports: Bearer token in Authorization header
- * Fallback: wallet query param (unauthenticated, limited access)
+ * Optional fallback: wallet query param (unauthenticated, limited access)
  *
  * @returns {{ wallet: string, isAdmin: boolean, authenticated: boolean }}
  */
-export async function getAuthContext(req) {
+export async function getAuthContext(req, { allowQueryFallback = false } = {}) {
     // Try JWT first
     const authHeader = req.headers?.authorization;
     if (authHeader?.startsWith('Bearer ')) {
@@ -60,6 +64,10 @@ export async function getAuthContext(req) {
         if (decoded) {
             return { ...decoded, authenticated: true };
         }
+    }
+
+    if (!allowQueryFallback) {
+        return null;
     }
 
     // Fallback: wallet query param (unauthenticated, limited access)

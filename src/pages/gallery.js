@@ -8,6 +8,8 @@ import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
 import { router } from '../lib/router.js';
 import { fetchNFTsByWallet, extractCollections } from '../lib/opensea.js';
 import { showNFTDetailModal } from '../components/NFTDetailModal.js';
+import { renderIcon } from '../utils/icons.js';
+
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { getBalance } from '@wagmi/core';
 import { toast } from '../utils/toast.js';
@@ -83,9 +85,9 @@ function buildGalleryHTML() {
             <div class="max-w-7xl mx-auto flex items-center justify-between">
                 <div class="flex items-center space-x-3">
                     <button id="gallery-back-btn" class="p-2 hover:bg-white/10 rounded-lg transition-colors" aria-label="Back">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
-                        </svg>
+${renderIcon('CHEVRON_LEFT', 'w-5 h-5')}
+
+
                     </button>
                     <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">My NFTs</h1>
                     <div id="gallery-nft-count" class="text-xs opacity-50 font-mono"></div>
@@ -129,28 +131,34 @@ function buildGalleryHTML() {
                     <div class="relative flex-1 min-w-[200px]">
                         <input type="text" id="gallery-search" placeholder="Search NFTs by name..."
                             class="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 pl-10 focus:outline-none focus:border-indigo-500/50 transition-colors text-sm" />
-                        <span class="absolute left-3 top-2.5 opacity-50 text-sm">🔍</span>
+                        <span class="absolute left-3 top-2.5 opacity-50 text-sm inline-flex">${renderIcon('EYE', 'w-4 h-4')}</span>
                     </div>
 
                     <!-- Mobile filter toggle -->
                     <button id="mobile-filter-btn" class="lg:hidden glass-card px-3 py-2.5 rounded-lg flex items-center space-x-2 hover:bg-white/10 transition-colors text-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/>
-                        </svg>
+                        ${renderIcon('FILTER', 'w-5 h-5')}
+
+
+
+
                         <span>Filters</span>
                     </button>
 
                     <!-- Grid size toggle -->
                     <div class="hidden sm:flex glass-card rounded-lg overflow-hidden">
                         <button data-grid="large" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors bg-white/10" title="Large grid" aria-label="Large grid">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z"/>
-                            </svg>
+                            ${renderIcon('GRID_LARGE', 'w-5 h-5')}
+
+
+
+
                         </button>
                         <button data-grid="small" class="gallery-grid-toggle px-3 py-2.5 hover:bg-white/10 transition-colors" title="Small grid" aria-label="Small grid">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h1.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 1-1.5 0V6ZM3.75 15.75A2.25 2.25 0 0 0 6 18h1.5a.75.75 0 0 0 0-1.5H6a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 0-1.5 0v1.5ZM15.75 3.75a.75.75 0 0 0 0 1.5H18a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 0 1.5 0V6A2.25 2.25 0 0 0 18 3.75h-2.25ZM18 16.5h-2.25a.75.75 0 0 0 0 1.5H18a2.25 2.25 0 0 0 2.25-2.25v-1.5a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 1-.75.75Z"/>
-                            </svg>
+                            ${renderIcon('GRID_SMALL', 'w-5 h-5')}
+
+
+
+
                         </button>
                     </div>
                 </div>
@@ -179,9 +187,11 @@ function buildGalleryHTML() {
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-lg font-bold">Filters</h2>
                     <button id="close-filter-btn" class="p-2 hover:bg-white/10 rounded-full transition-colors" aria-label="Close filters" title="Close filters">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
+                        ${renderIcon('CLOSE', 'w-6 h-6')}
+
+
+
+
                     </button>
                 </div>
                 <div class="mb-6">
@@ -315,14 +325,14 @@ function renderActiveFilters() {
     if (selectedCollection) {
         chips.push(`
             <button class="filter-chip filter-chip-active" data-clear="collection">
-                📁 ${selectedCollection} <span class="ml-1 opacity-60">✕</span>
+                ${renderIcon('FOLDER', 'w-3.5 h-3.5')} ${selectedCollection} <span class="ml-1 opacity-60">×</span>
             </button>
         `);
     }
     if (searchQuery) {
         chips.push(`
             <button class="filter-chip filter-chip-active" data-clear="search">
-                🔍 "${searchQuery}" <span class="ml-1 opacity-60">✕</span>
+                ${renderIcon('EYE', 'w-3.5 h-3.5')} "${searchQuery}" <span class="ml-1 opacity-60">×</span>
             </button>
         `);
     }
@@ -392,7 +402,7 @@ function buildNFTCard(nft, index) {
             ? `<img src="${encodeURI(nft.image_url)}" alt="${displayName}" loading="lazy"
                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
                             onerror="this.src='/placeholder.png'" />`
-            : `<div class="w-full h-full flex items-center justify-center text-4xl opacity-30">🖼️</div>`
+            : `<div class="w-full h-full flex items-center justify-center text-slate-500 opacity-30">${renderIcon('IMAGE', 'w-12 h-12')}</div>`
         }
                 <!-- Hover Overlay -->
                 <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
@@ -454,25 +464,25 @@ function attachCollectionListeners(container) {
 function buildEmptyState(type) {
     const states = {
         'connect': {
-            icon: '👛',
+            icon: 'LINK',
             title: 'Connect Your Wallet',
             subtitle: 'Connect your wallet to view your NFT collection',
             action: '<button id="empty-connect-btn" class="legendary-button px-8 py-3 rounded-xl font-bold text-white mt-4">Connect Wallet</button>'
         },
         'no-nfts': {
-            icon: '🖼️',
+            icon: 'IMAGE',
             title: 'No NFTs Found',
             subtitle: 'This wallet doesn\'t have any NFTs on Base yet',
             action: '<button id="browse-collections-btn" class="glass-card px-6 py-3 rounded-xl font-medium mt-4 hover:bg-white/10 transition-colors">Browse Collections</button>'
         },
         'no-results': {
-            icon: '🔍',
+            icon: 'EYE',
             title: 'No Results',
             subtitle: 'No NFTs match your current filters',
             action: '<button id="clear-filters-btn" class="glass-card px-6 py-3 rounded-xl font-medium mt-4 hover:bg-white/10 transition-colors">Clear Filters</button>'
         },
         'error': {
-            icon: '⚠️',
+            icon: 'XMARK',
             title: 'Failed to Load',
             subtitle: 'Check your OpenSea API key in .env and try again',
             action: '<button id="retry-btn" class="glass-card px-6 py-3 rounded-xl font-medium mt-4 hover:bg-white/10 transition-colors">Retry</button>'
@@ -481,7 +491,7 @@ function buildEmptyState(type) {
     const s = states[type] || states['error'];
     return `
         <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
-            <div class="text-6xl mb-4">${s.icon}</div>
+            <div class="text-indigo-300 mb-4">${renderIcon(s.icon, 'w-14 h-14')}</div>
             <h3 class="text-xl font-bold mb-2">${s.title}</h3>
             <p class="text-sm opacity-50 max-w-sm">${s.subtitle}</p>
             ${s.action}

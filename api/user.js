@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     // This alone saves ~50-70% of KV reads from repeat page loads
     res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=90');
 
-    const auth = await getAuthContext(req);
+    const auth = await getAuthContext(req, { allowQueryFallback: true });
     const requestedWallet = typeof req.query?.wallet === 'string' ? req.query.wallet : '';
     const normalizedWallet = String(auth?.wallet || requestedWallet || '').toLowerCase();
 
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
         pipe.zscore('leaderboard:points', walletKey);
 
         const [
-            profile,
+            rawProfile,
             journey,
             mintRank,
             mintScore,
@@ -61,6 +61,7 @@ export default async function handler(req, res) {
             pointsScore
         ] = await pipe.exec();
 
+        const profile = sanitizeProfileHash(rawProfile);
         console.log(`[UserAPI] Raw profile for ${walletKey}:`, profile);
 
         const parsedJourney = parseJourney(journey);
@@ -187,7 +188,7 @@ export default async function handler(req, res) {
         let bestMetric = -1;
 
         for (let i = 0; i < candidates.length; i++) {
-            const profile = results[i * 3] || {};
+            const profile = sanitizeProfileHash(results[i * 3] || {});
             const mintScore = parseFloat(results[i * 3 + 1] || 0);
             const pointsScore = parseFloat(results[i * 3 + 2] || 0);
             const totalMints = parseInt(profile?.total_mints, 10) || 0;
@@ -209,6 +210,13 @@ export default async function handler(req, res) {
             try { return typeof item === 'string' ? JSON.parse(item) : item; }
             catch { return item; }
         });
+    }
+
+    function sanitizeProfileHash(value) {
+        if (!value || typeof value !== 'object') return {};
+        return Object.fromEntries(
+            Object.entries(value).filter(([key]) => Number.isNaN(Number(key)))
+        );
     }
 
     function findFavoriteCollection(journey) {

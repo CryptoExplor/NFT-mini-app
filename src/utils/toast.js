@@ -1,4 +1,6 @@
 
+import { renderIcon } from './icons.js';
+
 class ToastManager {
     constructor() {
         this.container = null;
@@ -54,8 +56,8 @@ class ToastManager {
 
         const iconSpan = document.createElement('span');
         iconSpan.className = 'toast-icon';
-        iconSpan.style.fontSize = '1.2em';
-        iconSpan.textContent = this.getIcon(type);
+        iconSpan.style.display = 'inline-flex';
+        iconSpan.innerHTML = this.getIcon(type);
 
         const msgSpan = document.createElement('span');
         msgSpan.className = 'toast-message';
@@ -79,10 +81,10 @@ class ToastManager {
 
     getIcon(type) {
         const icons = {
-            success: '✓',
-            error: '✕',
-            warning: '⚠',
-            info: 'ℹ️'
+            success: renderIcon('CHECK', 'w-4 h-4'),
+            error: renderIcon('XMARK', 'w-4 h-4'),
+            warning: renderIcon('FLAME', 'w-4 h-4'),
+            info: renderIcon('CHART', 'w-4 h-4')
         };
         return icons[type] || icons.info;
     }
