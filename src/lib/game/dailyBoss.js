@@ -6,8 +6,10 @@
 export const BOSS_CONFIGS = [
     {
         name: "Zeus (Base God)",
-        collection: "base-gods",
-        // WARN-03 fix: external URLs 404'd; use an existing local placeholder until real assets exist
+        // NOTE: This is a fictional arena boss character, NOT tied to any external
+        // mintable collection. base-gods.js has been removed from collections/.
+        // This boss exists only as a battle opponent within the arena.
+        collection: "arena-boss",
         imageUrl: "/image.png",
         stats: { hp: 150, atk: 35, def: 20, spd: 15 },
         passive: "DIVINE",

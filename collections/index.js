@@ -4,7 +4,6 @@
  */
 
 import BaseFortunes from './BaseFortunes.js';
-import base_gods from './base-gods.js';
 import base_invaders from './base-invaders.js';
 import basemoods from './basemoods.js';
 import BASEHEADS_404 from './BASEHEADS_404.js';
@@ -18,7 +17,6 @@ import void_pfps from './void-pfps.js';
 
 export const COLLECTIONS_MAP = {
   'base-fortunes': BaseFortunes,
-  'base-gods': base_gods,
   'base-invaders': base_invaders,
   'base-moods': basemoods,
   'baseheads-404': BASEHEADS_404,
