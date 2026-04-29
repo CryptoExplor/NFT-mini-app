@@ -93,9 +93,23 @@ export default async function handler(req, res) {
 }
 
 function getLeaderboardKey(type, period, collectionSlug) {
+    // Per-collection leaderboards use the full pattern
     if (collectionSlug && ['mints', 'volume', 'gas'].includes(type) && period === 'all_time') {
         return `leaderboard:${type}:${period}:${collectionSlug}`;
     }
+
+    // BUGFIX: events.js writes points/reputation WITHOUT a period suffix:
+    //   leaderboard:points           (not leaderboard:points:all_time)
+    //   leaderboard:reputation       (not leaderboard:reputation:all_time)
+    // Weekly points uses: leaderboard:points:week:{weekNum}
+    if (type === 'points') {
+        return period === 'all_time' ? 'leaderboard:points' : `leaderboard:points:week:${period}`;
+    }
+    if (type === 'reputation') {
+        return 'leaderboard:reputation'; // reputation has no weekly variant
+    }
+
+    // All other types (mints, volume, gas, battle_wins) use the standard pattern
     return `leaderboard:${type}:${period}`;
 }
 
