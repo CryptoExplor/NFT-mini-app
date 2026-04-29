@@ -23,6 +23,14 @@ if (!JWT_SECRET_RAW) {
 const JWT_SECRET = JWT_SECRET_RAW ? new TextEncoder().encode(JWT_SECRET_RAW) : null;
 const JWT_EXPIRY_SECONDS = 3600; // 1 hour
 
+function getCookieAttributes(requestHost, requestProto) {
+    const isLocalHost = typeof requestHost === 'string' && /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(requestHost);
+    if (isLocalHost || requestProto === 'http') {
+        return ['HttpOnly', 'SameSite=Lax', 'Path=/'];
+    }
+    return ['HttpOnly', 'Secure', 'SameSite=None', 'Path=/'];
+}
+
 /**
  * Parse SIWE message using the official siwe package.
  * Falls back to manual parsing if the package fails.
@@ -165,14 +173,16 @@ async function handler(req, res) {
             .sign(JWT_SECRET);
 
         // Define cookie expiration to match JWT (1 hour)
-        const maxAge = 60 * 60; 
+        const maxAge = 60 * 60;
+        const cookieAttributes = getCookieAttributes(requestHost, requestProto);
 
-        // Set HttpOnly, Secure, SameSite=None cookie for the JWT
-        res.setHeader('Set-Cookie', `jwt=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`);
+        res.setHeader('Set-Cookie', `jwt=${token}; ${cookieAttributes.join('; ')}; Max-Age=${maxAge}`);
 
         return res.status(200).json({
             address: parsed.address,
-            domain: parsed.domain
+            domain: parsed.domain,
+            token,
+            expiresAt: Date.now() + (JWT_EXPIRY_SECONDS * 1000),
         });
     } catch (error) {
         console.error('[Auth Verify] Error:', error.message);

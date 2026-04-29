@@ -3,6 +3,12 @@ import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
 import { renderIcon } from '../../utils/icons.js';
 import { escapeHtml, sanitizeUrl } from '../../utils/html.js';
+import { getDailyBoss, checkBossVictory } from '../../lib/game/dailyBoss.js';
+import { getGlobalLeaderboard, getPlayerPoints } from '../../lib/game/points.js';
+import { getRankByPoints, formatRankBadge } from '../../lib/game/rankSystem.js';
+import { getAccount } from '@wagmi/core';
+import { wagmiAdapter } from '../../wallet.js';
+import { getPlayerTournamentStatus } from '../../lib/game/tournament.js';
 
 /**
  * Premium Challenge Board Component
@@ -175,29 +181,75 @@ export class ChallengeBoard {
         const aiCount = this.challenges.filter(c => c.isAi).length;
         const pvpCount = totalChallenges - aiCount;
 
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        const playerPoints = getPlayerPoints(account?.address);
+        const playerRank = getRankByPoints(playerPoints);
+        
+        // Async fetch for leaderboard - we can use the mock for now
+        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const topPlayer = leaderboard[0];
+
         this.container.innerHTML = `
             <!-- Hero Section -->
-            <div class="text-center py-8 mb-4 relative">
-                <div class="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent rounded-3xl"></div>
-                <div class="relative">
-                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase tracking-[0.2em] font-bold mb-4">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                        Live Arena
+            <div class="relative py-10 mb-6 overflow-hidden rounded-3xl border border-white/5 bg-slate-900/40 backdrop-blur-md">
+                <div class="absolute inset-0 bg-gradient-to-b from-indigo-500/10 to-transparent"></div>
+                
+                <div class="relative flex flex-col md:flex-row items-center justify-between px-8 gap-8">
+                    <!-- Left: Main Title -->
+                    <div class="text-center md:text-left">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase tracking-[0.2em] font-bold mb-4">
+                            <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                            Live Arena
+                        </div>
+                        <h2 class="text-4xl md:text-5xl font-black mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-indigo-400 italic tracking-tighter">
+                            BATTLE ARENA
+                        </h2>
+                        <div class="flex items-center justify-center md:justify-start gap-4 text-xs text-slate-500 font-medium">
+                            <span class="flex items-center gap-1.5">${renderIcon('SWORDS', 'w-3.5 h-3.5')} ${totalChallenges} ACTIVE</span>
+                            <span class="w-1 h-1 rounded-full bg-slate-800"></span>
+                            <span class="flex items-center gap-1.5">${renderIcon('USER', 'w-3.5 h-3.5')} ${pvpCount} PLAYERS</span>
+                        </div>
                     </div>
-                    <h2 class="text-3xl md:text-4xl font-black mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-indigo-400">
-                        Battle Arena
-                    </h2>
-                    <p class="text-slate-400 text-sm max-w-md mx-auto">
-                        Choose your opponent. Pick your fighter. Enter the arena.
-                    </p>
-                    <div class="flex justify-center gap-4 mt-4 text-xs text-slate-500">
-                        <span>${aiCount} AI</span>
-                        <span class="text-slate-700">·</span>
-                        <span>${pvpCount} PvP</span>
-                        <span class="text-slate-700">·</span>
-                        <span>${totalChallenges} Total</span>
+
+                    <!-- Right: Competitive Stats -->
+                    <div class="flex flex-wrap justify-center gap-4">
+                        <!-- Next Goal (Retention Hook) -->
+                        <div class="px-5 py-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center gap-2 group min-w-[140px]">
+                            <div class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Next Goal</div>
+                            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                                <div class="h-full bg-indigo-400 rounded-full shadow-[0_0_10px_rgba(129,140,248,0.5)]" style="width: ${Math.min(95, (playerPoints % 100))}%;"></div>
+                            </div>
+                            <div class="text-[10px] font-bold text-white/60 tracking-tight">${100 - (playerPoints % 100)} pts to next tier</div>
+                        </div>
+
+                        <!-- My Status -->
+                        <div class="px-5 py-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-4">
+                            <div class="text-right">
+                                <div class="text-[10px] text-indigo-400 uppercase font-black tracking-widest mb-1">Your Rank</div>
+                                ${formatRankBadge(playerRank)}
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Tournament Banner (Urgency Layer) -->
+            ${this.renderTournamentBanner()}
+
+            <!-- Featured Highlights (Social Layer) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                ${this.renderFeaturedBattle()}
+                ${this.renderTopPlayerShowcase()}
+            </div>
+
+            <!-- Daily Boss Banner (Retention Layer) -->
+            ${this.renderDailyBossBanner()}
+
+            <!-- Just One More? (Session Hook) -->
+            <div class="flex flex-col items-center mb-10 text-center">
+                <div class="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em] mb-3 opacity-50">Master the Arena</div>
+                <h3 class="text-xl font-bold text-white mb-6">Forge your legacy in combat</h3>
+                <div class="w-24 h-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent mb-8"></div>
             </div>
 
             <!-- Post Challenge CTA -->
@@ -220,12 +272,27 @@ export class ChallengeBoard {
 
         $('#post-challenge-btn').addEventListener('click', () => this.onPostRequested());
 
+        // Daily Boss Event
+        const boss = getDailyBoss();
+        const bossBtn = $(`#fight-boss-btn-${boss.id}`);
+        if (bossBtn) {
+            bossBtn.addEventListener('click', () => this.onPreviewRequested(boss));
+        }
+
         this.challenges.forEach((challenge) => {
             const btn = $(`#challenge-btn-${challenge.id}`);
             if (btn) {
                 btn.addEventListener('click', () => this.onPreviewRequested(challenge));
             }
         });
+
+        // Tournament Banner Event
+        const tourneyBanner = $('#tournament-banner-cta');
+        if (tourneyBanner) {
+            tourneyBanner.addEventListener('click', () => {
+                document.dispatchEvent(new CustomEvent('SWITCH_TAB', { detail: { tab: 'leaderboard', subTab: 'tournament' } }));
+            });
+        }
     }
 
     renderCard(challenge, index) {
@@ -305,6 +372,66 @@ export class ChallengeBoard {
         `;
     }
 
+    renderDailyBossBanner() {
+        const boss = getDailyBoss();
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        const won = checkBossVictory(boss.id, account?.address || 'guest');
+        
+        return `
+            <div class="relative mb-8 p-6 md:p-8 rounded-3xl overflow-hidden border border-orange-500/30 shadow-[0_0_50px_rgba(249,115,22,0.1)] group">
+                <!-- Background FX -->
+                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-md z-0"></div>
+                <div class="absolute inset-0 bg-gradient-to-r from-orange-600/20 via-red-600/10 to-transparent z-0"></div>
+                <div class="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 blur-[80px] -mr-32 -mt-32 rounded-full animate-pulse z-0"></div>
+                
+                <div class="relative z-10 flex flex-col md:flex-row items-center gap-6 md:gap-10">
+                    <!-- Boss Avatar -->
+                    <div class="relative">
+                        <div class="w-32 h-32 md:w-40 md:h-40 rounded-2xl border-4 border-orange-500/40 overflow-hidden shadow-2xl rotate-3 group-hover:rotate-0 transition-transform duration-500">
+                            <img src="${boss.imageUrl}" class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all" alt="Boss" />
+                        </div>
+                        <div class="absolute -bottom-3 -right-3 px-3 py-1 bg-red-600 text-white text-[10px] font-black rounded-lg shadow-lg uppercase tracking-tighter">
+                            World Boss
+                        </div>
+                    </div>
+
+                    <!-- Info -->
+                    <div class="flex-1 text-center md:text-left">
+                        <div class="flex items-center justify-center md:justify-start gap-2 mb-2">
+                            <span class="text-orange-500">${renderIcon('FLAME', 'w-5 h-5')}</span>
+                            <span class="text-orange-400 text-xs font-black uppercase tracking-widest">Active Challenge</span>
+                        </div>
+                        <h3 class="text-3xl md:text-5xl font-black text-white mb-2 leading-tight uppercase italic tracking-tighter">
+                            ${boss.name}
+                        </h3>
+                        <p class="text-slate-400 text-sm md:text-base max-w-lg mb-6 leading-relaxed">
+                            A legendary force has entered the arena. Defeat them to claim 50 Arena Points and exclusive bragging rights. Only <span class="text-orange-400 font-bold">${100 - boss.dominancePercentile}%</span> have managed to win today.
+                        </p>
+                        
+                        <div class="flex flex-wrap justify-center md:justify-start gap-3">
+                            <button id="fight-boss-btn-${boss.id}" 
+                                    class="px-8 py-4 ${won ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400' : 'bg-orange-600 hover:bg-orange-500 text-white'} rounded-2xl font-black transition-all hover:scale-105 active:scale-95 flex items-center gap-3 shadow-xl">
+                                ${won ? renderIcon('CHECK', 'w-5 h-5') : renderIcon('SWORDS', 'w-5 h-5')}
+                                ${won ? 'BOSS DEFEATED' : 'CHALLENGE BOSS'}
+                            </button>
+                            <div class="px-5 py-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm flex items-center gap-3">
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Reward</span>
+                                    <span class="text-sm font-black text-white">+50 Points</span>
+                                </div>
+                                <div class="w-px h-6 bg-white/10"></div>
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Difficulty</span>
+                                    <span class="text-sm font-black text-orange-400 uppercase">Mythic</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     renderMiniStat(label, value, max, color) {
         const pct = Math.min(100, Math.max(5, ((value || 0) / max) * 100));
         return `
@@ -325,5 +452,101 @@ export class ChallengeBoard {
     show() {
         this.container.classList.remove('hidden');
         this.loadChallenges();
+    }
+
+    renderTournamentBanner() {
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        const status = getPlayerTournamentStatus(account?.address);
+        if (!status) return '';
+
+        const { tournament, rank } = status;
+        const timeLeft = this._getTimeLeft(tournament.end);
+
+        return `
+            <div class="mb-6 animate-fade-in">
+                <div id="tournament-banner-cta" class="relative p-6 rounded-2xl overflow-hidden border-2 border-yellow-500/20 bg-gradient-to-r from-yellow-500/20 via-slate-900/60 to-slate-900 cursor-pointer group hover:border-yellow-500/50 transition-all shadow-xl">
+                    <div class="absolute -right-12 -top-12 w-48 h-48 bg-yellow-500/5 blur-3xl rounded-full group-hover:bg-yellow-500/15 transition-all"></div>
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div class="flex items-center gap-5">
+                            <div class="w-14 h-14 rounded-2xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-3xl shadow-lg shadow-yellow-500/10 group-hover:scale-110 transition-transform">${renderIcon('TROPHY', 'w-6 h-6 text-yellow-500')}</div>
+                            <div>
+                                <h3 class="text-base font-black text-white uppercase italic tracking-tight mb-1">Weekly Tournament LIVE</h3>
+                                <div class="flex items-center gap-3">
+                                    <span class="flex items-center gap-1.5 text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 px-2.5 py-1 rounded-lg">
+                                        ${renderIcon('CLOCK', 'w-3 h-3')} ${timeLeft}
+                                    </span>
+                                    ${rank ? `<span class="text-[10px] font-black text-slate-400 uppercase tracking-widest border border-white/10 px-2.5 py-1 rounded-lg">Rank: #${rank}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest hidden lg:block">Climb the Ranks</span>
+                            <div class="px-8 py-3 rounded-xl bg-yellow-500 text-slate-950 text-xs font-black uppercase tracking-widest group-hover:bg-yellow-400 transition-all shadow-xl shadow-yellow-500/20">
+                                Enter Arena
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    _getTimeLeft(endTs) {
+        const diff = endTs - Date.now();
+        if (diff <= 0) return 'EXPIRED';
+        const hours = Math.floor(diff / (60 * 60 * 1000));
+        if (hours < 24) return `${hours}h left`;
+        return `${Math.floor(hours / 24)}d left`;
+    }
+
+    renderFeaturedBattle() {
+        const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+        const featured = history.find(b => b.playerWon && b.rounds > 5) || history[0];
+
+        if (!featured) return '';
+
+        return `
+            <div class="relative p-5 rounded-2xl border border-indigo-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-indigo-500/40 transition-all cursor-pointer" 
+                 onclick="document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', { detail: { battleId: '${featured.id}' } }))">
+                <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">Featured Replay</span>
+                    <span class="text-[9px] text-slate-500 font-mono">${featured.rounds} Rounds</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        ${renderIcon('PLAY', 'w-5 h-5')}
+                    </div>
+                    <div>
+                        <div class="text-sm font-black text-white italic truncate w-32">${featured.playerName} vs ${featured.enemyName}</div>
+                        <div class="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Watch Masterful Combat</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderTopPlayerShowcase() {
+        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const top = leaderboard[0];
+
+        if (!top) return '';
+
+        return `
+            <div class="relative p-5 rounded-2xl border border-yellow-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-yellow-500/40 transition-all">
+                <div class="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-transparent"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[9px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 px-2 py-0.5 rounded">Top Contender</span>
+                    <span class="text-[9px] text-slate-500 font-mono">#1 Global</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center text-xl shadow-lg shadow-yellow-500/10">${renderIcon('STAR', 'w-5 h-5 text-yellow-400')}</div>
+                    <div>
+                        <div class="text-sm font-black text-white italic">${shortenAddress(top.address)}</div>
+                        <div class="text-[10px] text-yellow-500/60 font-bold uppercase tracking-tight">${top.score.toLocaleString()} Points</div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 }

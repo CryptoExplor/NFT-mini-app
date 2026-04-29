@@ -35,13 +35,22 @@ export default defineConfig(({ mode }) => ({
           'vendor-utils': ['eventemitter3', 'object-hash'],
           'collections': ['./src/lib/loadCollections.js'],
           'mint-helpers': ['./src/lib/mintHelpers.js'],
+          // Isolate the heavy game engine so it is only fetched on the Battle page
+          'game-engine': [
+            './src/lib/battle/engineV2.js',
+            './src/lib/game/arenaRenderer.js',
+            './src/lib/game/matchmaking.js',
+            './src/lib/game/distributionEngine.js',
+          ],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     },
-    chunkSizeWarningLimit: 500,
+    // Raised from 500 → 700: the remaining large-chunk warnings are from vendor bundles
+    // (appkit, farcaster SDK) that cannot be reduced without breaking their internals.
+    chunkSizeWarningLimit: 700,
     assetsInlineLimit: 10240,
   },
 
@@ -87,7 +96,9 @@ export default defineConfig(({ mode }) => ({
 
   plugins: [
     ViteImageOptimizer({
-      test: /\.(jpe?g|png|gif|tiff|webp|avif)$/i,
+      // Exclude GIFs: the optimizer cannot compress them and actively inflates
+      // cover.gif from 11 MB to 24 MB, causing the build to exit with code 1.
+      test: /\.(jpe?g|png|tiff|webp|avif)$/i,
       png: { quality: 80 },
       jpeg: { quality: 80 },
       jpg: { quality: 80 },

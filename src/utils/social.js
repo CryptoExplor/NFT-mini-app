@@ -1,5 +1,9 @@
 import { toast } from '../utils/toast.js';
 import { getFarcasterSDK, isInFarcaster } from '../farcaster.js';
+import { getPlayerPoints } from '../lib/game/points.js';
+import { getRankByPoints } from '../lib/game/rankSystem.js';
+import { getAccount } from '@wagmi/core';
+import { wagmiAdapter } from '../wallet.js';
 
 const APP_ORIGIN = 'https://base-mintapp.vercel.app';
 const WARPCAST_COMPOSE_URL = 'https://warpcast.com/~/compose';
@@ -49,8 +53,6 @@ function getCollectionImageUrl(collection) {
 function getCollectionEmbeds(collection) {
     const shareUrl = getCollectionShareUrl(collection.slug);
     const imageUrl = getCollectionImageUrl(collection);
-    // Keep collection casts to a single embed to avoid duplicate cards in compose.
-    // `/share/:slug` already contains the collection image metadata.
     return uniqueUrls([shareUrl, imageUrl], 1);
 }
 
@@ -60,7 +62,6 @@ function getMainAppShareUrl() {
 
 function getMainAppEmbeds() {
     const shareUrl = getMainAppShareUrl();
-    // Keep main app share to a single embed to avoid duplicate cards.
     return uniqueUrls([shareUrl], 1);
 }
 
@@ -124,12 +125,7 @@ async function copySharePayload(payload) {
     toast.show('Unable to share automatically.', 'error');
 }
 
-/**
- * Get share text from collection config
- * Supports string or array of strings (random selection)
- */
 function getCollectionShareText(collection) {
-    // Try farcaster.shareText first (as it's currently the only place for share text)
     const shareTextConfig = collection.farcaster?.shareText;
 
     if (Array.isArray(shareTextConfig) && shareTextConfig.length > 0) {
@@ -139,19 +135,10 @@ function getCollectionShareText(collection) {
     return shareTextConfig || null;
 }
 
-/**
- * Get the platform-specific share URL for a collection
- */
 function getPlatformShareUrl(platform, slug) {
-    if (platform === 'farcaster') {
-        return getCollectionShareUrl(slug);
-    }
-    if (platform === 'web') {
-        return getCollectionShareUrl(slug);
-    }
-    if (platform === 'x') {
-        return getCollectionMintUrl(slug);
-    }
+    if (platform === 'farcaster') return getCollectionShareUrl(slug);
+    if (platform === 'web') return getCollectionShareUrl(slug);
+    if (platform === 'x') return getCollectionMintUrl(slug);
     return toAbsoluteUrl(`/mint/${slug}`);
 }
 
@@ -180,9 +167,6 @@ function buildClipboardPayload(text, primaryUrl, openSeaUrl) {
     return payload;
 }
 
-/**
- * Share a collection (Generic/Web Share)
- */
 export async function shareCollection(collection) {
     const fcUrl = getPlatformShareUrl('farcaster', collection.slug);
     const baseAppUrl = getPlatformShareUrl('web', collection.slug);
@@ -196,7 +180,6 @@ export async function shareCollection(collection) {
     const text = appendOpenSeaText(baseText, openSeaUrl);
     const intentUrl = buildComposeIntentUrl(text, embeds);
 
-    // 1. Try Farcaster Native Share if in Farcaster/Base App
     if (isInFarcaster()) {
         if (await tryComposeCast(text, embeds)) {
             return;
@@ -205,7 +188,6 @@ export async function shareCollection(collection) {
         return;
     }
 
-    // 2. Try Web Share API
     const shareData = {
         title: collection.name,
         text,
@@ -216,19 +198,15 @@ export async function shareCollection(collection) {
         if (navigator?.share) {
             await navigator.share(shareData);
             return;
-        } else {
-            // Web fallback to Warpcast compose intent
-            await openExternalUrl(intentUrl);
-            return;
         }
+
+        await openExternalUrl(intentUrl);
     } catch (error) {
         if (error?.name !== 'AbortError') {
             console.error('Share failed:', error);
-            // Fallback to Warpcast compose intent first
             const opened = await openExternalUrl(intentUrl);
             if (opened) return;
 
-            // Last fallback to copy link + context
             const payload = buildClipboardPayload(text, fcUrl || baseAppUrl, openSeaUrl);
             if (imageUrl && !payload.includes(imageUrl)) {
                 await copySharePayload(`${payload}\nImage: ${imageUrl}`);
@@ -239,49 +217,71 @@ export async function shareCollection(collection) {
     }
 }
 
-/**
- * Share to feed (client-agnostic)
- */
-export async function shareToFeed(collection, customText = null) {
-    const url = getPlatformShareUrl('farcaster', collection.slug);
-    const openSeaUrl = getOpenSeaUrl(collection);
-    const embeds = getCollectionEmbeds(collection);
+export async function shareReplayToFeed(battleId, won = false) {
+    const origin = getAppOrigin();
+    const url = `${origin}/battle?replay=${battleId}`;
 
-    const configText = getCollectionShareText(collection);
-    const baseText = customText || configText || `Just minted ${collection.name} on Base!`;
+    const account = getAccount(wagmiAdapter.wagmiConfig);
+    const points = getPlayerPoints(account?.address);
+    const rank = getRankByPoints(points);
 
-    const text = appendOpenSeaText(baseText, openSeaUrl);
+    const text = won
+        ? `I just won a battle in the NFT Arena.\n\nRank: ${rank.label}${rank.id === 'mythic' ? ' - Mythic' : ''}\n\nWatch the replay and try to beat my squad:`
+        : `Check out this intense battle in the NFT Arena.\n\nCurrent Rank: ${rank.label}`;
+
+    const embeds = [url];
 
     if (await tryComposeCast(text, embeds)) {
         return;
     }
 
-    const fallbackEmbeds = uniqueUrls([url, ...embeds]);
-    await openExternalUrl(buildComposeIntentUrl(text, fallbackEmbeds));
+    await openExternalUrl(buildComposeIntentUrl(text, embeds));
 }
 
-/**
- * Share to Twitter/X
- */
+export async function shareCustomToFeed(text, url) {
+    const embeds = url ? [url] : [];
+
+    if (await tryComposeCast(text, embeds)) {
+        return;
+    }
+
+    await openExternalUrl(buildComposeIntentUrl(text, embeds));
+}
+
+export async function shareChallengeToFeed(challengeId, collectionName) {
+    const origin = getAppOrigin();
+    const url = `${origin}/battle?challenge=${challengeId}`;
+
+    const account = getAccount(wagmiAdapter.wagmiConfig);
+    const points = getPlayerPoints(account?.address);
+    const rank = getRankByPoints(points);
+
+    const text = `I'm putting my ${collectionName} on the line.\n\nRank: ${rank.label}${rank.id === 'mythic' ? ' - Mythic' : ''}\n\nWho wants to challenge my NFT? Click below to fight:`;
+
+    const embeds = [url];
+
+    if (await tryComposeCast(text, embeds)) {
+        return;
+    }
+
+    await openExternalUrl(buildComposeIntentUrl(text, embeds));
+}
+
 export function shareToTwitter(collection, customText = null) {
     const url = getPlatformShareUrl('web', collection.slug);
     const openSeaUrl = getOpenSeaUrl(collection);
 
     const configText = getCollectionShareText(collection);
     const baseText = customText || configText || `I'm minting ${collection.name} on Base!`;
-
     const text = appendOpenSeaText(baseText, openSeaUrl);
 
     const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     window.open(intentUrl, '_blank');
 }
 
-/**
- * Share the main app to feed (client-agnostic)
- */
 export async function shareAppToFeed() {
     const url = getMainAppShareUrl();
-    const text = 'Check out Base Mint — NFT Battle Arena on Base! Pick your fighter and enter the arena.';
+    const text = 'Check out Base Mint - NFT Battle Arena on Base. Pick your fighter and enter the arena.';
     const embeds = getMainAppEmbeds();
 
     if (await tryComposeCast(text, embeds)) {
@@ -289,4 +289,65 @@ export async function shareAppToFeed() {
     }
 
     await openExternalUrl(buildComposeIntentUrl(text, uniqueUrls([url], 1)));
+}
+
+/**
+ * Check if a wallet (or FID) follows another FID on Farcaster.
+ * Used for social combat synergies.
+ *
+ * NOTE: In production, this would query a Farcaster Hub or Neynar API.
+ * For now, this only trusts session context hints or cached results.
+ */
+export async function isFarcasterFollower(targetFid = 309857) {
+    if (!isInFarcaster()) return false;
+
+    const sdk = getFarcasterSDK();
+    const context = sdk?.context;
+    const userFid = context?.user?.fid;
+
+    if (!userFid) return false;
+    const cacheKey = `fc_follow_${userFid}_${targetFid}`;
+
+    try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached === '1') return true;
+        if (cached === '0') return false;
+    } catch { }
+
+    const followsTarget = Boolean(
+        context?.relationships?.following?.includes?.(targetFid) ||
+        context?.socialGraph?.following?.includes?.(targetFid)
+    );
+
+    try {
+        localStorage.setItem(cacheKey, followsTarget ? '1' : '0');
+    } catch { }
+
+    return followsTarget;
+}
+
+export function getFrameMetadata(battleId, challengeId = null) {
+    const origin = getAppOrigin();
+    if (challengeId) {
+        return {
+            'fc:frame': 'vNext',
+            'fc:frame:image': `${origin}/api/og/challenge/${challengeId}`,
+            'fc:frame:button:1': 'Accept Challenge',
+            'fc:frame:button:1:action': 'post_redirect',
+            'fc:frame:post_url': `${origin}/api/frame/challenge/${challengeId}`,
+        };
+    }
+    return {
+        'fc:frame': 'vNext',
+        'fc:frame:image': `${origin}/api/og/battle/${battleId}`,
+        'fc:frame:button:1': 'Watch Replay',
+        'fc:frame:button:1:action': 'post_redirect',
+        'fc:frame:button:2': 'Enter Arena',
+        'fc:frame:button:2:action': 'post_redirect',
+        'fc:frame:post_url': `${origin}/api/frame/battle/${battleId}`,
+    };
+}
+
+export function getDominanceMessage(winCount, percentile = 72) {
+    return `I just defeated ${percentile}% of players in the Arena.\n\nThink you can top that? Challenge me:`;
 }

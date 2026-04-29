@@ -2,6 +2,11 @@ import { $ } from '../../utils/dom.js';
 import { getAccount } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
 import { renderIcon } from '../../utils/icons.js';
+import { getPlayerPoints, getGlobalLeaderboard } from '../../lib/game/points.js';
+import { getRankByPoints, formatRankBadge } from '../../lib/game/rankSystem.js';
+import { shortenAddress } from '../../utils/dom.js';
+import { escapeHtml } from '../../utils/html.js';
+import { TournamentBoard } from './TournamentBoard.js';
 
 const HISTORY_KEY = 'battle_history';
 
@@ -10,7 +15,7 @@ export function getReplayHref(battleId) {
 }
 
 /**
- * Save a battle result to localStorage (legacy - kept for quick optimistic UI, though server is source of truth)
+ * Save a battle result to localStorage (legacy - kept for quick optimistic UI)
  */
 export function saveBattleResult(result) {
     try {
@@ -62,123 +67,64 @@ function getLegacyBattleStats() {
 }
 
 /**
- * Get verifiable battle stats from API and recreate logs using deterministic engine.
+ * Get verifiable battle stats from API
  */
 export async function getBattleStats(walletAddress) {
     try {
-        if (!walletAddress) {
-            return getLegacyBattleStats();
-        }
+        if (!walletAddress) return getLegacyBattleStats();
 
         const { getBattleHistory } = await import('../../lib/game/matchmaking.js');
         const rawHistory = await getBattleHistory(walletAddress);
 
-        // If backend fails or is empty, keep the local optimistic history visible.
-        if (!rawHistory || !rawHistory.length) {
-            return getLegacyBattleStats();
-        }
+        if (!rawHistory || !rawHistory.length) return getLegacyBattleStats();
+        const normalizedWallet = String(walletAddress).toLowerCase();
+        const history = rawHistory.map((record) => {
+            const p1 = record?.players?.p1;
+            const p2 = record?.players?.p2;
+            if (!p1?.name || !p2?.name) return null;
 
-        const { simulateBattle } = await import('../../lib/game/engine.js');
-        const { createPRNG } = await import('../../lib/battle/prng.js');
+            const isWalletP1 = String(p1.id || '').toLowerCase() === normalizedWallet;
+            const side = isWalletP1 ? 'P1' : 'P2';
+            const opponent = isWalletP1 ? p2 : p1;
+            const logs = Array.isArray(record.logs) ? record.logs : [];
+            const fallbackPlayerDmg = logs
+                .filter((log) => log.attackerSide === side)
+                .reduce((sum, log) => sum + (log.damage || 0), 0);
+            const fallbackEnemyDmg = logs
+                .filter((log) => log.attackerSide !== side)
+                .reduce((sum, log) => sum + (log.damage || 0), 0);
 
-        let wins = 0, losses = 0, total = 0, totalDmg = 0, totalCrits = 0;
-        const winnerCounts = {};
-        const history = [];
-
-        for (const record of rawHistory) {
-            if (!record.seed || !record.players) continue;
-            total++;
-
-            const p1 = record.players.p1;
-            const p2 = record.players.p2;
-            const isAiBattle = record.options?.isAiBattle || false;
-            const isWalletP1 = p1.id?.toLowerCase() === walletAddress.toLowerCase();
-
-            let resolvedWinnerSide;
-            let battleDmg = 0;
-            let battleCrits = 0;
-            let totalRounds = 0;
-
-            if (isAiBattle) {
-                // ── AI battles: trust server-stored result ──
-                // AI battles use engineV2.js locally; re-simulating with engine.js (V1)
-                // produces a different winner. The stored result is the authoritative truth.
-                resolvedWinnerSide = record.result?.winnerSide;
-                totalRounds = record.result?.rounds || 0;
-
-                // Read pre-computed stats stored at record time (via recordAiBattle extras)
-                const extras = record.extras || {};
-                battleDmg = isWalletP1 ? (extras.p1Dmg || 0) : (extras.p2Dmg || 0);
-                battleCrits = extras.crits || 0;
-            } else {
-                // ── PvP battles: re-simulate from seed for cryptographic verification ──
-                const prng = createPRNG(record.seed);
-                const battleResult = simulateBattle(
-                    { name: p1.name, ...p1.stats },
-                    { name: p2.name, ...p2.stats },
-                    prng,
-                    {
-                        playerItem: p1.item,
-                        enemyItem: p2.item,
-                        environment: p1.arena,
-                        playerTeam: p1.team || [],
-                        enemyTeam: p2.team || [],
-                        isAiBattle: false
-                    }
-                );
-
-                // Verifiability check (only meaningful for PvP with deterministic V1 engine)
-                if (battleResult.winnerSide !== record.result?.winnerSide) {
-                    console.warn(`[Verifiability] Check Failed! Battle ${record.battleId} server winner ${record.result?.winnerSide} mismatches simulation ${battleResult.winnerSide}`);
-                }
-
-                resolvedWinnerSide = battleResult.winnerSide;
-                totalRounds = battleResult.totalRounds;
-
-                // Derive dmg/crits from re-simulated logs
-                const myName = isWalletP1 ? p1.name : p2.name;
-                const myLogs = battleResult.logs.filter(l => l.attacker === myName);
-                battleDmg = myLogs.reduce((s, l) => s + (l.damage || 0), 0);
-                battleCrits = myLogs.filter(l => l.isCrit).length;
-            }
-
-            // Determine outcome for current wallet
-            const walletWon = (isWalletP1 && resolvedWinnerSide === 'P1') ||
-                              (!isWalletP1 && resolvedWinnerSide === 'P2');
-
-            if (walletWon) wins++; else losses++;
-
-            totalDmg += battleDmg;
-            totalCrits += battleCrits;
-
-            const myName = isWalletP1 ? p1.name : p2.name;
-            if (walletWon) {
-                winnerCounts[myName] = (winnerCounts[myName] || 0) + 1;
-            }
-
-            history.push({
+            return {
                 id: record.battleId,
-                playerName: myName,
-                enemyName: isWalletP1 ? p2.name : p1.name,
-                playerWon: walletWon,
-                isAi: isAiBattle,
-                rounds: totalRounds,
-                playerDmg: battleDmg,
-                crits: battleCrits,
+                playerName: isWalletP1 ? p1.name : p2.name,
+                enemyName: opponent?.name || 'Unknown',
+                playerWon: record.result?.winnerSide === side,
+                isAi: Boolean(record.options?.isAiBattle),
+                rounds: record.result?.rounds || logs[logs.length - 1]?.round || 0,
+                playerDmg: side === 'P1' ? (record.extras?.p1Dmg ?? fallbackPlayerDmg) : (record.extras?.p2Dmg ?? fallbackPlayerDmg),
+                enemyDmg: side === 'P1' ? (record.extras?.p2Dmg ?? fallbackEnemyDmg) : (record.extras?.p1Dmg ?? fallbackEnemyDmg),
+                crits: logs.filter((log) => log.attackerSide === side && log.isCrit).length,
+                dodges: logs.filter((log) => log.targetSide === side && log.isDodge).length,
                 timestamp: record.createdAt || Date.now(),
-                canReplay: Boolean(record.battleId),
-            });
-        }
+                canReplay: Boolean(record.battleId)
+            };
+        }).filter(Boolean);
 
-        // Sort descending by timestamp
-        history.sort((a, b) => b.timestamp - a.timestamp);
+        const wins = history.filter(h => h.playerWon).length;
+        const total = history.length;
 
-        const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
-        const bestFighter = Object.entries(winnerCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
-
-        return { wins, losses, total, winRate, totalDmg, totalCrits, bestFighter, history, source: 'synced' };
+        return { 
+            wins, 
+            losses: total - wins, 
+            total, 
+            winRate: total > 0 ? Math.round((wins/total)*100) : 0, 
+            totalDmg: history.reduce((s, h) => s + h.playerDmg, 0),
+            totalCrits: history.reduce((s, h) => s + h.crits, 0),
+            bestFighter: 'Various',
+            history, 
+            source: 'synced' 
+        };
     } catch (err) {
-        console.error("Leaderboard Stats Error:", err);
         return getLegacyBattleStats();
     }
 }
@@ -189,60 +135,166 @@ export async function getBattleStats(walletAddress) {
 export class BattleLeaderboard {
     constructor(containerId) {
         this.containerId = containerId;
+        this.currentView = 'leaderboard';
+        this.boardType = 'global'; // global, daily, tournament
+        this.historyData = [];
+        this.tournamentBoard = new TournamentBoard(null); // will be used to render partials
     }
 
     async render() {
         const container = $(`#${this.containerId}`);
         if (!container) return;
 
-        // Start loading state
+        const account = getAccount(wagmiAdapter.wagmiConfig);
+        const playerPoints = getPlayerPoints(account?.address);
+        const playerRank = getRankByPoints(playerPoints);
+        
+        // Calculate Global Rank from leaderboard
+        const board = await getGlobalLeaderboard();
+        const globalRankIdx = board.findIndex(e => e.address === account?.address);
+        const globalRankText = globalRankIdx !== -1 ? `#${globalRankIdx + 1}` : (account?.address ? '#50+' : '#--');
+
         container.innerHTML = `
-            <div class="mt-8 mb-6 text-center py-12">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
-                <div class="text-sm font-mono text-slate-400">SYNCING VERIFIABLE HISTORY...</div>
+            <div class="mt-8 mb-6">
+                <!-- Player Status Card -->
+                <div class="relative p-6 rounded-3xl overflow-hidden border border-white/10 bg-slate-900/40 backdrop-blur-md mb-8 group">
+                    <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-transparent to-transparent"></div>
+                    <div class="relative flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div class="flex items-center gap-5">
+                            <div class="w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-2xl shadow-xl">
+                                ${renderIcon('USER', 'w-8 h-8 ' + playerRank.textClass)}
+                            </div>
+                            <div class="text-center md:text-left">
+                                <div class="flex items-center justify-center md:justify-start gap-2 mb-1">
+                                    <h2 class="text-xl font-black text-white">${account?.address ? shortenAddress(account.address) : 'Guest Player'}</h2>
+                                    ${formatRankBadge(playerRank, 'lg')}
+                                </div>
+                                <p class="text-slate-500 text-sm font-medium">Global Ranking Status</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-8">
+                            <div class="text-center">
+                                <div class="text-2xl font-black text-white">${playerPoints}</div>
+                                <div class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Arena Points</div>
+                            </div>
+                            <div class="w-px h-10 bg-white/10"></div>
+                            <div class="text-center">
+                                <div class="text-2xl font-black text-indigo-400">${globalRankText}</div>
+                                <div class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Global Rank</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View Toggle -->
+                <div class="flex items-center justify-center gap-2 mb-8 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit mx-auto">
+                    <button id="lb-view-board" class="px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${this.currentView === 'leaderboard' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}">Leaderboard</button>
+                    <button id="lb-view-history" class="px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${this.currentView === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}">My History</button>
+                </div>
+
+                <div id="lb-content-area">
+                    ${this.currentView === 'leaderboard' ? await this.renderLeaderboardView() : await this.renderHistoryView()}
+                </div>
             </div>
         `;
 
+        this._attachEvents();
+    }
+
+    async renderLeaderboardView() {
+        if (this.boardType === 'tournament') {
+            const tempDiv = document.createElement('div');
+            tempDiv.id = 'temp-tournament-container';
+            this.tournamentBoard.containerId = tempDiv.id;
+            await this.tournamentBoard.render();
+            return tempDiv.innerHTML;
+        }
+
+        const board = await getGlobalLeaderboard();
+        
+        return `
+            <div class="bg-white/[0.03] backdrop-blur-sm rounded-3xl border border-white/10 overflow-hidden">
+                <div class="p-5 border-b border-white/5 flex items-center justify-between">
+                    <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Elite Standings</h3>
+                    <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg border border-white/5">
+                        <button id="lb-type-global" class="text-[9px] font-bold px-2 py-0.5 rounded transition-all ${this.boardType === 'global' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-300'}">GLOBAL</button>
+                        <button id="lb-type-tournament" class="text-[9px] font-bold px-2 py-0.5 rounded transition-all ${this.boardType === 'tournament' ? 'bg-yellow-500 text-slate-950' : 'text-slate-500 hover:text-slate-300'}">TOURNAMENT</button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-[10px] uppercase tracking-widest text-slate-500 border-b border-white/5">
+                                <th class="px-6 py-4 font-bold">Rank</th>
+                                <th class="px-6 py-4 font-bold">Fighter</th>
+                                <th class="px-6 py-4 font-bold">Status</th>
+                                <th class="px-6 py-4 font-bold text-right">Points</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/[0.03]">
+                            ${board.length === 0 ? `
+                                <tr><td colspan="4" class="px-6 py-12 text-center text-slate-600 text-sm italic">The arena is empty... for now.</td></tr>
+                            ` : board.map((entry, idx) => {
+                                const rank = getRankByPoints(entry.score);
+                                return `
+                                    <tr class="hover:bg-white/[0.02] transition-colors group">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-sm font-mono ${idx < 3 ? 'text-indigo-400 font-black' : 'text-slate-500'}">#${idx + 1}</span>
+                                                ${idx === 0 ? `<span class="text-yellow-400">${renderIcon('STAR', 'w-5 h-5')}</span>` : ''}
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">${shortenAddress(entry.address)}</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            ${formatRankBadge(rank)}
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <span class="text-sm font-black text-indigo-400">${entry.score}</span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    async renderHistoryView() {
         const account = getAccount(wagmiAdapter.wagmiConfig);
         const stats = await getBattleStats(account?.address);
+        this.historyData = stats.history;
 
         const sourceBadge = stats.source === 'synced'
             ? '<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">SERVER SYNCED</span>'
             : '<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">LOCAL FALLBACK</span>';
 
-        container.innerHTML = `
-            <div class="mt-8 mb-6">
-                <!-- Stats Cards -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    ${this._statCard(renderIcon('SWORDS', 'w-5 h-5'), 'Battles', stats.total, 'indigo')}
-                    ${this._statCard(renderIcon('TROPHY', 'w-5 h-5'), 'Wins', stats.wins, 'emerald')}
-                    ${this._statCard(renderIcon('SKULL', 'w-5 h-5'), 'Losses', stats.losses, 'red')}
-                    ${this._statCard(renderIcon('CHART', 'w-5 h-5'), 'Win Rate', `${stats.winRate}%`, stats.winRate >= 50 ? 'emerald' : 'orange')}
-                </div>
+        return `
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                ${this._statCard(renderIcon('SWORDS', 'w-5 h-5'), 'Battles', stats.total, 'indigo')}
+                ${this._statCard(renderIcon('TROPHY', 'w-5 h-5'), 'Wins', stats.wins, 'emerald')}
+                ${this._statCard(renderIcon('SKULL', 'w-5 h-5'), 'Losses', stats.losses, 'red')}
+                ${this._statCard(renderIcon('CHART', 'w-5 h-5'), 'Win Rate', `${stats.winRate}%`, stats.winRate >= 50 ? 'emerald' : 'orange')}
+            </div>
 
-                <!-- Extra Stats Row -->
-                <div class="grid grid-cols-3 gap-3 mb-6">
-                    ${this._statCard(renderIcon('DAMAGE', 'w-5 h-5'), 'Total Dmg', stats.totalDmg.toLocaleString(), 'orange')}
-                    ${this._statCard(renderIcon('CRIT', 'w-5 h-5'), 'Crits', stats.totalCrits, 'yellow')}
-                    ${this._statCard(renderIcon('FLAME', 'w-5 h-5'), 'Best Fighter', stats.bestFighter, 'purple')}
+            <div class="bg-white/[0.03] backdrop-blur-sm rounded-3xl border border-white/10 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Recent Encounters</h3>
+                    ${sourceBadge}
                 </div>
-
-                <!-- Recent Battles -->
-                <div class="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Verifiable History</h3>
-                        ${sourceBadge}
-                    </div>
-                    <div class="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar">
-                        ${stats.history.length === 0
-                ? '<div class="text-slate-600 text-sm text-center py-6">No battles yet. Challenge an opponent!</div>'
-                : stats.history.slice(0, 15).map(b => this._battleRow(b)).join('')
-            }
-                    </div>
+                <div class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                    ${stats.history.length === 0
+                        ? '<div class="text-slate-600 text-sm text-center py-12 italic">No battles documented. Enter the arena to start your legacy.</div>'
+                        : stats.history.slice(0, 30).map(b => this._battleRow(b)).join('')
+                    }
                 </div>
             </div>
         `;
-        this._attachReplayEvents(stats.history);
     }
 
     _statCard(iconHtml, label, value, color) {
@@ -267,7 +319,7 @@ export class BattleLeaderboard {
             <div class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/[0.03] group transition-colors">
                 <div class="flex items-center gap-2 min-w-0">
                     ${badge}${aiTag}
-                    <span class="text-sm text-slate-300 truncate font-medium">vs ${battle.enemyName}</span>
+                    <span class="text-sm text-slate-300 truncate font-medium">vs ${escapeHtml(battle.enemyName)}</span>
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
                     <span class="text-[10px] text-slate-500 font-mono hidden md:inline-block">${battle.rounds} ROUNDS</span>
@@ -285,23 +337,56 @@ export class BattleLeaderboard {
                     ${renderIcon('PLAY', 'w-3.5 h-3.5 group-hover:scale-110 transition-transform')}
                     WATCH
                 </button>
-                <a href="${getReplayHref(battleId)}" class="flex items-center justify-center p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 transition-colors" aria-label="Open shareable replay link">
-                    ${renderIcon('EXTERNAL', 'w-3.5 h-3.5')}
-                </a>
             </div>
         `;
     }
 
-    _attachReplayEvents(history) {
-        document.querySelectorAll('.replay-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const battleId = btn.getAttribute('data-battle-id');
-                const battle = history.find(h => h.id === battleId);
-                if (!battle) return;
+    _attachEvents() {
+        $('#lb-view-board')?.addEventListener('click', () => {
+            this.currentView = 'leaderboard';
+            this.render();
+        });
+        $('#lb-view-history')?.addEventListener('click', () => {
+            this.currentView = 'history';
+            this.render();
+        });
 
-                // Fire custom event to battle page to show replay
+        $('#lb-type-global')?.addEventListener('click', () => {
+            this.boardType = 'global';
+            this.render();
+        });
+
+        $('#lb-type-tournament')?.addEventListener('click', () => {
+            this.boardType = 'tournament';
+            this.render();
+        });
+
+        this._attachReplayEvents();
+        this._attachGlobalEvents();
+    }
+
+    _attachGlobalEvents() {
+        // Listen for external tab switches (e.g. from Tournament Banner)
+        if (!window._leaderboardEventAttached) {
+            document.addEventListener('SWITCH_TAB', (e) => {
+                if (e.detail.tab === 'leaderboard') {
+                    this.currentView = 'leaderboard';
+                    if (e.detail.subTab === 'tournament') {
+                        this.boardType = 'tournament';
+                    }
+                    this.render();
+                }
+            });
+            window._leaderboardEventAttached = true;
+        }
+    }
+
+    _attachReplayEvents() {
+        document.querySelectorAll('.replay-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const battleId = btn.getAttribute('data-battle-id');
                 document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', {
-                    detail: { battleId: battle.id }
+                    detail: { battleId }
                 }));
             });
         });

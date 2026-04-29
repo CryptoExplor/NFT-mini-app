@@ -1,5 +1,6 @@
 import { $, shortenAddress } from '../../utils/dom.js';
 import { renderIcon } from '../../utils/icons.js';
+import { escapeHtml, sanitizeUrl } from '../../utils/html.js';
 
 /**
  * Premium Match Preview Modal
@@ -48,6 +49,15 @@ export class MatchPreviewModal {
 
         const pStats = this.playerData ? this.playerData.stats : null;
         const eStats = this.enemyData.stats;
+        const playerImageUrl = sanitizeUrl(this.playerData?.imageUrl || '');
+        const enemyImageUrl = sanitizeUrl(this.enemyData?.imageUrl || '');
+        const playerName = this.playerData ? escapeHtml(this.playerData.name || 'Select Fighter') : 'Select Fighter';
+        const playerTrait = this.playerData?.trait ? escapeHtml(this.playerData.trait) : '';
+        const enemyTitle = escapeHtml(this.enemyData.name || `${this.enemyData.collectionName || 'Enemy'} #${this.enemyData.nftId || '?'}`);
+        const enemyTrait = this.enemyData?.trait ? escapeHtml(this.enemyData.trait) : '';
+        const enemyDifficulty = this.enemyData?.difficulty ? escapeHtml(this.enemyData.difficulty) : '';
+        const enemyAddress = escapeHtml(this.enemyData.player || '');
+        const enemyShortAddress = escapeHtml(shortenAddress(this.enemyData.player || ''));
 
         this.container.innerHTML = `
             <!-- Header -->
@@ -68,18 +78,18 @@ export class MatchPreviewModal {
 
                     <!-- Avatar -->
                     <div class="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-indigo-900/30 mb-4 flex items-center justify-center border-2 border-indigo-500/30 group-hover:border-indigo-400/50 transition-all overflow-hidden shadow-[0_0_30px_rgba(99,102,241,0.15)]">
-                        ${this.playerData?.imageUrl
-                ? `<img src="${this.playerData.imageUrl}" class="w-full h-full object-contain" alt="Your Fighter" />`
+                        ${playerImageUrl
+                ? `<img src="${playerImageUrl}" class="w-full h-full object-contain" alt="Your Fighter" />`
                 : `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-indigo-400 group-hover:scale-110 transition-transform">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                </svg>`
             }
                     </div>
 
-                    <h3 class="text-lg font-bold text-indigo-100 mb-1">${this.playerData ? this.playerData.name : 'Select Fighter'}</h3>
+                    <h3 class="text-lg font-bold text-indigo-100 mb-1">${playerName}</h3>
                     <p class="text-xs text-indigo-400/70 mb-4">${this.playerData ? 'Tap to change' : 'Choose from your wallet'}</p>
 
-                    ${this.playerData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 mb-2">${this.playerData.trait}</span>` : ''}
+                    ${playerTrait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 mb-2">${playerTrait}</span>` : ''}
                     ${this.playerData?.loadout ? this.renderLayerBadges(this.playerData.loadout, 'player') : '<div class="mb-4"></div>'}
 
                     <!-- Player Stats -->
@@ -111,19 +121,19 @@ export class MatchPreviewModal {
 
                     <!-- Avatar -->
                     <div class="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-red-900/30 mb-4 flex items-center justify-center border-2 border-red-500/30 overflow-hidden shadow-[0_0_30px_rgba(239,68,68,0.15)]">
-                        ${this.enemyData?.imageUrl
-                ? `<img src="${this.enemyData.imageUrl}" class="w-full h-full object-contain" alt="Opponent" />`
+                        ${enemyImageUrl
+                ? `<img src="${enemyImageUrl}" class="w-full h-full object-contain" alt="Opponent" />`
                 : `<span class="text-3xl font-black ${this.enemyData?.isAi ? 'text-red-500/60' : 'text-red-500/60'}">${this.enemyData?.isAi ? 'AI' : 'P2'}</span>`
             }
                     </div>
 
-                    <h3 class="text-lg font-bold text-red-100 mb-1">${this.enemyData.collectionName} #${this.enemyData.nftId}</h3>
+                    <h3 class="text-lg font-bold text-red-100 mb-1">${enemyTitle}</h3>
                     ${this.enemyData.isAi
                 ? `<p class="text-xs text-red-400/60 font-semibold uppercase tracking-wider mb-4">AI Opponent${this.enemyData.difficulty ? ` · ${this.enemyData.difficulty}` : ''}</p>`
-                : `<p class="text-xs font-mono text-red-400/60 truncate max-w-[180px] mb-4" title="${this.enemyData.player || ''}">${shortenAddress(this.enemyData.player || '')}</p>`
+                : `<p class="text-xs font-mono text-red-400/60 truncate max-w-[180px] mb-4" title="${enemyAddress}">${enemyShortAddress}</p>`
             }
 
-                    ${this.enemyData?.trait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 border border-red-500/20 mb-2">${this.enemyData.trait}</span>` : ''}
+                    ${enemyTrait ? `<span class="text-[10px] px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 border border-red-500/20 mb-2">${enemyTrait}</span>` : ''}
                     ${this.enemyData?.loadout ? this.renderLayerBadges(this.enemyData.loadout, 'enemy') : '<div class="mb-4"></div>'}
 
                     <!-- Enemy Stats -->
@@ -159,7 +169,7 @@ export class MatchPreviewModal {
             $('#start-battle-btn').addEventListener('click', () => {
                 const pCombat = { name: this.playerData.name, ...this.playerData.stats, image: this.playerData.imageUrl || '' };
                 const eCombat = {
-                    name: `${this.enemyData.collectionName} #${this.enemyData.nftId}`,
+                    name: this.enemyData.name || `${this.enemyData.collectionName || 'Enemy'} #${this.enemyData.nftId || '?'}`,
                     ...this.enemyData.stats,
                     image: this.enemyData.imageUrl || '',
                     isAi: !!this.enemyData.isAi,
@@ -235,13 +245,13 @@ export class MatchPreviewModal {
         const textClass = isPlayer ? 'text-indigo-200' : 'text-red-200';
 
         if (loadout.item) {
-            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.item.collectionName}">${renderIcon('MAGIC', 'w-2.5 h-2.5')} ITEM</span>`);
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${escapeHtml(loadout.item.collectionName || 'Item')}">${renderIcon('MAGIC', 'w-2.5 h-2.5')} ITEM</span>`);
         }
         if (loadout.arena) {
-            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.arena.collectionName}">${renderIcon('MAP', 'w-2.5 h-2.5')} ARENA</span>`);
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${escapeHtml(loadout.arena.collectionName || 'Arena')}">${renderIcon('MAP', 'w-2.5 h-2.5')} ARENA</span>`);
         }
         if (loadout.teamSnapshot && loadout.teamSnapshot.length > 0) {
-            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.teamSnapshot.length} Allies">🤝 TEAM SYNERGY</span>`);
+            badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded border ${borderClass} ${bgClass} ${textClass} flex items-center gap-1 font-bold" title="${loadout.teamSnapshot.length} Allies">${renderIcon('USERS', 'w-2.5 h-2.5')} TEAM SYNERGY</span>`);
         }
 
         if (badges.length === 0) return '<div class="mb-4"></div>';

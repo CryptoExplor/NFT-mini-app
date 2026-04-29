@@ -85,6 +85,14 @@ export const PASSIVES = {
         effect: { healPercent: 0.08 },
         triggerCondition: 'ON_TURN_START',
     },
+    DIVINE: {
+        id: 'DIVINE',
+        name: 'Divine Protection',
+        description: 'Reduce all incoming damage by 15%. Every 4th turn, cleanse all debuffs and heal 10% HP.',
+        cooldown: 4,
+        effect: { damageReduction: 0.15, healPercent: 0.10, cleanse: true },
+        triggerCondition: 'PASSIVE_ALWAYS',
+    },
 };
 
 // ── Collection Passive Mapping ───────────────────────────────────
@@ -96,6 +104,7 @@ export const COLLECTION_PASSIVES = {
     'void-pfps': 'GHOST_STEP',   // Ultra-fast dodge
     'quantum-quills': 'DRAIN',        // Sustain DPS
     'base-fortunes': 'IRON_WALL',    // Tanky / defensive
+    'base-gods': 'DIVINE',           // Divine protection
 };
 
 // ── Trait Passive Overrides ──────────────────────────────────────

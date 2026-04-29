@@ -13,7 +13,7 @@ import {
     setChallengeAtomic,
     listActiveChallenges,
 } from '../kv.js';
-import hash from 'object-hash';
+import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
 
 const CHALLENGE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
@@ -107,10 +107,7 @@ async function handler(req, res) {
             const expiresAt = timestamp + CHALLENGE_EXPIRY_MS;
 
             // Compute snapshot hash for anti-tamper verification
-            const snapshotHash = await computeHash({
-                loadout,
-                stats: fighterStats || loadout.fighter?.stats || {}
-            });
+            const snapshotHash = computeLoadoutSnapshot(loadout, fighterStats || loadout.fighter?.stats);
 
             const challengeRecord = {
                 id: challengeId,
@@ -147,8 +144,5 @@ async function handler(req, res) {
     });
 }
 
-async function computeHash(data) {
-    return hash(data, { algorithm: 'sha256' });
-}
 
 export default withCors(handler);

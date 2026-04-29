@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 // Critical events (mints, wallet connect) are NEVER deduplicated.
 const DEDUP_TTL = 30_000; // 30 seconds
 const _recentEvents = new Map();
-const NEVER_DEDUP = new Set(['mint_success', 'mint_failure', 'mint_attempt', 'tx_sent', 'wallet_connect', 'battle_loadout_built', 'battle_started_v2', 'battle_result_v2']);
+const NEVER_DEDUP = new Set(['mint_success', 'mint_failure', 'mint_attempt', 'tx_sent', 'wallet_connect', 'battle_loadout_built', 'battle_started_v2', 'battle_result_v2', 'social_share', 'replay_conversion']);
 
 function shouldThrottle(type, data) {
     if (NEVER_DEDUP.has(type)) return false;
@@ -142,6 +142,27 @@ export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0
     trackEvent('battle_result_v2', {
         wallet,
         metadata: { won, isAi, rounds, opponent }
+    });
+}
+
+/**
+ * Track social share event
+ */
+export function trackShare(wallet, platform = 'farcaster', metadata = {}) {
+    trackEvent('social_share', {
+        wallet,
+        platform,
+        metadata
+    });
+}
+
+/**
+ * Track conversion from a replay view to active gameplay
+ */
+export function trackReplayConversion(wallet, battleId, type = 'play_now') {
+    trackEvent('replay_conversion', {
+        wallet,
+        metadata: { battleId, type }
     });
 }
 
@@ -395,14 +416,21 @@ export async function getAdminData(action = 'overview', target = null) {
     try {
         const params = new URLSearchParams({ action });
         if (target) params.set('target', target);
+        const session = getAuthToken();
 
         // Verify auth session exists locally first
-        if (!getAuthToken()) {
+        if (!session) {
             return { error: 'Unauthorized', status: 401 };
         }
 
+        const headers = {};
+        if (session.token) {
+            headers.Authorization = `Bearer ${session.token}`;
+        }
+
         const response = await fetch(`${API_BASE}/api/admin?${params}`, { 
-            credentials: 'include' 
+            credentials: 'include',
+            headers,
         });
         const contentType = response.headers.get('content-type') || '';
         const payload = contentType.includes('application/json')
@@ -431,12 +459,19 @@ export async function getAdminData(action = 'overview', target = null) {
  */
 export async function downloadCSV(type) {
     try {
-        if (!getAuthToken()) {
+        const session = getAuthToken();
+        if (!session) {
             return { success: false, error: 'Unauthorized', status: 401 };
         }
 
+        const headers = {};
+        if (session.token) {
+            headers.Authorization = `Bearer ${session.token}`;
+        }
+
         const response = await fetch(`${API_BASE}/api/export?type=${type}`, {
-            credentials: 'include'
+            credentials: 'include',
+            headers,
         });
 
         if (!response.ok) {

@@ -2,6 +2,8 @@ import { $ } from '../../utils/dom.js';
 import { simulateBattle } from './engine.js';
 import { createShareCard, getFarcasterShareUrl } from '../../components/game/BattleShareCard.js';
 import { renderIcon } from '../../utils/icons.js';
+import { shareReplayToFeed, shareChallengeToFeed } from '../../utils/social.js';
+import { formatRankBadge } from '../../lib/game/rankSystem.js';
 
 /**
  * Premium Combat Arena Renderer
@@ -125,6 +127,7 @@ function getBiomeClass(environmentStats) {
     if (b.includes('forest') || b.includes('valley')) return 'biome-forest';
     if (b.includes('snow') || b.includes('tundra') || b.includes('mountain')) return 'biome-tundra';
     if (b.includes('neon') || b.includes('city') || b.includes('sunset')) return 'biome-neon';
+    if (b.includes('divine') || b.includes('celestial') || b.includes('olympus') || b.includes('gods')) return 'biome-divine';
     return 'biome-default';
 }
 
@@ -143,6 +146,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
     container.classList.add('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
 
     const biomeClass = getBiomeClass(options.environment);
+    const enemyDisplayName = enemyData.name || 'Enemy';
 
     arena.innerHTML = `
         <!-- Round Header -->
@@ -180,7 +184,13 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
                 </div>
                 <!-- Name + Stats -->
                 <div class="mt-2 md:mt-3 text-center">
-                    <div class="text-indigo-100 font-bold text-sm truncate max-w-[160px]">${playerData.name}</div>
+                    <div class="flex items-center justify-center gap-2 mb-1">
+                        <div class="text-indigo-100 font-bold text-sm truncate max-w-[140px]">${playerData.name}</div>
+                        ${playerData.rank ? formatRankBadge(playerData.rank) : ''}
+                    </div>
+                    ${playerData.points !== undefined ? `
+                        <div class="text-[9px] uppercase tracking-widest text-indigo-400/60 font-bold mb-1">${playerData.points} Arena Points</div>
+                    ` : ''}
                     <div class="flex gap-2 mt-1 justify-center">
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">${playerData.atk || '?'} ATK</span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">${playerData.def || '?'} DEF</span>
@@ -212,7 +222,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
                 </div>
                 <!-- Name + Stats -->
                 <div class="mt-2 md:mt-3 text-center">
-                    <div class="text-red-100 font-bold text-sm truncate max-w-[160px]">${enemyData.name}</div>
+                    <div class="text-red-100 font-bold text-sm truncate max-w-[160px]">${enemyDisplayName}</div>
                     <div class="flex gap-2 mt-1 justify-center">
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">${enemyData.atk || '?'} ATK</span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">${enemyData.def || '?'} DEF</span>
@@ -235,12 +245,29 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
 
         <!-- Results Overlay -->
         <div id="battle-results" class="hidden mt-6 md:mt-8 flex flex-col items-center justify-center p-5 md:p-8 bg-slate-900/90 backdrop-blur-lg rounded-2xl border border-indigo-500/20 shadow-[0_0_80px_rgba(99,102,241,0.15)]">
+            <div id="dominance-pill" class="hidden px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-[10px] font-bold tracking-widest uppercase mb-4 animate-pulse">
+                <span class="inline-block mr-1">${renderIcon('FLAME', 'w-3 h-3')}</span> Defeated 72% of Players
+            </div>
             <h2 class="text-3xl md:text-5xl font-black mb-2 md:mb-3" id="victory-text">VICTORY</h2>
             <p class="text-slate-400 mb-2 text-center text-sm md:text-base" id="victory-sub">Your fighter proved superior in combat.</p>
             <div class="text-[10px] md:text-xs text-slate-500 mb-4 md:mb-6 font-mono text-center" id="battle-stats-line"></div>
-            <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                <button id="return-board-btn" class="px-6 md:px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-indigo-400/30 shadow-lg shadow-indigo-500/20">Return to Board</button>
-                <button id="share-battle-btn" class="px-6 md:px-8 py-3 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-white/10">Share</button>
+            
+            <div class="grid grid-cols-2 gap-2 sm:gap-3 w-full max-w-md">
+                <button id="return-board-btn" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-indigo-400/30 flex items-center justify-center gap-2">
+                    PLAY AGAIN ${renderIcon('BOLT', 'w-4 h-4')}
+                </button>
+                <button id="rematch-btn" class="hidden px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-red-400/30 flex items-center justify-center gap-2">
+                    REMATCH ${renderIcon('SWORDS', 'w-4 h-4')}
+                </button>
+                <button id="try-another-btn" class="hidden px-6 py-3 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-white/10 flex items-center justify-center gap-2">
+                    TRY ANOTHER
+                </button>
+                <button id="challenge-friend-btn" class="px-6 py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-red-400/30 shadow-lg shadow-red-500/20 flex items-center justify-center gap-2">
+                    Challenge ${renderIcon('FLAME', 'w-4 h-4')}
+                </button>
+                <button id="share-battle-btn" class="col-span-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 border border-white/10 flex items-center justify-center gap-2">
+                    Share Replay ${renderIcon('PLAY', 'w-4 h-4')}
+                </button>
             </div>
             <div id="share-card-container" class="hidden mt-4 w-full"></div>
         </div>
@@ -360,6 +387,14 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
             // Bump attacker forward
             bumpEntity(isPlayerAttacking ? '#player-avatar' : '#enemy-avatar', isPlayerAttacking ? 30 : -30);
 
+            // Handle passives glow
+            if (log.passiveEvents && log.passiveEvents.length > 0) {
+                log.passiveEvents.forEach(pe => {
+                    const peContainer = pe.side === 'P1' ? '#player-sprite-container' : '#enemy-sprite-container';
+                    glowPassive(peContainer);
+                });
+            }
+
             // Flash defender
             flashDamage(defenderContainer);
 
@@ -453,19 +488,51 @@ function bumpEntity(selector, xOffset) {
 function flashDamage(selector) {
     const el = $(selector);
     if (!el) return;
+
+    // Apply flash to the container
     el.style.transition = 'filter 0.1s ease-out';
     el.style.filter = 'brightness(2) saturate(0.5)';
+
+    // Apply VFX v2 to the sprite specifically
+    const sprite = el.querySelector('img, div.font-black');
+    if (sprite) {
+        sprite.classList.remove('sprite-flash-damage');
+        void sprite.offsetWidth; // force reflow
+        sprite.classList.add('sprite-flash-damage');
+    }
+
     setTimeout(() => {
         if (el) {
             el.style.transition = 'filter 0.4s ease-in';
             el.style.filter = 'none';
         }
+        if (sprite) {
+            sprite.classList.remove('sprite-flash-damage');
+        }
     }, 150);
 }
 
+// ── Passive Glow ─────────────────────────────────────────────────
+function glowPassive(selector) {
+    const el = $(selector);
+    if (!el) return;
+
+    const sprite = el.querySelector('img, div.font-black');
+    if (sprite) {
+        sprite.classList.remove('sprite-glow-passive');
+        void sprite.offsetWidth; // force reflow
+        sprite.classList.add('sprite-glow-passive');
+
+        setTimeout(() => {
+            sprite.classList.remove('sprite-glow-passive');
+        }, 600);
+    }
+}
+
 // ── Results Screen ───────────────────────────────────────────────
-function showResults(battleData, playerName, enemyName, totalRounds) {
+async function showResults(battleData, playerName, enemyName, totalRounds) {
     const res = $('#battle-results');
+    if (!res) return; // Abort if DOM was unmounted during animation
     res.classList.remove('hidden');
 
     const title = $('#victory-text');
@@ -473,6 +540,8 @@ function showResults(battleData, playerName, enemyName, totalRounds) {
     const statsLine = $('#battle-stats-line');
 
     const playerWon = battleData.winner === playerName;
+    const lastLog = battleData.logs[battleData.logs.length - 1];
+    const enemyRemainingHp = lastLog ? (lastLog.attackerSide === 'P1' ? lastLog.defenderRemainingHp : lastLog.attackerRemainingHp || 0) : 0;
 
     // Calculate stats
     const p1Dmg = battleData.logs.filter(l => l.attackerSide === 'P1').reduce((s, l) => s + (l.damage || 0), 0);
@@ -482,16 +551,55 @@ function showResults(battleData, playerName, enemyName, totalRounds) {
 
     if (playerWon) {
         title.innerText = 'VICTORY';
-        title.className = 'text-5xl font-black mb-3 text-emerald-400 victory-text';
+        title.className = 'text-5xl font-black mb-3 text-emerald-400 victory-text animate-bounce-slow';
         sub.innerText = 'Excellent command of the arena.';
     } else {
         title.innerText = 'DEFEAT';
         title.className = 'text-5xl font-black mb-3 text-red-500 defeat-text';
-        sub.innerText = 'Your fighter was overpowered.';
+
+        // Loss Feedback (Retention Layer)
+        const enemyRemainingHp = lastLog ? (lastLog.attackerSide === 'P2' ? lastLog.attackerHp : lastLog.defenderHp) : 0;
+        const hpDiff = Math.max(1, Math.round(enemyRemainingHp || 0));
+        const nearWin = hpDiff < 20;
+
+        sub.innerHTML = `
+            <div class="mb-2">${nearWin ? '<span class="text-yellow-400 font-bold uppercase tracking-widest text-[10px] block mb-1">So Close!</span>' : ''}Your fighter was overpowered.</div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-widest">
+                ${renderIcon('HEART', 'w-3 h-3')} Opponent survived with ${hpDiff} HP
+            </div>
+        `;
+
+        const rematchBtn = $('#rematch-btn');
+        if (rematchBtn) {
+            rematchBtn.classList.remove('hidden');
+            rematchBtn.onclick = () => {
+                res.classList.add('hidden');
+                document.dispatchEvent(new CustomEvent('BATTLE_REMATCH_REQUEST'));
+            };
+        }
+
+        const tryAnotherBtn = $('#try-another-btn');
+        if (tryAnotherBtn) {
+            tryAnotherBtn.classList.remove('hidden');
+            tryAnotherBtn.onclick = () => {
+                res.classList.add('hidden');
+                document.dispatchEvent(new CustomEvent('GUEST_PLAY_REQUEST'));
+            };
+        }
     }
 
     if (statsLine) {
         statsLine.innerHTML = `${totalRounds} rounds · ${p1Dmg} P1 dmg · ${p2Dmg} P2 dmg · ${crits} crits · ${dodges} dodges`;
+    }
+
+    // Dominance Pill (Urgency/Flex)
+    const domPill = $('#dominance-pill');
+    if (domPill && playerWon) {
+        const { getDominancePercentile } = await import('./conversion.js');
+        const score = parseInt(localStorage.getItem('arena_points_' + (window._lastPlayerAddress || '')) || '0');
+        const percentile = getDominancePercentile(score);
+        domPill.innerHTML = `<span class="inline-block mr-1">${renderIcon('FLAME', 'w-3 h-3')}</span> Defeated ${Math.floor(percentile)}% of Players`;
+        domPill.classList.remove('hidden');
     }
 
     // Import confetti if available
@@ -499,7 +607,7 @@ function showResults(battleData, playerName, enemyName, totalRounds) {
         if (playerWon && typeof window !== 'undefined') {
             import('canvas-confetti').then(mod => {
                 const confetti = mod.default || mod;
-                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#6366f1', '#10b981', '#f59e0b'] });
                 setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.5, x: 0.3 } }), 300);
                 setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.5, x: 0.7 } }), 500);
             }).catch(() => { /* confetti not available, no-op */ });
@@ -512,29 +620,55 @@ function showResults(battleData, playerName, enemyName, totalRounds) {
         $('#battle-container').classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
     });
 
-    // Share button
+    // Challenge Friend button
+    const challengeBtn = $('#challenge-friend-btn');
+    if (challengeBtn) {
+        challengeBtn.addEventListener('click', async () => {
+            const mockChallengeId = `ch_${Math.random().toString(36).slice(2, 9)}`;
+            await shareChallengeToFeed(mockChallengeId, playerName);
+        });
+    }
+
+    // Share Replay button
     const shareBtn = $('#share-battle-btn');
     if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
-            const cardContainer = $('#share-card-container');
-            if (cardContainer?.classList.contains('hidden')) {
-                // Show the share card
-                const cardHtml = createShareCard({
-                    playerName, enemyName,
-                    playerWon,
-                    rounds: totalRounds,
-                    playerDmg: p1Dmg,
-                    enemyDmg: p2Dmg,
-                    crits, dodges
-                });
-                cardContainer.innerHTML = cardHtml;
-                cardContainer.classList.remove('hidden');
-                shareBtn.textContent = 'Open Warpcast';
-            } else {
-                // Open Farcaster share
-                const url = getFarcasterShareUrl({ playerName, enemyName, playerWon, rounds: totalRounds });
-                window.open(url, '_blank');
-            }
+        shareBtn.addEventListener('click', async () => {
+            const mockBattleId = `ba_${Math.random().toString(36).slice(2, 9)}`;
+            await shareReplayToFeed(mockBattleId, playerWon);
         });
+    }
+
+    // Replay CTA (Conversion)
+    if (options.isReplay) {
+        const resultsBox = $('#battle-results');
+        if (resultsBox && !resultsBox.querySelector('#replay-conversion-group')) {
+            const group = document.createElement('div');
+            group.id = 'replay-conversion-group';
+            group.className = 'mt-6 w-full max-w-md space-y-3';
+            group.innerHTML = `
+                <button id="replay-play-now-btn" class="w-full px-8 py-5 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-2xl font-black text-lg transition-all hover:scale-105 active:scale-95 shadow-[0_0_50px_rgba(239,68,68,0.4)] flex items-center justify-center gap-3 animate-pulse">
+                    PLAY NOW ${renderIcon('BOLT', 'w-6 h-6')}
+                </button>
+                <button id="replay-fight-opponent-btn" class="w-full px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black transition-all hover:scale-105 active:scale-95 border border-white/10 flex items-center justify-center gap-3">
+                    FIGHT THIS OPPONENT ${renderIcon('SWORDS', 'w-5 h-5')}
+                </button>
+            `;
+
+            group.querySelector('#replay-play-now-btn').onclick = async () => {
+                const { trackReplayConversion } = await import('../api.js');
+                trackReplayConversion(window._lastPlayerAddress, options.battleId, 'play_now');
+                $('#arena-view').classList.add('hidden');
+                document.dispatchEvent(new CustomEvent('GUEST_PLAY_REQUEST'));
+            };
+
+            group.querySelector('#replay-fight-opponent-btn').onclick = async () => {
+                const { trackReplayConversion } = await import('../api.js');
+                trackReplayConversion(window._lastPlayerAddress, options.battleId, 'fight_opponent');
+                $('#arena-view').classList.add('hidden');
+                document.dispatchEvent(new CustomEvent('REPLAY_FIGHT_REQUEST'));
+            };
+
+            resultsBox.appendChild(group);
+        }
     }
 }

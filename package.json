@@ -24,6 +24,7 @@
     "@farcaster/miniapp-core": "^0.5.1",
     "@farcaster/miniapp-sdk": "^0.2.3",
     "@farcaster/miniapp-wagmi-connector": "^1.1.1",
+    "@google/generative-ai": "^0.24.1",
     "@reown/appkit": "^1.8.14",
     "@reown/appkit-adapter-wagmi": "^1.8.14",
     "@upstash/redis": "^1.34.3",

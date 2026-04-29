@@ -31,7 +31,9 @@ export const VALID_EVENTS = [
     'battle_loadout_built',   // V2: fired when fighter + item + arena selected
     'battle_won',
     'battle_lost',
-    'battle_result_v2'
+    'battle_result_v2',
+    'social_share',
+    'replay_conversion'
 ];
 
 // Funnel steps (ordered)
@@ -401,16 +403,35 @@ const RATE_LIMITS = {
     collection_view: 60,
     wallet_connect: 10,
     page_view: 100,
-    mint_success: 100
+    mint_success: 100,
+    social_share: 20,
+    replay_conversion: 60,
+    ai_post: 5
 };
 
-export async function checkRateLimit(kv, key, action) {
+export async function checkRateLimit(kv, key, action, limitOverride = null, windowSeconds = 60) {
     const limitKey = `ratelimit:${key}:${action}`;
+    const limit = Number.isFinite(limitOverride) ? limitOverride : (RATE_LIMITS[action] || 100);
+    const ttlSeconds = Number.isFinite(windowSeconds) ? windowSeconds : 60;
     // Atomic: SET NX with TTL ensures the key always has an expiry
-    await kv.set(limitKey, 0, { ex: 60, nx: true });
+    await kv.set(limitKey, 0, { ex: ttlSeconds, nx: true });
     const count = await kv.incr(limitKey);
-    if (count > (RATE_LIMITS[action] || 100)) {
+    if (count > limit) {
         throw new Error('Rate limit exceeded');
+    }
+}
+
+export function handleSocialShare(pipe, event) {
+    pipe.hincrby('stats:global', 'social_shares', 1);
+    if (event.wallet && event.wallet !== 'anonymous') {
+        pipe.hincrby(`user:${event.wallet}:profile`, 'social_shares', 1);
+    }
+}
+
+export function handleReplayConversion(pipe, event) {
+    pipe.hincrby('stats:global', 'replay_conversions', 1);
+    if (event.wallet && event.wallet !== 'anonymous') {
+        pipe.hincrby(`user:${event.wallet}:profile`, 'replay_conversions', 1);
     }
 }
 
@@ -517,6 +538,12 @@ export async function processEvent(kv, event, opts = {}) {
             pipe.hincrby('stats:global', 'battle_loadouts_built', 1);
             break;
         }
+        case 'social_share':
+            handleSocialShare(pipe, event);
+            break;
+        case 'replay_conversion':
+            handleReplayConversion(pipe, event);
+            break;
         default:
             break;
     }

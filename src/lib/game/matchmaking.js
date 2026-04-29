@@ -7,11 +7,38 @@ import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
 import { getBattleHistory as fetchBattleHistory } from '../api.js';
 
-let battleAuthToken = null;
 let tokenExpiry = 0;
+let battleAuthToken = null;
 
-async function getBattleToken(walletAddress) {
-    if (battleAuthToken && Date.now() < tokenExpiry) return battleAuthToken;
+function buildBattleRequestInit(init = {}) {
+    const headers = { ...(init.headers || {}) };
+    if (battleAuthToken) {
+        headers.Authorization = `Bearer ${battleAuthToken}`;
+    }
+
+    return {
+        ...init,
+        headers,
+        credentials: 'include',
+    };
+}
+
+async function fetchWithBattleAuth(walletAddress, url, init = {}) {
+    await getBattleToken(walletAddress);
+
+    let response = await fetch(url, buildBattleRequestInit(init));
+    if (response.status === 401 || response.status === 403) {
+        tokenExpiry = 0;
+        battleAuthToken = null;
+        await getBattleToken(walletAddress, { forceRefresh: true });
+        response = await fetch(url, buildBattleRequestInit(init));
+    }
+
+    return response;
+}
+
+async function getBattleToken(walletAddress, { forceRefresh = false } = {}) {
+    if (!forceRefresh && Date.now() < tokenExpiry) return true;
 
     try {
         const chainId = wagmiAdapter.wagmiConfig.state?.chainId || 8453;
@@ -34,15 +61,15 @@ async function getBattleToken(walletAddress) {
         const verifyRes = await fetch('/api/auth?action=verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ message, signature })
         });
         const verifyData = await verifyRes.json();
 
-        if (verifyData?.token) {
-            battleAuthToken = verifyData.token;
-            // Track expiry (server returns expiresIn in seconds)
-            tokenExpiry = Date.now() + ((verifyData.expiresIn || 3600) * 1000) - 60000; // 1min safety margin
-            return battleAuthToken;
+        if (verifyData?.address) {
+            battleAuthToken = typeof verifyData.token === 'string' ? verifyData.token : battleAuthToken;
+            tokenExpiry = Number.isFinite(verifyData.expiresAt) ? verifyData.expiresAt : Date.now() + 3540000;
+            return true;
         }
         throw new Error('Verification failed format');
     } catch (e) {
@@ -76,13 +103,10 @@ export async function getActiveChallenges() {
  */
 export async function postChallenge(playerAddress, loadout) {
     try {
-        const token = await getBattleToken(playerAddress);
-
-        const res = await fetch('/api/battle?action=challenge', {
+        const res = await fetchWithBattleAuth(playerAddress, '/api/battle?action=challenge', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 loadout: loadout,
@@ -115,14 +139,10 @@ export async function getChallengeById(challengeId) {
  */
 export async function resolveFight(challengeId, attackerAddress, loadout) {
     try {
-        const token = await getBattleToken(attackerAddress);
-
-        // V2 API expects { challengeId, defenderLoadout }
-        const res = await fetch('/api/battle?action=fight', {
+        const res = await fetchWithBattleAuth(attackerAddress, '/api/battle?action=fight', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 challengeId,
@@ -187,8 +207,8 @@ export function readLegacyChallenge(raw) {
  * Clear cached auth token (call on wallet disconnect)
  */
 export function clearBattleAuth() {
-    battleAuthToken = null;
     tokenExpiry = 0;
+    battleAuthToken = null;
 }
 
 /**
@@ -206,16 +226,13 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
     if (!walletAddress) return;
 
     try {
-        const token = await getBattleToken(walletAddress);
-
         // If no seed provided, fallback to deterministic (though battle.js should provide it)
         const finalSeed = seed || `ai:${walletAddress}:${playerStats.name}:${enemyStats.name}:${Date.now()}`;
 
-        await fetch('/api/battle?action=record', {
+        const response = await fetchWithBattleAuth(walletAddress, '/api/battle?action=record', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 seed: finalSeed,
@@ -243,9 +260,16 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
             }),
         });
 
+        if (!response.ok) {
+            throw new Error(`AI battle record failed (${response.status})`);
+        }
+
+        return await response.json().catch(() => null);
+
     } catch (err) {
         // Non-blocking — never surface to user
         console.warn('[recordAiBattle] Failed to persist AI battle result:', err.message);
+        return null;
     }
 }
 

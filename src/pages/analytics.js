@@ -522,8 +522,8 @@ function renderBattleHistorySection(battleAnalytics) {
             </div>
             <div class="space-y-2">
                 ${battleAnalytics.recent.length === 0
-                    ? '<div class="text-center py-8 text-sm opacity-40">No arena matches yet. Start a fight to populate synced history.</div>'
-                    : battleAnalytics.recent.map(renderBattleHistoryRow).join('')}
+            ? '<div class="text-center py-8 text-sm opacity-40">No arena matches yet. Start a fight to populate synced history.</div>'
+            : battleAnalytics.recent.map(renderBattleHistoryRow).join('')}
             </div>
         </section>
     `;

@@ -23,7 +23,7 @@ import {
     incrementBattleWins,
     saveBattleRecord,
 } from '../kv.js';
-import hash from 'object-hash';
+import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -81,11 +81,8 @@ async function handler(req, res) {
         const attackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
         const defenderStats = defenderLoadout.fighter.stats || {};
 
-        // Use object-hash for deterministic verification
-        const snapshotHash = hash({
-            loadout: challenge.loadout,
-            stats: attackerStats
-        }, { algorithm: 'sha256' });
+        // Use shared utility for deterministic verification
+        const snapshotHash = computeLoadoutSnapshot(challenge.loadout, attackerStats);
 
         if (snapshotHash !== challenge.snapshotHash) {
             return res.status(409).json({
@@ -208,8 +205,5 @@ async function handler(req, res) {
     }
 }
 
-async function computeHash(data) {
-    return hash(data, { algorithm: 'sha256' });
-}
 
 export default withCors(handler);

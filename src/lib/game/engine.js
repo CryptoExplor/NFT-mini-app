@@ -199,6 +199,13 @@ export function applyTeamSynergies(fighter, team = []) {
         fighter.spd += 15;
     }
 
+    // 4. Social Synergy: Farcaster Follower Boost (+5% ATK & HP)
+    if (team.some(t => t.isFarcasterFollower)) {
+        fighter.atk = Math.round(fighter.atk * 1.05);
+        fighter.hp = Math.round(fighter.hp * 1.05);
+        fighter.maxHp = Math.round(fighter.maxHp * 1.05);
+    }
+
     return fighter;
 }
 
@@ -407,6 +414,13 @@ function _simulateBattleCore(playerFighter, enemyFighter, prng, options = {}) {
                 }
                 atkPassiveState.cooldownRemaining = p.cooldown;
             }
+
+            if (p.id === 'DIVINE' && round % 4 === 0) {
+                const healAmt = Math.floor(currentAttacker.maxHp * (p.effect.healPercent || 0.10));
+                currentAttacker.hp = Math.min(currentAttacker.maxHp, currentAttacker.hp + healAmt);
+                // Cleanse logic would go here if we had debuffs system
+                turnEvents.push({ type: 'passive', side: atkSide, passive: p.id, name: `${p.name} (Cleanse)`, healing: healAmt });
+            }
         }
 
         // Defender passives
@@ -439,7 +453,23 @@ function _simulateBattleCore(playerFighter, enemyFighter, prng, options = {}) {
             turnResult.damageReduced = reduced;
         }
 
-        logs.push({ round, ...turnResult, passiveEvents: turnEvents });
+        // Apply DIVINE constant reduction (stacks with active passives)
+        const defPassive = defPassiveState.passive;
+        if (defPassive?.id === 'DIVINE' && turnResult.damage > 0 && !turnResult.isDodge) {
+            const divineReduced = Math.floor(turnResult.damage * (defPassive.effect.damageReduction || 0.15));
+            currentDefender.hp += divineReduced;
+            turnResult.damage -= divineReduced;
+            turnResult.defenderRemainingHp = Math.max(0, currentDefender.hp);
+            turnResult.divineReduced = divineReduced;
+        }
+
+        logs.push({ 
+            round, 
+            ...turnResult, 
+            attackerHp: currentAttacker.hp,
+            defenderHp: currentDefender.hp,
+            passiveEvents: turnEvents 
+        });
 
         if (currentDefender.hp <= 0) {
             winner = currentAttacker.name;

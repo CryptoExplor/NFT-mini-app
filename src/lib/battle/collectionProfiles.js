@@ -104,6 +104,31 @@ export const COLLECTION_PROFILES = {
         }
     },
 
+    'base-gods': {
+        name: 'Base Gods',
+        role: 'FIGHTER',
+        idMode: 'USER_CHOSEN',
+        statSource: 'STATIC_METADATA',
+        allowedModes: ['global_ranked_async'],
+        baseStats: { hp: 110, atk: 22, def: 15, spd: 10 },
+        passive: 'DIVINE',
+        engineAlias: ['BaseGods', 'base_gods'],
+        traitsMap: {
+            'Deity': {
+                'Zeus': { atk: 5, crit: 0.1 },
+                'Hades': { lifesteal: 0.1, atk: 3 },
+                'Poseidon': { hp: 20, def: 5 },
+                'Athena': { def: 10, spd: 5 },
+                'Ares': { atk: 10, def: -5 }
+            },
+            'Aura': {
+                'Gold': { crit: 0.15 },
+                'Purple': { regen: 5 },
+                'Celestial': { dodge: 0.1 }
+            }
+        }
+    },
+
     // ============================================
     // V2 MODIFIERS
     // Items / Environments (Not allowed in V1 rank)
@@ -115,6 +140,7 @@ export const COLLECTION_PROFILES = {
         idMode: 'SEQUENTIAL_1',
         statSource: 'DYNAMIC_ONCHAIN',
         allowedModes: ['v2_synergy'], // Locked behind V2
+        engineAlias: ['neon-runes', 'neonrunes', 'Neon Runes'],
         dynamicReads: ['getRuneStats'] // runePower changes over time/combinations
     },
 
@@ -124,6 +150,7 @@ export const COLLECTION_PROFILES = {
         idMode: 'SEQUENTIAL_1',
         statSource: 'DYNAMIC_ONCHAIN',
         allowedModes: ['v2_synergy'],
+        engineAlias: ['mini-worlds', 'miniworlds', 'Mini Worlds', 'mini-worlds-base'],
         dynamicReads: ['worldEvolution'] // Evolutions boost arena effects
     },
 
@@ -133,6 +160,7 @@ export const COLLECTION_PROFILES = {
         idMode: 'SEQUENTIAL_1',
         statSource: 'DYNAMIC_ONCHAIN',
         allowedModes: ['v2_synergy'],
+        engineAlias: ['bytebeats', 'byte-beats', 'Byte Beats', 'bytebeats-base'],
         dynamicReads: ['getBeatStats'] // tempo/harmony alters stats
     },
 
@@ -142,6 +170,7 @@ export const COLLECTION_PROFILES = {
         idMode: 'SEQUENTIAL_1',
         statSource: 'DYNAMIC_ONCHAIN',
         allowedModes: ['v2_synergy'],
+        engineAlias: ['neon-shapes', 'neonshapes', 'Neon Shapes'],
         dynamicReads: ['shapeIntensity']
     }
 };
@@ -150,15 +179,21 @@ export const COLLECTION_PROFILES = {
  * Returns the profile configuration for a given collection ID
  */
 export function getCollectionProfile(collectionId) {
-    // 1. Direct match (e.g. 'base-invaders')
-    if (COLLECTION_PROFILES[collectionId]) {
-        return COLLECTION_PROFILES[collectionId];
+    if (!collectionId) return null;
+    const searchId = collectionId.toLowerCase();
+
+    // 1. Direct match (case-insensitive)
+    for (const key of Object.keys(COLLECTION_PROFILES)) {
+        if (key.toLowerCase() === searchId) {
+            return COLLECTION_PROFILES[key];
+        }
     }
 
-    // 2. Alias match (e.g. 'BASE_INVADERS')
+    // 2. Alias match (case-insensitive)
     for (const [key, profile] of Object.entries(COLLECTION_PROFILES)) {
-        if (profile.engineAlias && profile.engineAlias.includes(collectionId)) {
-            return profile;
+        if (profile.engineAlias) {
+            const hasAlias = profile.engineAlias.some(alias => alias.toLowerCase() === searchId);
+            if (hasAlias) return profile;
         }
     }
 

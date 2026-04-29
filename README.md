@@ -1,4 +1,4 @@
-# Base Mint — NFT Battle Arena ⚔️
+# Base Mint — NFT Battle Arena
 
 A cross-collection NFT battle game built on **Base**. Any NFT, any collection — pick your fighter and enter the arena.
 
@@ -20,9 +20,10 @@ The flagship feature — a real-time turn-based battle system where NFTs from di
 ## 📦 Platform Features
 
 - **NFT Minting** — mint from curated Base collections with auto-discovery
-- **Points & Gamification** — streaks, badges, leaderboards
+- **Points & Gamification** — streaks, status badges, global leaderboards
+- **Growth & Distribution** — automated social sharing, replay-to-play conversion, featured battle highlights
 - **Analytics** — retention cohorts, conversion funnels, wallet insights
-- **Social Sharing** — Farcaster cast composing, share cards
+- **Social Sharing** — Farcaster cast composing, share cards, viral loops
 - **Farcaster Mini App** — native integration with Farcaster frames
 
 ## 🛠️ Tech Stack
@@ -102,12 +103,12 @@ src/
 
 | Collection | Role | Passive | Archetype |
 |---|---|---|---|
-| Base Invaders | Fighter | Ghost Step 👻 | Speed / Dodge |
-| BaseHeads 404 | Fighter | Berserker 🔥 | Aggro DPS |
-| BaseMoods | Fighter | Regen Burst 💚 | Balanced / Healer |
-| Void PFPs | Fighter | Ghost Step 👻 | Glass Cannon |
-| Quantum Quills | Fighter | Drain 🩸 | Sustain DPS |
-| Base Fortunes | Fighter | Iron Wall 🛡️ | Tank |
+| Base Invaders | Fighter | Ghost Step | Speed / Dodge |
+| BaseHeads 404 | Fighter | Berserker | Aggro DPS |
+| BaseMoods | Fighter | Regen Burst | Balanced / Healer |
+| Void PFPs | Fighter | Ghost Step | Glass Cannon |
+| Quantum Quills | Fighter | Drain | Sustain DPS |
+| Base Fortunes | Fighter | Iron Wall | Tank |
 | Neon Runes | Item Buff | — | V2 Modifier |
 | Mini Worlds | Environment | — | V2 Modifier |
 
@@ -152,11 +153,11 @@ NFT Metadata → Normalizer → Universal Stats → Combat Engine → Animated R
 
 | Passive | Trigger | Effect | Cooldown |
 |---|---|---|---|
-| **Ghost Step** 👻 | On Defend | +25% dodge for 1 turn | 2 turns |
-| **Iron Wall** 🛡️ | On Defend | -30% incoming damage for 1 turn | 3 turns |
-| **Drain** 🩸 | On Attack | Leech 20% of damage dealt as HP | 2 turns |
-| **Berserker** 🔥 | Below 30% HP | +40% ATK, -10% DEF | Always active |
-| **Regen Burst** 💚 | Turn Start | Heal 8% of max HP | 3 turns |
+| **Ghost Step** | On Defend | +25% dodge for 1 turn | 2 turns |
+| **Iron Wall** | On Defend | -30% incoming damage for 1 turn | 3 turns |
+| **Drain** | On Attack | Leech 20% of damage dealt as HP | 2 turns |
+| **Berserker** | Below 30% HP | +40% ATK, -10% DEF | Always active |
+| **Regen Burst** | Turn Start | Heal 8% of max HP | 3 turns |
 
 ## 🗺️ Roadmap
 

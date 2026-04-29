@@ -10,7 +10,7 @@ import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { applyLayer } from '../lib/battle/metadataNormalizer.js';
-import { postChallenge, recordAiBattle } from '../lib/game/matchmaking.js';
+import { postChallenge, recordAiBattle, getChallengeById } from '../lib/game/matchmaking.js';
 import {
     getCurrentBattleLoadout,
     getCurrentBattleSelection,
@@ -18,8 +18,12 @@ import {
     saveLastBattleSelection,
 } from '../lib/battle/loadoutSession.js';
 import { BattleLeaderboard, saveBattleResult } from '../components/game/BattleLeaderboard.js';
-import { getBattleReplay, trackBattleLoadout, trackBattleStarted, trackBattleResult } from '../lib/api.js';
+import { getPlayerPoints, addPlayerPoints } from '../lib/game/points.js';
+import { getRankByPoints } from '../lib/game/rankSystem.js';
+import { getBattleReplay, trackBattleLoadout, trackBattleStarted, trackBattleResult, trackReplayConversion } from '../lib/api.js';
 import { renderIcon } from '../utils/icons.js';
+import { escapeHtml } from '../utils/html.js';
+import { isFarcasterFollower } from '../utils/social.js';
 
 /** Inline toast for Farcaster miniapp (no browser alert) */
 function showBattleToast(message, type = 'error') {
@@ -27,9 +31,10 @@ function showBattleToast(message, type = 'error') {
     if (existing) existing.remove();
     const bg = type === 'error' ? 'rgba(239,68,68,0.92)' : 'rgba(16,185,129,0.92)';
     const border = type === 'error' ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.5)';
+    const safeMessage = escapeHtml(String(message || ''));
     document.body.insertAdjacentHTML('beforeend', `
         <div id="battle-toast" style="position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:200;padding:12px 20px;border-radius:12px;background:${bg};border:1px solid ${border};color:#fff;font-size:14px;font-weight:500;text-align:center;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.4);backdrop-filter:blur(8px);">
-            ${message}
+            ${safeMessage}
         </div>
     `);
     setTimeout(() => document.getElementById('battle-toast')?.remove(), 3500);
@@ -40,6 +45,11 @@ let walletHandler = null;
 function getReplayIdFromUrl() {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.search).get('replay') || '';
+}
+
+function getChallengeIdFromUrl() {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.search).get('challenge') || '';
 }
 
 function setReplayIdInUrl(battleId) {
@@ -53,12 +63,18 @@ function setReplayIdInUrl(battleId) {
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
 }
 
+function buildReplayShareUrl(battleId) {
+    if (typeof window === 'undefined') return '/battle';
+    const origin = window.location.origin || 'https://base-mintapp.vercel.app';
+    return battleId ? `${origin}/battle?replay=${encodeURIComponent(battleId)}` : `${origin}/battle`;
+}
+
 export async function renderBattlePage() {
     // Force dark mode on battle arena entry
     setThemePreference('dark');
 
     // Load live balance patches from CDN (fire-and-forget, falls back to bundled)
-    import('../lib/battle/balanceConfig.js').then(({ loadBalanceOverrides }) => loadBalanceOverrides()).catch(() => {});
+    import('../lib/battle/balanceConfig.js').then(({ loadBalanceOverrides }) => loadBalanceOverrides()).catch(() => { });
 
     const app = $('#app');
 
@@ -73,7 +89,15 @@ export async function renderBattlePage() {
                         </h1>
                     </div>
                     <div class="flex items-center gap-3">
+                        <div id="battle-streak-badge" class="hidden glass-card px-3 py-1 rounded-full flex items-center gap-1.5 border-orange-500/30 text-orange-400">
+                            ${renderIcon('FLAME', 'w-3.5 h-3.5')}
+                            <span class="text-[10px] font-black uppercase tracking-widest"><span id="streak-count">0</span> STREAK</span>
+                        </div>
                         ${renderThemeToggleButton('theme-toggle-battle')}
+                        <button id="guest-play-btn" class="hidden glass-card px-4 py-2 rounded-full flex items-center gap-2 hover:scale-105 transition-all text-xs font-bold text-indigo-400 border-indigo-500/30">
+                            ${renderIcon('BOLT', 'w-4 h-4')}
+                            Play as Guest
+                        </button>
                         <button id="battle-connect-btn" class="glass-card px-4 py-2 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform text-sm font-medium">
                             <div class="status-glow" style="background: ${state.wallet?.isConnected ? '#10B981' : '#EF4444'}; box-shadow: 0 0 10px ${state.wallet?.isConnected ? '#10B981' : '#EF4444'};"></div>
                             <img id="battle-connect-avatar" class="w-5 h-5 rounded-full object-cover hidden" alt="Profile avatar">
@@ -137,6 +161,8 @@ export async function renderBattlePage() {
 
                 const isAi = !!previewModal.enemyData?.isAi;
                 let replayLogs, winner, winnerSide, battleSeed;
+                let persistedBattleId = null;
+                let persistedBattlePromise = null;
 
                 // V2 Analytics: track battle start
                 trackBattleStarted(state.wallet?.address, {
@@ -144,6 +170,22 @@ export async function renderBattlePage() {
                     challengeId: previewModal.enemyData?.id || null,
                     opponent: enemyCombatStats.name || null,
                 });
+
+                // Check social synergy (Farcaster follow)
+                const isFollower = await isFarcasterFollower();
+                if (isFollower && selectedLoadout) {
+                    if (!selectedLoadout.teamSnapshot) selectedLoadout.teamSnapshot = [];
+                    // WARN-05 fix: guard against stacking synergy on rematch
+                    const alreadyInjected = selectedLoadout.teamSnapshot.some(t => t.collectionName === 'farcaster-synergy');
+                    if (!alreadyInjected) {
+                        selectedLoadout.teamSnapshot.push({
+                            collectionName: 'farcaster-synergy',
+                            isFarcasterFollower: true,
+                            trait: 'Follower'
+                        });
+                        console.log('[SocialSynergy] Farcaster follow detected! ATK boost active.');
+                    }
+                }
 
                 if (isAi) {
                     // ── AI Battles: resolve locally with V2 engine ──
@@ -188,11 +230,20 @@ export async function renderBattlePage() {
                     replayLogs = result.logs; // Server returns `logs`, not `replayLogs`
                     winner = result.summary?.winner || result.winner;
                     winnerSide = result.summary?.winnerSide || result.winnerSide || null;
+                    persistedBattleId = result.battleId || null;
                 }
 
                 $('#battle-loading-overlay')?.remove();
 
-                renderCombatArena(playerCombatStats, enemyCombatStats, (battleData) => {
+                // Inject rank/points for arena rendering
+                const pPoints = getPlayerPoints(state.wallet?.address);
+                const pRank = getRankByPoints(pPoints);
+                playerCombatStats.points = pPoints;
+                playerCombatStats.rank = pRank;
+
+                window._lastBattleStats = { pStats: playerCombatStats, eStats: enemyCombatStats };
+
+                renderCombatArena(playerCombatStats, enemyCombatStats, async (battleData) => {
                     console.log("Match concluded! Winner:", winner);
                     // Save battle result to localStorage for leaderboard
                     const logs = replayLogs || [];
@@ -216,10 +267,9 @@ export async function renderBattlePage() {
                         dodges: logs.filter(l => l.isDodge).length
                     });
 
-                    // Persist AI battle to server so it appears in verifiable history
                     if (isAi && state.wallet?.address) {
                         const loadout = getCurrentBattleLoadout();
-                        recordAiBattle(state.wallet.address, {
+                        persistedBattlePromise = recordAiBattle(state.wallet.address, {
                             seed: battleSeed,
                             playerStats: playerCombatStats,
                             enemyStats: enemyCombatStats,
@@ -229,16 +279,96 @@ export async function renderBattlePage() {
                                 totalRounds,
                             },
                             loadout,
-                            // Pre-computed stats stored so leaderboard doesn't need to re-simulate
                             extras: {
                                 p1Dmg,
                                 p2Dmg,
                                 crits: logs.filter(l => l.isCrit).length,
                             },
-                            // Store logs for replays
-                            logs: logs,
-                        }).catch(() => {}); // fire-and-forget
+                            logs,
+                        }).then((payload) => {
+                            persistedBattleId = payload?.battleId || null;
+                            return persistedBattleId;
+                        }).catch(() => null);
                     }
+
+                    // Progression & Points Logic
+                    if (playerWon && state.wallet?.address) {
+                        const { addTournamentPoints } = await import('../lib/game/tournament.js');
+                        // NOTE: getNextRank is removed — it was imported but never used (BUG-01 fix)
+                        const { recordBattleResult, shouldShowSharePrompt } = await import('../lib/game/conversion.js');
+                        const { analyzeOutcome, getGrowthCycleDay } = await import('../lib/game/distributionEngine.js');
+
+                        const pointsToAdd = previewModal.enemyData?.isBoss ? 50 : 10;
+                        const battleId = `battle_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+                        // 1. Global Progression (BUG-03 fix: use statically-imported addPlayerPoints/getRankByPoints)
+                        const result = addPlayerPoints(state.wallet.address, pointsToAdd, battleId);
+
+                        if (result) {
+                            const currentRank = getRankByPoints(result.updated);
+                            const prevRank = getRankByPoints(result.previous);
+
+                            // 2. Tournament Progression
+                            addTournamentPoints(state.wallet.address, pointsToAdd);
+
+                            // 3. Conversion & Retension Tracking
+                            const conversionState = recordBattleResult(state.wallet.address, true);
+
+                            if (currentRank.id !== prevRank.id) {
+                                showRankUpCelebration(prevRank, currentRank);
+                            } else {
+                                let toastMsg = `+${pointsToAdd} Arena Points!`;
+                                if (conversionState.streak > 1) {
+                                    toastMsg += ` ${conversionState.streak} WIN STREAK!`;
+                                }
+                                showBattleToast(toastMsg, 'success');
+                            }
+
+                            // 4. Distribution Engine: Auto-share prompt
+                            const outcome = analyzeOutcome({ playerWon: true }, logs);
+                            const cycleDay = getGrowthCycleDay(state.wallet.address);
+
+                            if (shouldShowSharePrompt(state.wallet.address) || outcome) {
+                                setTimeout(() => {
+                                    showSharePrompt(
+                                        state.wallet.address,
+                                        conversionState,
+                                        outcome,
+                                        cycleDay,
+                                        persistedBattlePromise || buildReplayShareUrl(persistedBattleId)
+                                    );
+                                }, 1500);
+                            }
+                        }
+                    } else if (!playerWon && state.wallet?.address) {
+                        // Track loss for streak reset
+                        const { recordBattleResult } = await import('../lib/game/conversion.js');
+                        const conversionState = recordBattleResult(state.wallet.address, false);
+
+                        // Distribution Engine: Near Loss Detection
+                        const { analyzeOutcome, getGrowthCycleDay } = await import('../lib/game/distributionEngine.js');
+                        const outcome = analyzeOutcome({ playerWon: false }, logs);
+                        const cycleDay = getGrowthCycleDay(state.wallet.address);
+
+                        if (outcome && outcome.type === 'NEAR_LOSS') {
+                            setTimeout(() => {
+                                showSharePrompt(
+                                    state.wallet.address,
+                                    conversionState,
+                                    outcome,
+                                    cycleDay,
+                                    persistedBattlePromise || buildReplayShareUrl(persistedBattleId)
+                                );
+                            }, 1500);
+                        }
+                    }
+
+                    // Boss Victory Logic
+                    if (playerWon && previewModal.enemyData?.isBoss) {
+                        const { recordBossVictory } = await import('../lib/game/dailyBoss.js');
+                        recordBossVictory(previewModal.enemyData.id, state.wallet?.address || 'guest');
+                    }
+
                     // V2 Analytics: track battle result
                     trackBattleResult(state.wallet?.address, {
                         won: playerWon,
@@ -327,6 +457,7 @@ export async function renderBattlePage() {
     const board = new ChallengeBoard(
         'challenge-board-view',
         (challengeData) => {
+            window._lastBattleChallenge = challengeData;
             board.hide();
             const saved = getCurrentBattleSelection().loadout
                 ? getCurrentBattleSelection()
@@ -396,7 +527,7 @@ export async function renderBattlePage() {
 
             // Transition to Arena View
             $('#battle-loading-overlay')?.remove();
-            
+
             $('#challenge-board-view')?.classList.add('hidden');
             $('#leaderboard-view')?.classList.add('hidden');
             const arenaView = $('#arena-view');
@@ -414,6 +545,64 @@ export async function renderBattlePage() {
                 winner: data.result?.winner,
                 isReplay: true
             });
+
+            const replayIsAi = Boolean(data.options?.isAiBattle);
+            const replayCtaLabel = replayIsAi ? 'FIGHT THIS OPPONENT' : 'ENTER ARENA';
+            const replayCtaHint = replayIsAi ? 'Convinced? Run it back with your fighter.' : 'Jump back into the arena and pick your next match.';
+
+            // Add Replay -> Play CTA
+            if (arenaView && !arenaView.querySelector('#replay-play-cta')) {
+                arenaView.insertAdjacentHTML('beforeend', `
+                    <div id="replay-play-cta" class="absolute bottom-32 left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center animate-bounce">
+                        <button id="replay-fight-btn" class="px-8 py-4 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-2xl font-black shadow-2xl border-2 border-white/20 hover:scale-110 transition-transform flex items-center gap-2">
+                            ${replayCtaLabel} ${renderIcon('SWORDS', 'w-6 h-6')}
+                        </button>
+                        <div class="mt-2 text-[10px] font-bold text-white uppercase tracking-widest text-shadow-sm">${replayCtaHint}</div>
+                    </div>
+                `);
+
+                $('#replay-fight-btn')?.addEventListener('click', () => {
+                    trackReplayConversion(state.wallet?.address, battleId, replayIsAi ? 'fight_this_opponent' : 'enter_arena');
+                    $('#replay-play-cta')?.remove();
+                    arenaView?.classList.add('hidden');
+
+                    if (!replayIsAi) {
+                        document.dispatchEvent(new CustomEvent('REPLAY_FIGHT_REQUEST'));
+                        return;
+                    }
+
+                    const saved = getCurrentBattleSelection().loadout
+                        ? getCurrentBattleSelection()
+                        : restoreLastBattleSelection();
+                    if (saved) {
+                        previewModal.playerData = saved.previewData;
+                    } else {
+                        previewModal.playerData = null;
+                    }
+
+                    previewModal.show({
+                        id: `replay_ai_${battleId}`,
+                        isAi: true,
+                        name: data.p2?.name || 'AI Opponent',
+                        collectionName: data.p2?.name || 'AI Opponent',
+                        nftId: data.p2?.nftId || data.p2?.tokenId || '?',
+                        stats: data.p2?.stats || {},
+                        imageUrl: data.p2?.imageUrl || data.p2?.image || '',
+                        loadout: {
+                            fighter: {
+                                collectionName: data.p2?.name || 'AI Opponent',
+                                nftId: data.p2?.nftId || data.p2?.tokenId || '?',
+                                stats: data.p2?.stats || {},
+                            },
+                            item: data.p2?.item ? { stats: data.p2.item } : null,
+                            arena: data.p2?.arena ? { stats: data.p2.arena } : null,
+                            teamSnapshot: data.p2?.team || [],
+                            schemaVersion: 'battle-loadout-v1',
+                        },
+                        aiWinRate: data.options?.aiWinRate || 0.6,
+                    });
+                });
+            }
         } catch (err) {
             console.error('Replay error:', err);
             $('#battle-loading-overlay')?.remove();
@@ -430,6 +619,76 @@ export async function renderBattlePage() {
         switchTab('stats');
         setTimeout(() => replayHandler({ detail: { battleId: replayId } }), 0);
     }
+
+    const challengeId = getChallengeIdFromUrl();
+    if (challengeId) {
+        setTimeout(async () => {
+            const challenge = await getChallengeById(challengeId);
+            if (challenge) {
+                board.hide();
+                const saved = getCurrentBattleSelection().loadout
+                    ? getCurrentBattleSelection()
+                    : restoreLastBattleSelection();
+                if (saved) {
+                    previewModal.playerData = saved.previewData;
+                }
+                previewModal.show(challenge);
+            }
+        }, 100);
+    }
+
+    const guestPlayHandler = () => {
+        document.querySelector('#arena-view')?.classList.add('hidden');
+        selectorModal.show();
+    };
+
+    const openPreviewHandler = (e) => {
+        const challenge = e.detail;
+        if (challenge) {
+            window._lastBattleChallenge = challenge;
+            board.hide();
+            const saved = getCurrentBattleSelection().loadout
+                ? getCurrentBattleSelection()
+                : restoreLastBattleSelection();
+            if (saved) {
+                previewModal.playerData = saved.previewData;
+            }
+            previewModal.show(challenge);
+        }
+    };
+
+    document.addEventListener('GUEST_PLAY_REQUEST', guestPlayHandler);
+    document.addEventListener('OPEN_PREVIEW_MODAL', openPreviewHandler);
+    window._battleGuestPlayHandler = guestPlayHandler;
+    window._battleOpenPreviewHandler = openPreviewHandler;
+
+    // BUG-07 fix: move module-scope listeners inside renderBattlePage so they
+    // can be tracked and cleaned up in cleanup(), preventing listener stacking.
+    const rematchHandler = () => {
+        const arenaView = document.querySelector('#arena-view');
+        if (arenaView) arenaView.classList.add('hidden');
+
+        if (window._lastBattleStats && window._lastBattleChallenge) {
+            const boardEl = document.querySelector('#challenge-board-view');
+            if (boardEl) boardEl.classList.add('hidden');
+            document.dispatchEvent(new CustomEvent('OPEN_PREVIEW_MODAL', { detail: window._lastBattleChallenge }));
+        } else {
+            const boardEl = document.querySelector('#challenge-board-view');
+            if (boardEl) boardEl.classList.remove('hidden');
+        }
+    };
+
+    const replayFightHandler = () => {
+        document.querySelector('#arena-view')?.classList.add('hidden');
+        const tabArenaEl = document.querySelector('#tab-arena');
+        if (tabArenaEl) tabArenaEl.click();
+        showBattleToast('Opponent challenged! Select your fighter.', 'success');
+    };
+
+    document.addEventListener('BATTLE_REMATCH_REQUEST', rematchHandler);
+    document.addEventListener('REPLAY_FIGHT_REQUEST', replayFightHandler);
+    window._battleRematchHandler = rematchHandler;
+    window._battleReplayFightHandler = replayFightHandler;
 }
 
 function attachBattleEvents() {
@@ -453,6 +712,18 @@ function attachBattleEvents() {
             }
         });
     }
+
+    const guestBtn = document.getElementById('guest-play-btn');
+    if (guestBtn) {
+        guestBtn.addEventListener('click', () => {
+            // Force selector modal open (will use Trial Armory)
+            const selectorModal = document.querySelector('#nft-selector-modal');
+            if (selectorModal) {
+                // Find the instance - we might need to expose it or trigger an event
+                document.dispatchEvent(new CustomEvent('GUEST_PLAY_REQUEST'));
+            }
+        });
+    }
 }
 
 function updateBattleHeader(account) {
@@ -461,15 +732,30 @@ function updateBattleHeader(account) {
         const glow = connectBtn.querySelector('.status-glow');
         const avatar = document.getElementById('battle-connect-avatar');
         const text = document.getElementById('battle-connect-text');
+        const streakBadge = document.getElementById('battle-streak-badge');
+        const streakCount = document.getElementById('streak-count');
 
         applyMiniAppAvatar(avatar);
 
         if (account?.isConnected) {
             if (glow) { glow.style.background = '#10B981'; glow.style.boxShadow = '0 0 10px #10B981'; }
             if (text) text.textContent = getWalletIdentityLabel(account);
+            document.getElementById('guest-play-btn')?.classList.add('hidden');
+
+            // Update streak visibility
+            import('../lib/game/conversion.js').then(({ getConversionState }) => {
+                const conv = getConversionState(account.address);
+                if (conv && conv.streak >= 2) {
+                    if (streakBadge) streakBadge.classList.remove('hidden');
+                    if (streakCount) streakCount.textContent = conv.streak;
+                } else {
+                    if (streakBadge) streakBadge.classList.add('hidden');
+                }
+            });
         } else {
             if (glow) { glow.style.background = '#EF4444'; glow.style.boxShadow = '0 0 10px #EF4444'; }
             if (text) text.textContent = getWalletIdentityLabel(account);
+            document.getElementById('guest-play-btn')?.classList.remove('hidden');
         }
     }
 }
@@ -483,4 +769,133 @@ export function cleanup() {
         document.removeEventListener('BATTLE_REPLAY_REQUEST', window._battleReplayHandler);
         delete window._battleReplayHandler;
     }
+    // BUG-07 fix: clean up the rematch/replay-fight handlers
+    if (window._battleRematchHandler) {
+        document.removeEventListener('BATTLE_REMATCH_REQUEST', window._battleRematchHandler);
+        delete window._battleRematchHandler;
+    }
+    if (window._battleReplayFightHandler) {
+        document.removeEventListener('REPLAY_FIGHT_REQUEST', window._battleReplayFightHandler);
+        delete window._battleReplayFightHandler;
+    }
+    if (window._battleGuestPlayHandler) {
+        document.removeEventListener('GUEST_PLAY_REQUEST', window._battleGuestPlayHandler);
+        delete window._battleGuestPlayHandler;
+    }
+    if (window._battleOpenPreviewHandler) {
+        document.removeEventListener('OPEN_PREVIEW_MODAL', window._battleOpenPreviewHandler);
+        delete window._battleOpenPreviewHandler;
+    }
 }
+async function showRankUpCelebration(oldRank, newRank) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-fade-in';
+    overlay.innerHTML = `
+        <div class="max-w-sm w-full text-center animate-scale-up">
+            <div class="relative mb-8">
+                <div class="absolute inset-0 bg-indigo-500/20 blur-[100px] rounded-full animate-pulse"></div>
+                <div class="flex justify-center mb-4">${renderIcon('STAR', 'w-10 h-10 text-yellow-400')}</div>
+                <h2 class="text-4xl font-black text-white uppercase italic tracking-tighter mb-2">Rank Up!</h2>
+                <p class="text-slate-400 text-sm">Your legend grows in the arena.</p>
+            </div>
+            
+            <div class="flex items-center justify-center gap-6 mb-10">
+                <div class="flex flex-col items-center gap-2 opacity-50 grayscale scale-90">
+                    <div class="px-4 py-1.5 rounded-lg border border-current bg-white/5 ${oldRank.textClass} text-xs font-black uppercase tracking-widest">${oldRank.label}</div>
+                </div>
+                <div class="text-slate-600">${renderIcon('CHEVRON_RIGHT', 'w-6 h-6')}</div>
+                <div class="flex flex-col items-center gap-2 scale-125">
+                    <div class="px-5 py-2 rounded-xl border-2 border-current bg-white/10 ${newRank.textClass} text-sm font-black uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(255,255,255,0.1)]">${newRank.label}</div>
+                </div>
+            </div>
+            
+            <button id="close-rank-up" class="w-full py-4 bg-white text-slate-950 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 shadow-xl">
+                Enter Next Tier
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Add particle effects if possible
+
+    $('#close-rank-up').addEventListener('click', () => {
+        overlay.classList.add('animate-fade-out');
+        setTimeout(() => overlay.remove(), 400);
+    });
+}
+
+async function showSharePrompt(address, conversion, outcome, cycleDay, shareUrlSource = null) {
+    const { recordShare } = await import('../lib/game/conversion.js');
+    const { getRankByPoints } = await import('../lib/game/rankSystem.js');
+    const { getPlayerPoints } = await import('../lib/game/points.js');
+    const { generateGrowthPost } = await import('../lib/game/distributionEngine.js');
+    const { getPlayerTournamentStatus } = await import('../lib/game/tournament.js');
+
+    const points = getPlayerPoints(address);
+    const rank = getRankByPoints(points);
+    const tourney = getPlayerTournamentStatus(address);
+
+    const isNearLoss = outcome?.type === 'NEAR_LOSS';
+    const isComeback = outcome?.type === 'COMEBACK';
+
+    // Build context for post generation
+    const resolvedShareUrl = typeof shareUrlSource?.then === 'function'
+        ? await shareUrlSource
+        : shareUrlSource;
+    const shareUrl = resolvedShareUrl || buildReplayShareUrl(null);
+    const growthPost = await generateGrowthPost(outcome?.type || `DAY_${cycleDay}`, {
+        rank: rank.label,
+        value: outcome?.value || 0,
+        pos: tourney?.rank || 18,
+        url: shareUrl,
+        wallet: address,
+    });
+
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-fade-in';
+    overlay.innerHTML = `
+        <div class="max-w-sm w-full bg-slate-900 rounded-[2.5rem] border border-white/10 p-8 text-center animate-scale-up shadow-2xl">
+            <div class="relative w-20 h-20 ${isNearLoss ? 'bg-red-500/20' : 'bg-yellow-500/20'} rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                ${renderIcon(isNearLoss ? 'SWORDS' : 'TROPHY', 'w-10 h-10 ' + (isNearLoss ? 'text-red-500' : 'text-yellow-500'))}
+                ${conversion.streak > 1 ? `<div class="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-red-600 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-white">#${conversion.streak}</div>` : ''}
+            </div>
+            <h2 class="text-2xl font-black text-white uppercase italic tracking-tighter mb-2">
+                ${isNearLoss ? 'So Close!' : (isComeback ? 'Insane Comeback!' : 'Legendary Progress!')}
+            </h2>
+            <p class="text-slate-400 text-sm mb-8">
+                ${isNearLoss ? `You lost by only ${outcome.value} HP. Rematch already queued?` : `Share your dominance to the arena feed and climb ranks faster!`}
+            </p>
+            
+            <div class="space-y-3">
+                <button id="confirm-share" class="w-full py-4 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-2xl font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-red-500/20">
+                    Share Victory
+                </button>
+                <button id="skip-share" class="w-full py-4 bg-white/5 text-slate-500 rounded-2xl font-bold uppercase tracking-widest hover:text-slate-300 transition-all">
+                    Maybe Later
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    $('#confirm-share').onclick = async () => {
+        const { shareCustomToFeed } = await import('../utils/social.js');
+        const { trackShare } = await import('../lib/api.js');
+
+        await shareCustomToFeed(growthPost.text, growthPost.url);
+
+        trackShare(address, 'farcaster', { type: outcome?.type || 'growth', cycleDay });
+        recordShare(address);
+        overlay.remove();
+        showBattleToast('Shared to Arena Feed!', 'success');
+    };
+
+    $('#skip-share').onclick = () => overlay.remove();
+}
+
+
+// NOTE: BUG-07 — the BATTLE_REMATCH_REQUEST and REPLAY_FIGHT_REQUEST listeners
+// have been moved into renderBattlePage() and wired to cleanup() above.
+// They no longer exist at module scope to prevent listener stacking.

@@ -168,6 +168,12 @@ export async function initWallet() {
         }
     } catch (error) {
         console.warn('⚠️ Reconnect failed (this is normal if no previous session):', error);
+        
+        // 5. If reconnect failed, try silent mini-app connect (Auto-Connect for Farcaster/Base)
+        if (!initialAccount.isConnected && globalState.platform?.inMiniApp) {
+            console.log('⚡ Attempting silent mini-app auto-connect...');
+            connectMiniAppWalletSilently().catch(() => {});
+        }
     }
 
     // Log available connectors for debugging
@@ -253,81 +259,4 @@ export async function switchToBase() {
 }
 
 
-/**
- * Game Ecosystem Utility
- * Fetches all owned NFTs across the whitelisted collections
- * using the existing OpenSea API client (src/lib/opensea.js) to populate the NFTSelectorModal.
- */
-export async function fetchOwnedBattleNFTs(walletAddress) {
-    if (!walletAddress) return [];
-    console.log(`[Wallet] Fetching OpenSea NFTs on Base for ${walletAddress}...`);
-    try {
-        const { fetchNFTsByWallet } = await import('./lib/opensea.js');
-        const result = await fetchNFTsByWallet(walletAddress, {
-            chain: 'base',
-            limit: 200
-        });
-        const nfts = result.nfts || [];
-        const { normalizeFighter, normalizeItemStats, normalizeArenaStats } = await import('./lib/battle/metadataNormalizer.js');
-        const { COLLECTION_PROFILES, getRoleForSlug } = await import('./lib/battle/collectionProfiles.js');
-
-        const allowedSlugs = Object.keys(COLLECTION_PROFILES);
-
-        return nfts
-            .filter(nft => allowedSlugs.includes(nft.collection))
-            .map(nft => {
-                const traits = nft.traits || [];
-                let primaryTrait = 'Standard';
-                if (traits.length > 0) {
-                    const mapped = traits.find(t =>
-                        t.trait_type === 'Faction' ||
-                        t.trait_type === 'Mood' ||
-                        t.trait_type === 'Distortion'
-                    );
-                    if (mapped) primaryTrait = mapped.value;
-                    else primaryTrait = traits[0].value;
-                }
-
-                // Map OpenSea slug to engine known collection ID
-                let engineId = nft.collection;
-                if (nft.collection === 'baseheads-404') engineId = 'BASEHEADS_404';
-                else if (nft.collection === 'base-moods') engineId = 'BaseMoods';
-                else if (nft.collection === 'void-pfps') engineId = 'VOID_PFPS';
-                else if (nft.collection === 'neon-runes') engineId = 'neon-runes';
-                else if (nft.collection === 'base-invaders') engineId = 'BASE_INVADERS';
-
-                const role = getRoleForSlug(engineId) || 'UNKNOWN';
-
-                // Normalize stats so the selector can display real values
-                let stats = {};
-                try {
-                    if (role === 'FIGHTER') {
-                        stats = normalizeFighter(engineId, nft.identifier, traits);
-                    } else if (role === 'ITEM_BUFF') {
-                        stats = normalizeItemStats(engineId, nft.identifier, traits);
-                    } else if (role === 'ENVIRONMENT') {
-                        stats = normalizeArenaStats(engineId, nft.identifier, traits);
-                    }
-                } catch (e) {
-                    console.warn(`[Wallet] Could not normalize stats for ${engineId} #${nft.identifier}`, e);
-                }
-
-                return {
-                    id: `${nft.collection}:${nft.identifier}`,
-                    engineId,  // The ID the normalizer expects
-                    collectionName: nft.collection,
-                    nftId: nft.identifier,
-                    trait: primaryTrait,
-                    role,
-                    slotEligible: true,
-                    rawAttributes: traits,
-                    stats,
-                    passive: stats.passive || null,
-                    imageUrl: nft.image_url || nft.animation_url || null
-                };
-            });
-    } catch (e) {
-        console.error('[Wallet] Error fetching APIs from OpenSea wrapper:', e);
-        return [];
-    }
-}
+export { fetchOwnedBattleNFTs } from './lib/nftInventory.js';
