@@ -301,3 +301,127 @@ Post-Codex verification pass. Focused on build tooling, chunk splitting, and imp
 ### Remaining Non-Blocking Items
 - Mixed static/dynamic import warnings for battle engine modules — expected because `engineV2.js` is inside both the new `game-engine` manual chunk AND dynamically imported inside the battle flow. Harmless.
 - Points, boss progress, and tournament state still browser-local (Phase A server-migration roadmap).
+
+---
+
+## [2026-04-30] - Analytics Competitive Dashboard Refactor
+
+### Scope
+- Refactored the root `/analytics` experience into a battle-first competitive dashboard.
+- Preserved `/analytics/:slug` as the collection-oriented analytics route.
+- Removed analytics-side battle localStorage fallback logic and switched the root analytics surface to server-only battle data.
+
+### Fixed / Implemented
+- **Root analytics architecture**:
+  - Rebuilt `src/pages/analytics.js` so the root route now renders the battle-first sections:
+    - `Your Stats`
+    - `Global Competition`
+    - `Your History`
+  - Kept the admin panel on-page below the main sections.
+  - Collection analytics routing remains separate and mint/collection oriented.
+- **User stats API contract**:
+  - `api/user.js` now exposes battle profile fields already present in KV:
+    - `profile.battleTotal`
+    - `profile.battleWins`
+    - `profile.battleLosses`
+    - `profile.battleWinRate`
+  - Added `rankings.battleWins = { rank, score }`.
+- **Leaderboard API contract**:
+  - `api/leaderboard.js` now supports `viewer=<wallet>` and `surface=competition`.
+  - Added `leaderboard[].rank_change` and top-level `viewerRow`.
+  - Root competition mode now reads from `activity:battles:global` instead of the mint feed.
+  - Root competition mode skips funnel, social-proof, and top-collections work to reduce KV reads.
+- **Daily rank snapshots**:
+  - Added daily JSON snapshots at `leaderboard:snapshot:<type>:<YYYY-MM-DD>`.
+  - Snapshot writes use `SET NX` with 8-day TTL to avoid race-condition overwrites.
+  - Rank changes now resolve to `up`, `down`, `same`, or `new`.
+- **Battle feed plumbing**:
+  - `api/_lib/events.js` now increments `global:battle_count`.
+  - `battle_result_v2` now pushes compact feed items to `activity:battles:global`.
+  - Feed items include `battleId` when available and render correctly without a replay link when absent.
+- **PvP analytics correctness**:
+  - `api/_lib/battle/fight.js` now emits server-side `battle_result_v2` events after replay persistence.
+  - Added mirrored participant updates so both PvP wallets get profile/history battle accounting without double-counting global stats.
+  - Root PvP tracking no longer depends on the client battle page.
+- **Client analytics correctness**:
+  - `src/pages/battle.js` now tracks battle-result analytics on the client for AI battles only.
+  - PvP analytics are now server-sourced, which avoids duplicate counting and enables replay-aware feed items.
+- **Analytics component refactor**:
+  - `src/components/analytics/WalletInsights.js` is now battle-first.
+  - `src/components/analytics/MintLeaderboard.js` now renders top-3 styling, rank-change pills, and appended `YOU` rows.
+  - `src/components/analytics/RecentActivity.js` now supports battle-feed rendering mode.
+  - `src/components/analytics/BattleOverview.js` is now synced-history only and no longer uses local fallback or `LOCAL FALLBACK` badges.
+
+### Validation
+- `npm.cmd run build` completed successfully after the analytics refactor.
+- `node --check` remains unreliable in this workspace because of the existing Windows `EPERM` realpath issue on `C:\Users\ravi`; the production build remains the reliable validation step here.
+
+### Follow-Up
+- Root competition pills refresh on full page render and on the 30-second live refresh loop; they are not individually hot-swapped on every leaderboard tab click yet.
+- Collection analytics still share the same wallet-insights component, which is now battle-first by design.
+
+---
+
+## [2026-04-30] - Analytics Arena/NFT Tabs Pass
+
+### Scope
+- Added root `/analytics` view switching between `Arena` and `NFT`.
+- Kept `/analytics/:slug` on the existing collection analytics route.
+- Preserved the prior backend data contracts; this pass is frontend orchestration and presentation only.
+
+### Implemented
+- **Root view tabs**:
+  - `/analytics` defaults to the Arena view.
+  - `/analytics?view=nft` opens the NFT view directly.
+  - Tab changes use `window.history.replaceState(...)` and swap only the root analytics content section.
+- **Page-local analytics cache**:
+  - `getUserStats(wallet)` is fetched once per root page render and shared across both views.
+  - Arena and NFT leaderboard/feed payloads are cached separately for tab switching.
+- **Arena view**:
+  - Uses `WalletInsights` in `arena` mode.
+  - Shows global battle competition, battle feed, and synced battle history.
+  - Arena metric tabs are `Wins` and `Points`, both using `surface=competition`.
+- **NFT view**:
+  - Uses `WalletInsights` in `nft` mode.
+  - Restores mint stats, conversion funnel, collection performance, global mint leaderboard, mint feed, mint history, and journey timeline.
+  - NFT metric tabs are `Mints`, `Volume`, and `Points`, using the default global analytics API with no competition surface.
+  - Added a moving social-proof ticker that pauses on hover and respects `prefers-reduced-motion`.
+- **Unified points display**:
+  - Total points remain server-authoritative.
+  - NFT, battle, streak, bonus, and per-collection point breakdown rows are explicitly labelled estimated.
+
+### Validation
+- `npm.cmd run build` completed successfully.
+- Build warnings are the existing third-party pure-comment, chunk-size, and mixed static/dynamic import warnings; no analytics compilation errors were introduced.
+
+### Notes
+- No commit was created.
+- No backend writes were added in this pass.
+
+---
+
+## [2026-04-30] - Track Event Security Hardening
+
+### Scope
+- Hardened sensitive analytics ingestion in `api/track.js`.
+- Adjusted abuse limits for high-value event types in `api/_lib/events.js`.
+- Kept wallet-popup/auth UX changes out of scope for a separate pass.
+
+### Fixed / Implemented
+- **JWT required for sensitive events**:
+  - `battle_result_v2`
+  - `battle_won`
+  - `mint_success`
+  - `social_share`
+- **Wallet ownership enforcement**:
+  - Sensitive events now reject with `403` when the authenticated JWT address does not match `body.wallet`.
+- **Mint event integrity**:
+  - `mint_success` now rejects with `400` when `txHash` is missing.
+- **Rate-limit tightening**:
+  - `battle_result_v2` is capped at `20` events per rate-limit window.
+  - `mint_success` is capped at `5` events per rate-limit window.
+
+### Validation
+- `node --check api/track.js` passed.
+- `npm.cmd run build` completed successfully.
+- `node --check api/_lib/events.js` hit the existing Windows `EPERM` realpath issue; production build validation passed.

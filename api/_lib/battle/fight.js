@@ -18,11 +18,12 @@
 import { withCors } from '../cors.js';
 import { verifyAuth } from '../authMiddleware.js';
 import {
+    kv,
     getChallengeAtomic,
     deleteChallengeAtomic,
-    incrementBattleWins,
     saveBattleRecord,
 } from '../kv.js';
+import { processEvent } from '../events.js';
 import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
 
 async function handler(req, res) {
@@ -128,12 +129,7 @@ async function handler(req, res) {
         // 7. Delete consumed challenge
         await deleteChallengeAtomic(challengeId);
 
-        // 8. Update leaderboard
-        await incrementBattleWins(winnerAddress).catch(err => {
-            console.error('[Fight] Leaderboard update failed:', err.message);
-        });
-
-        // 9. Save Verifiable Battle Record (Seed-First Schema)
+        // 8. Save Verifiable Battle Record (Seed-First Schema)
         const attackerName = challenge.loadout?.fighter?.name || `Fighter ${attackerId}`;
         const defenderName = defenderLoadout.fighter.name || `Fighter ${defenderId}`;
 
@@ -173,6 +169,38 @@ async function handler(req, res) {
         const generatedBattleId = await saveBattleRecord(battleRecord).catch(err => {
             console.error('[Fight] KV Battle Record save failed:', err.message);
             return null;
+        });
+
+        processEvent(kv, {
+            type: 'battle_result_v2',
+            wallet: auth.address,
+            timestamp: Date.now(),
+            metadata: {
+                won: battleResult.winnerSide === 'P2',
+                isAi: false,
+                rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                opponent: attackerName,
+                battleId: generatedBattleId || null,
+                affectsGlobal: true
+            }
+        }).catch((err) => {
+            console.error('[Fight] battle_result_v2 analytics failed:', err.message);
+        });
+
+        processEvent(kv, {
+            type: 'battle_result_v2',
+            wallet: challenge.player,
+            timestamp: Date.now(),
+            metadata: {
+                won: battleResult.winnerSide === 'P1',
+                isAi: false,
+                rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                opponent: defenderName,
+                battleId: generatedBattleId || null,
+                affectsGlobal: false
+            }
+        }).catch((err) => {
+            console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);
         });
 
         return res.status(200).json({

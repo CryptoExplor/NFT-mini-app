@@ -164,14 +164,30 @@ export function handleBattleWon(pipe, event, { weekNum }) {
 }
 
 /** battle_result_v2 — modern V2 battle tracker */
-export function handleBattleResultV2(pipe, event, { weekNum }) {
+export function handleBattleResultV2(pipe, event, { weekNum, timestamp }) {
     const { wallet, metadata } = event;
     const isAi = metadata?.isAi ?? true;
     const won = metadata?.won ?? false;
+    const battleId = metadata?.battleId || null;
+    const opponent = metadata?.opponent || null;
+    const affectsGlobal = metadata?.affectsGlobal !== false;
 
-    // Global Stats
-    pipe.hincrby('stats:global', 'battle_total', 1);
-    if (won) pipe.hincrby('stats:global', 'battle_wins', 1);
+    if (affectsGlobal) {
+        pipe.hincrby('stats:global', 'battle_total', 1);
+        if (won) pipe.hincrby('stats:global', 'battle_wins', 1);
+        pipe.incr('global:battle_count');
+
+        const activityItem = JSON.stringify({
+            battleId,
+            wallet: wallet || 'anonymous',
+            opponent,
+            won,
+            isAi,
+            timestamp: timestamp || Date.now()
+        });
+        pipe.lpush('activity:battles:global', activityItem);
+        pipe.ltrim('activity:battles:global', 0, 99);
+    }
 
     if (wallet && wallet !== 'anonymous') {
         pipe.hincrby(`user:${wallet}:profile`, 'battle_total', 1);
@@ -403,8 +419,9 @@ const RATE_LIMITS = {
     collection_view: 60,
     wallet_connect: 10,
     page_view: 100,
-    mint_success: 100,
+    mint_success: 5,
     social_share: 20,
+    battle_result_v2: 20,
     replay_conversion: 60,
     ai_post: 5
 };
@@ -558,6 +575,7 @@ export async function processEvent(kv, event, opts = {}) {
     // ── Weekly leaderboard TTL (inside pipeline, not standalone!) ──
     pipe.expire(`leaderboard:mints:week:${weekNum}`, 60 * 60 * 24 * 56);
     pipe.expire(`leaderboard:points:week:${weekNum}`, 60 * 60 * 24 * 56);
+    pipe.expire(`leaderboard:battle_wins:week:${weekNum}`, 60 * 60 * 24 * 56);
 
     // ── Execute pipeline ──
     const results = await pipe.exec();

@@ -180,7 +180,10 @@ NFT Metadata → Normalizer → Universal Stats → Combat Engine → Animated R
 - [x] V2 Analytics tracking (`battle_loadout_built`, `battle_started_v2`, `battle_result_v2`)
 - [x] Auth cleanup on wallet disconnect (`clearBattleAuth`)
 - [x] Live balance configuration fetching via CDN (with bundled fallback)
-- [ ] Spectator Mode — shareable battle replay URLs
+- [x] Spectator Mode — shareable battle replay URLs
+- [x] Strict JWT event authentication & Rate-limiting (Hardened Pipeline)
+- [x] Split Analytics Dashboard (Arena vs NFT views)
+- [x] Dedicated Battle Points Leaderboard
 
 ### 🔜 Phase 3 — Multiplayer & Social
 - [ ] Real-time PvP matchmaking with WebSocket

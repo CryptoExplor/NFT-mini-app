@@ -8,11 +8,13 @@ try {
     const mod = await import('../src/lib/loadCollections.js');
     loadCollections = mod.loadCollections;
 } catch (e) {
-    console.warn('[leaderboard] Could not load loadCollections — import.meta.env is unavailable in this runtime. Falling back to KV-only slugs.');
+    console.warn('[leaderboard] Could not load loadCollections - import.meta.env is unavailable in this runtime. Falling back to KV-only slugs.');
     loadCollections = () => [];
 }
 
-const VALID_TYPES = new Set(['mints', 'volume', 'gas', 'reputation', 'points', 'battle_wins']);
+const VALID_TYPES = new Set(['mints', 'volume', 'gas', 'reputation', 'points', 'battle_wins', 'battle_points']);
+const SNAPSHOT_TYPES = new Set(['battle_wins', 'points', 'mints', 'volume', 'battle_points']);
+const SNAPSHOT_TTL_SECONDS = 8 * 24 * 60 * 60;
 
 export default async function handler(req, res) {
     setCors(req, res, {
@@ -23,93 +25,173 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        // Cache at edge for 60s — leaderboard data changes slowly
         res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
-        const { type = 'mints', period = 'all_time', limit = 10, collection = null } = req.query;
+
+        const {
+            type = 'mints',
+            period = 'all_time',
+            limit = 10,
+            collection = null,
+            viewer = null,
+            surface = null
+        } = req.query;
+
         const typeKey = VALID_TYPES.has(type) ? type : 'mints';
         const safeLimit = Math.max(1, Math.min(parseInt(limit, 10) || 10, 100));
         const collectionSlug = typeof collection === 'string' && collection.trim() ? collection.trim() : null;
-
-        const pipeline = kv.pipeline();
+        const viewerWallet = normalizeWallet(viewer);
+        const isCompetitionSurface = !collectionSlug && surface === 'competition';
+        const leaderboardKey = getLeaderboardKey(typeKey, period, collectionSlug);
 
         if (collectionSlug) {
-            pipeline.hgetall(`collection:${collectionSlug}:stats`);
-            pipeline.hgetall(`funnel:mint:${collectionSlug}`);
-            pipeline.zrange(getLeaderboardKey(typeKey, period, collectionSlug), 0, safeLimit - 1, { rev: true, withScores: true });
-            pipeline.lrange(`activity:collection:${collectionSlug}`, 0, 29);
-            pipeline.scard(`collection:${collectionSlug}:wallets`);
-        } else {
-            pipeline.hgetall('stats:global');
-            pipeline.hgetall('funnel:mint');
-            pipeline.zrange(getLeaderboardKey(typeKey, period, null), 0, safeLimit - 1, { rev: true, withScores: true });
-            pipeline.lrange('activity:global', 0, 29);
-            pipeline.scard('wallets:connected');
+            const collectionPayload = await getCollectionPayload({
+                collectionSlug,
+                typeKey,
+                period,
+                safeLimit
+            });
+            return res.status(200).json(collectionPayload);
         }
 
-        const [rawStats, funnelData, rawLeaderboard, recentActivity, uniqueWallets] = await pipeline.exec();
-        const collections = await getTopCollections();
-
-        const formattedLeaderboard = formatLeaderboard(rawLeaderboard);
-
-        // Resolve display names for leaderboard wallets (1 pipeline, N reads)
-        if (formattedLeaderboard.length > 0) {
-            const namePipe = kv.pipeline();
-            for (const entry of formattedLeaderboard) {
-                namePipe.hget(`user:${entry.wallet}:profile`, 'display_name');
-            }
-            const names = await namePipe.exec();
-            for (let i = 0; i < formattedLeaderboard.length; i++) {
-                const w = formattedLeaderboard[i].wallet;
-                formattedLeaderboard[i].displayName = names[i] || null;
-                formattedLeaderboard[i].shortAddress = w && w.length >= 10
-                    ? `${w.slice(0, 6)}...${w.slice(-4)}`
-                    : w || 'Unknown';
-            }
+        if (isCompetitionSurface) {
+            const competitionPayload = await getCompetitionPayload({
+                typeKey,
+                period,
+                safeLimit,
+                leaderboardKey,
+                viewerWallet
+            });
+            return res.status(200).json(competitionPayload);
         }
 
-        const parsedActivity = parseList(recentActivity);
-        const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
-        const funnelSteps = buildFunnel(funnelData || {});
-        const overallConversion = computeOverallConversion(funnelSteps);
-        const stats = collectionSlug
-            ? toCollectionStats(rawStats || {}, uniqueWallets || 0)
-            : toGlobalStats(rawStats || {}, uniqueWallets || 0);
-
-        return res.status(200).json({
-            scope: collectionSlug ? 'collection' : 'global',
-            collection: collectionSlug,
-            stats,
-            funnel: funnelSteps,
-            overallConversion,
-            leaderboard: formattedLeaderboard,
-            collections,
-            recentActivity: parsedActivity,
-            socialProof
+        const defaultPayload = await getDefaultGlobalPayload({
+            typeKey,
+            period,
+            safeLimit,
+            leaderboardKey
         });
+        return res.status(200).json(defaultPayload);
     } catch (error) {
         console.error('Leaderboard error:', error);
         return res.status(500).json({ error: 'Failed to fetch analytics' });
     }
 }
 
+async function getCollectionPayload({ collectionSlug, typeKey, period, safeLimit }) {
+    const pipeline = kv.pipeline();
+    pipeline.hgetall(`collection:${collectionSlug}:stats`);
+    pipeline.hgetall(`funnel:mint:${collectionSlug}`);
+    pipeline.zrange(getLeaderboardKey(typeKey, period, collectionSlug), 0, safeLimit - 1, { rev: true, withScores: true });
+    pipeline.lrange(`activity:collection:${collectionSlug}`, 0, 29);
+    pipeline.scard(`collection:${collectionSlug}:wallets`);
+
+    const [rawStats, funnelData, rawLeaderboard, recentActivity, uniqueWallets] = await pipeline.exec();
+    const collections = await getTopCollections();
+    const formattedLeaderboard = await hydrateLeaderboardRows(formatLeaderboard(rawLeaderboard, typeKey));
+    const parsedActivity = parseList(recentActivity);
+    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
+    const funnelSteps = buildFunnel(funnelData || {});
+
+    return {
+        scope: 'collection',
+        collection: collectionSlug,
+        stats: toCollectionStats(rawStats || {}, uniqueWallets || 0),
+        funnel: funnelSteps,
+        overallConversion: computeOverallConversion(funnelSteps),
+        leaderboard: formattedLeaderboard,
+        viewerRow: null,
+        collections,
+        recentActivity: parsedActivity,
+        socialProof
+    };
+}
+
+async function getCompetitionPayload({ typeKey, period, safeLimit, leaderboardKey, viewerWallet }) {
+    const pipeline = kv.pipeline();
+    pipeline.hgetall('stats:global');
+    pipeline.zrange(leaderboardKey, 0, safeLimit - 1, { rev: true, withScores: true });
+    pipeline.lrange('activity:battles:global', 0, 29);
+    pipeline.zcard('leaderboard:battle_wins:all_time');
+    pipeline.get('global:battle_count');
+
+    const [rawStats, rawLeaderboard, recentActivity, uniqueWallets, globalBattleCount] = await pipeline.exec();
+    const leaderboard = await hydrateLeaderboardRows(formatLeaderboard(rawLeaderboard, typeKey));
+
+    let yesterdaySnapshot = null;
+    if (period === 'all_time' && SNAPSHOT_TYPES.has(typeKey)) {
+        await ensureDailySnapshot(typeKey, leaderboardKey);
+        yesterdaySnapshot = await getSnapshotForDay(typeKey, getUtcDayOffset(-1));
+    }
+
+    const rankedLeaderboard = leaderboard.map((entry) => ({
+        ...entry,
+        rank_change: getRankChange(yesterdaySnapshot, entry.wallet, entry.rank)
+    }));
+
+    const viewerRow = await getViewerRow({
+        viewerWallet,
+        leaderboard: rankedLeaderboard,
+        leaderboardKey,
+        snapshot: yesterdaySnapshot
+    });
+
+    return {
+        scope: 'global',
+        collection: null,
+        stats: toGlobalStats(rawStats || {}, uniqueWallets || 0, globalBattleCount),
+        funnel: [],
+        overallConversion: '0.0',
+        leaderboard: rankedLeaderboard,
+        viewerRow,
+        collections: [],
+        recentActivity: parseList(recentActivity),
+        socialProof: []
+    };
+}
+
+async function getDefaultGlobalPayload({ typeKey, period, safeLimit, leaderboardKey }) {
+    const pipeline = kv.pipeline();
+    pipeline.hgetall('stats:global');
+    pipeline.hgetall('funnel:mint');
+    pipeline.zrange(leaderboardKey, 0, safeLimit - 1, { rev: true, withScores: true });
+    pipeline.lrange('activity:global', 0, 29);
+    pipeline.scard('wallets:connected');
+
+    const [rawStats, funnelData, rawLeaderboard, recentActivity, uniqueWallets] = await pipeline.exec();
+    const collections = await getTopCollections();
+    const formattedLeaderboard = await hydrateLeaderboardRows(formatLeaderboard(rawLeaderboard, typeKey));
+    const parsedActivity = parseList(recentActivity);
+    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
+    const funnelSteps = buildFunnel(funnelData || {});
+
+    return {
+        scope: 'global',
+        collection: null,
+        stats: toGlobalStats(rawStats || {}, uniqueWallets || 0, null),
+        funnel: funnelSteps,
+        overallConversion: computeOverallConversion(funnelSteps),
+        leaderboard: formattedLeaderboard,
+        viewerRow: null,
+        collections,
+        recentActivity: parsedActivity,
+        socialProof
+    };
+}
+
 function getLeaderboardKey(type, period, collectionSlug) {
-    // Per-collection leaderboards use the full pattern
+    if (type === 'battle_points') type = 'battle_wins';
+
     if (collectionSlug && ['mints', 'volume', 'gas'].includes(type) && period === 'all_time') {
         return `leaderboard:${type}:${period}:${collectionSlug}`;
     }
 
-    // BUGFIX: events.js writes points/reputation WITHOUT a period suffix:
-    //   leaderboard:points           (not leaderboard:points:all_time)
-    //   leaderboard:reputation       (not leaderboard:reputation:all_time)
-    // Weekly points uses: leaderboard:points:week:{weekNum}
     if (type === 'points') {
         return period === 'all_time' ? 'leaderboard:points' : `leaderboard:points:week:${period}`;
     }
     if (type === 'reputation') {
-        return 'leaderboard:reputation'; // reputation has no weekly variant
+        return 'leaderboard:reputation';
     }
 
-    // All other types (mints, volume, gas, battle_wins) use the standard pattern
     return `leaderboard:${type}:${period}`;
 }
 
@@ -132,6 +214,9 @@ function buildFunnel(funnel) {
             step.dropOff = prev > 0 ? (((prev - step.count) / prev) * 100).toFixed(1) : '0.0';
         }
         step.overallConversion = ((step.count / firstStep) * 100).toFixed(1);
+        step.conversion = i === 0
+            ? '100.0'
+            : (step.conversionFromPrev || '0.0');
     }
 
     return funnelSteps;
@@ -144,13 +229,14 @@ function computeOverallConversion(funnelSteps) {
     return ((funnelSteps[funnelSteps.length - 1].count / firstStep) * 100).toFixed(1);
 }
 
-function formatLeaderboard(raw) {
+function formatLeaderboard(raw, typeKey) {
     if (!raw || !Array.isArray(raw)) return [];
 
+    const multiplier = typeKey === 'battle_points' ? 5 : 1;
     const aggregated = new Map();
     for (let i = 0; i < raw.length; i += 2) {
         const wallet = String(raw[i] || '').toLowerCase();
-        const score = parseFloat(raw[i + 1]) || 0;
+        const score = (parseFloat(raw[i + 1]) || 0) * multiplier;
         if (!wallet) continue;
         aggregated.set(wallet, (aggregated.get(wallet) || 0) + score);
     }
@@ -166,20 +252,69 @@ function formatLeaderboard(raw) {
     }));
 }
 
-function parseList(list) {
-    return (list || []).map((item) => {
-        try { return typeof item === 'string' ? JSON.parse(item) : item; }
-        catch { return item; }
+async function hydrateLeaderboardRows(rows) {
+    if (!rows || rows.length === 0) return [];
+
+    const namePipe = kv.pipeline();
+    for (const entry of rows) {
+        namePipe.hget(`user:${entry.wallet}:profile`, 'display_name');
+    }
+    const names = await namePipe.exec();
+
+    return rows.map((entry, index) => {
+        const wallet = entry.wallet;
+        return {
+            ...entry,
+            displayName: names[index] || null,
+            shortAddress: shortenAddr(wallet)
+        };
     });
 }
 
-function toGlobalStats(raw, uniqueWallets) {
+async function getViewerRow({ viewerWallet, leaderboard, leaderboardKey, snapshot }) {
+    if (!viewerWallet) return null;
+    if ((leaderboard || []).some((entry) => entry.wallet === viewerWallet)) {
+        return null;
+    }
+
+    const pipe = kv.pipeline();
+    pipe.zrevrank(leaderboardKey, viewerWallet);
+    pipe.zscore(leaderboardKey, viewerWallet);
+    pipe.hget(`user:${viewerWallet}:profile`, 'display_name');
+    const [rank, score, displayName] = await pipe.exec();
+
+    if (rank === null || score === null) {
+        return null;
+    }
+
+    return {
+        wallet: viewerWallet,
+        score: parseFloat(score) || 0,
+        rank: rank + 1,
+        displayName: displayName || null,
+        shortAddress: shortenAddr(viewerWallet),
+        rank_change: getRankChange(snapshot, viewerWallet, rank + 1)
+    };
+}
+
+function parseList(list) {
+    return (list || []).map((item) => {
+        try {
+            return typeof item === 'string' ? JSON.parse(item) : item;
+        } catch {
+            return item;
+        }
+    });
+}
+
+function toGlobalStats(raw, uniqueWallets, globalBattleCount) {
     const totalViews = parseInt(raw.total_views, 10) || 0;
     const totalMints = parseInt(raw.total_mints, 10) || 0;
     const totalAttempts = parseInt(raw.total_attempts, 10) || 0;
     const totalVolume = parseFloat(raw.total_volume) || 0;
     const totalGas = parseFloat(raw.total_gas) || 0;
-    const battleTotal = parseInt(raw.battle_total, 10) || 0;
+    const fallbackBattleTotal = parseInt(raw.battle_total, 10) || 0;
+    const battleTotal = parseInt(globalBattleCount, 10) || fallbackBattleTotal;
     const battleWins = parseInt(raw.battle_wins, 10) || 0;
 
     return {
@@ -241,12 +376,12 @@ function generateSocialProof(activity, leaderboard, collections) {
 
     for (const col of collections) {
         const milestones = [1000, 500, 100, 50, 10];
-        for (const m of milestones) {
-            if ((col.mints || 0) >= m) {
+        for (const milestone of milestones) {
+            if ((col.mints || 0) >= milestone) {
                 messages.push({
                     type: 'milestone',
                     icon: 'Milestone',
-                    text: `${col.slug} crossed ${m}+ mints`,
+                    text: `${col.slug} crossed ${milestone}+ mints`,
                     timestamp: Date.now()
                 });
                 break;
@@ -266,7 +401,7 @@ function generateSocialProof(activity, leaderboard, collections) {
         }
     }
 
-    const uniqueRecentWallets = new Set(activity.map((a) => a?.wallet).filter(Boolean)).size;
+    const uniqueRecentWallets = new Set(activity.map((entry) => entry?.wallet).filter(Boolean)).size;
     if (uniqueRecentWallets > 1) {
         messages.push({
             type: 'social',
@@ -279,17 +414,70 @@ function generateSocialProof(activity, leaderboard, collections) {
     return messages;
 }
 
+function getRankChange(snapshot, wallet, currentRank) {
+    const previousRank = snapshot?.ranks?.[wallet];
+    if (!previousRank) return 'new';
+    if (currentRank < previousRank) return 'up';
+    if (currentRank > previousRank) return 'down';
+    return 'same';
+}
+
+async function ensureDailySnapshot(typeKey, leaderboardKey) {
+    const today = getUtcDayOffset(0);
+    const snapshotKey = getSnapshotKey(typeKey, today);
+    const existing = await kv.get(snapshotKey);
+    if (existing) return;
+
+    const raw = await kv.zrange(leaderboardKey, 0, -1, { rev: true, withScores: true });
+    const formatted = formatLeaderboard(raw);
+    const ranks = {};
+    for (const entry of formatted) {
+        ranks[entry.wallet] = entry.rank;
+    }
+
+    const payload = JSON.stringify({
+        createdAt: Date.now(),
+        ranks
+    });
+
+    await kv.set(snapshotKey, payload, { ex: SNAPSHOT_TTL_SECONDS, nx: true });
+}
+
+async function getSnapshotForDay(typeKey, day) {
+    const raw = await kv.get(getSnapshotKey(typeKey, day));
+    if (!raw) return null;
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+        return null;
+    }
+}
+
+function getSnapshotKey(typeKey, day) {
+    return `leaderboard:snapshot:${typeKey}:${day}`;
+}
+
+function getUtcDayOffset(offsetDays) {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() + offsetDays);
+    return date.toISOString().split('T')[0];
+}
+
 function shortenAddr(addr) {
     if (!addr || addr.length < 10) return addr || 'Unknown';
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+function normalizeWallet(value) {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toLowerCase();
+    return /^0x[a-f0-9]{40}$/.test(normalized) ? normalized : null;
+}
+
 async function getTopCollections() {
     try {
         const configuredSlugs = getConfiguredCollectionSlugs();
-        // OPTIMIZED: Use static configured slugs directly instead of
-        // expensive kv.scan('collection:*:stats') which does multiple
-        // round-trip cursor iterations (was biggest single KV waste).
         const slugs = [...configuredSlugs];
 
         if (slugs.length === 0) return [];
@@ -324,8 +512,6 @@ async function getTopCollections() {
         return [];
     }
 }
-
-
 
 function getConfiguredCollectionSlugs() {
     try {

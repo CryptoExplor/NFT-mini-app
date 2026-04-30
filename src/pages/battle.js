@@ -369,13 +369,17 @@ export async function renderBattlePage() {
                         recordBossVictory(previewModal.enemyData.id, state.wallet?.address || 'guest');
                     }
 
-                    // V2 Analytics: track battle result
-                    trackBattleResult(state.wallet?.address, {
-                        won: playerWon,
-                        isAi,
-                        rounds: totalRounds,
-                        opponent: enemyCombatStats.name || null,
-                    });
+                    // V2 Analytics: AI battles still report from the client.
+                    // PvP battles are emitted server-side after the replay record is saved.
+                    if (isAi) {
+                        trackBattleResult(state.wallet?.address, {
+                            won: playerWon,
+                            isAi: true,
+                            rounds: totalRounds,
+                            opponent: enemyCombatStats.name || null,
+                            battleId: persistedBattleId || null,
+                        });
+                    }
                     // Refresh leaderboard if visible
                     leaderboard.render();
                 }, {

@@ -2,12 +2,20 @@ import { kv } from './_lib/kv.js';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { setCors } from './_lib/cors.js';
+import { verifyAuth } from './_lib/authMiddleware.js';
 import {
     VALID_EVENTS,
     processEvent,
     checkRateLimit,
     cleanupExpiredKeys
 } from './_lib/events.js';
+
+const AUTH_REQUIRED_EVENTS = new Set([
+    'battle_result_v2',
+    'battle_won',
+    'mint_success',
+    'social_share'
+]);
 
 // RPC Client for on-chain verification
 const publicClient = createPublicClient({
@@ -24,6 +32,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
+        const body = req.body || {};
         const {
             type,
             wallet,
@@ -36,10 +45,28 @@ export default async function handler(req, res) {
             device,
             page,
             metadata
-        } = req.body;
+        } = body;
 
         if (!type || !VALID_EVENTS.includes(type)) {
             return res.status(400).json({ error: `Invalid event type. Valid: ${VALID_EVENTS.join(', ')}` });
+        }
+
+        // ── Auth guard for points-granting events ──
+        if (AUTH_REQUIRED_EVENTS.has(type)) {
+            const auth = await verifyAuth(req);
+            if (!auth?.valid) {
+                return res.status(401).json({ error: 'Authentication required' });
+            }
+
+            const bodyWallet = wallet ? String(wallet).toLowerCase() : '';
+            if (!bodyWallet || auth.address.toLowerCase() !== bodyWallet) {
+                return res.status(403).json({ error: 'Authenticated wallet does not match event wallet' });
+            }
+        }
+
+        // ── txHash required for mint_success ──
+        if (type === 'mint_success' && !txHash) {
+            return res.status(400).json({ error: 'txHash is required for mint_success events' });
         }
 
         const normalizedWallet = (wallet && wallet !== 'anonymous')
@@ -108,17 +135,20 @@ async function verifyMintTransaction(txHash, wallet) {
 
         const TOPICS = {
             ERC721_TRANSFER: '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
-            ERC1155_SINGLE: '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62',
-            ERC1155_BATCH: '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb'
+            ERC1155_SINGLE:  '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62',
+            ERC1155_BATCH:   '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb'
         };
 
-        const walletPad = wallet.toLowerCase().replace('0x', '0x000000000000000000000000');
+        // ERC topics zero-pad addresses to 32 bytes:
+        // 0x + 24 zero chars + 40-char address = 66 chars total
+        // .slice(2) strips '0x' before prepending the correct padding
+        const walletPad = `0x000000000000000000000000${wallet.toLowerCase().slice(2)}`;
 
         return receipt.logs.some(log => {
             const t0 = log.topics[0];
             if (t0 === TOPICS.ERC721_TRANSFER) return log.topics[2]?.toLowerCase() === walletPad;
-            if (t0 === TOPICS.ERC1155_SINGLE) return log.topics[3]?.toLowerCase() === walletPad;
-            if (t0 === TOPICS.ERC1155_BATCH) return log.topics[3]?.toLowerCase() === walletPad;
+            if (t0 === TOPICS.ERC1155_SINGLE)  return log.topics[3]?.toLowerCase() === walletPad;
+            if (t0 === TOPICS.ERC1155_BATCH)   return log.topics[3]?.toLowerCase() === walletPad;
             return false;
         });
     } catch (e) {

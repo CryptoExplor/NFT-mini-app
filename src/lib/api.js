@@ -138,10 +138,10 @@ export function trackBattleStarted(wallet, { isAi = true, challengeId = null, op
 /**
  * Track V2 battle result
  */
-export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0, opponent = null } = {}) {
+export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0, opponent = null, battleId = null } = {}) {
     trackEvent('battle_result_v2', {
         wallet,
-        metadata: { won, isAi, rounds, opponent }
+        metadata: { won, isAi, rounds, opponent, battleId }
     });
 }
 
@@ -180,6 +180,12 @@ export async function getLeaderboard(options = {}) {
         if (options.collection) {
             params.set('collection', options.collection);
         }
+        if (options.viewer) {
+            params.set('viewer', options.viewer);
+        }
+        if (options.surface) {
+            params.set('surface', options.surface);
+        }
 
         // Allow relative paths in dev (e.g. vercel dev)
         // if (!API_BASE && import.meta.env.DEV) { ... }
@@ -195,6 +201,7 @@ export async function getLeaderboard(options = {}) {
                 funnel: [],
                 overallConversion: '0.0',
                 leaderboard: [],
+                viewerRow: null,
                 collections: [],
                 recentActivity: [],
                 socialProof: [],
@@ -210,6 +217,7 @@ export async function getLeaderboard(options = {}) {
             funnel: [],
             overallConversion: '0.0',
             leaderboard: [],
+            viewerRow: null,
             collections: [],
             recentActivity: [],
             socialProof: [],

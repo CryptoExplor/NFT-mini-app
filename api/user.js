@@ -45,6 +45,8 @@ export default async function handler(req, res) {
         pipe.zscore('leaderboard:reputation', walletKey);
         pipe.zrevrank('leaderboard:points', walletKey);
         pipe.zscore('leaderboard:points', walletKey);
+        pipe.zrevrank('leaderboard:battle_wins:all_time', walletKey);
+        pipe.zscore('leaderboard:battle_wins:all_time', walletKey);
 
         const [
             rawProfile,
@@ -58,7 +60,9 @@ export default async function handler(req, res) {
             reputationRank,
             reputationScore,
             pointsRank,
-            pointsScore
+            pointsScore,
+            battleWinsRank,
+            battleWinsScore
         ] = await pipe.exec();
 
         const profile = sanitizeProfileHash(rawProfile);
@@ -82,6 +86,12 @@ export default async function handler(req, res) {
         const totalVolume = parseFloat(profile?.total_volume || 0);
         const totalGas = parseFloat(profile?.total_gas || 0);
         const totalPoints = parseInt(profile?.total_points, 10) || 0;
+        const battleTotal = parseInt(profile?.battle_total, 10) || 0;
+        const battleWins = parseInt(profile?.battle_wins, 10) || 0;
+        const battleLosses = Math.max(0, battleTotal - battleWins);
+        const battleWinRate = battleTotal > 0
+            ? ((battleWins / battleTotal) * 100).toFixed(1)
+            : '0.0';
 
         const successRate = totalAttempts > 0
             ? ((totalMints / totalAttempts) * 100).toFixed(1)
@@ -128,6 +138,10 @@ export default async function handler(req, res) {
                 streak: currentStreak,
                 longestStreak,
                 totalPoints,
+                battleTotal,
+                battleWins,
+                battleLosses,
+                battleWinRate,
                 favoriteCollection: favorite.collection,
                 favoriteCollectionMints: favorite.count,
                 mintContribution,
@@ -151,6 +165,10 @@ export default async function handler(req, res) {
                 points: {
                     rank: pointsRank !== null ? pointsRank + 1 : 'Unranked',
                     score: totalPoints || parseInt(pointsScore, 10) || 0
+                },
+                battleWins: {
+                    rank: battleWinsRank !== null ? battleWinsRank + 1 : 'Unranked',
+                    score: parseInt(battleWinsScore, 10) || battleWins
                 }
             },
             insights: {
