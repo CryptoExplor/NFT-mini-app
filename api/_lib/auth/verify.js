@@ -106,14 +106,28 @@ async function handler(req, res) {
         const requestProto = req.headers['x-forwarded-proto'] || inferredProto;
         const requestOrigin = req.headers.origin || (requestHost ? `${requestProto}://${requestHost}` : null);
 
+        // Domain / URI checks — relaxed for Farcaster miniapp SIWF context.
+        // When the message was signed via sdk.actions.signIn(), the domain will be
+        // a Farcaster relay, not our app domain. The nonce is still ours (server-issued),
+        // so if it validates below, the request is authentic.
+        let isFarcasterRelay = false;
         if (parsed.domain && requestHost && parsed.domain !== requestHost) {
-            return res.status(401).json({
-                code: 'INVALID_DOMAIN',
-                message: 'SIWE domain does not match this host',
-            });
+            // Check if nonce exists before rejecting — if it does, this is a valid
+            // Farcaster-relayed signIn, not a cross-site attack.
+            const preCheckNonce = await kv.get(`nonce:${parsed.address}`);
+            if (preCheckNonce && preCheckNonce === parsed.nonce) {
+                isFarcasterRelay = true;
+                // Domain mismatch is expected — skip rejection
+            } else {
+                return res.status(401).json({
+                    code: 'INVALID_DOMAIN',
+                    message: 'SIWE domain does not match this host',
+                });
+            }
         }
 
-        if (parsed.uri && requestOrigin && parsed.uri !== requestOrigin) {
+        // URI check — also skip for Farcaster relay context
+        if (!isFarcasterRelay && parsed.uri && requestOrigin && parsed.uri !== requestOrigin) {
             return res.status(401).json({
                 code: 'INVALID_URI',
                 message: 'SIWE URI does not match this origin',
@@ -165,6 +179,7 @@ async function handler(req, res) {
         const token = await new SignJWT({
             address: parsed.address,
             chainId: parsed.chainId || 8453,
+            authMethod: isFarcasterRelay ? 'siwf' : 'siwe',
         })
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()

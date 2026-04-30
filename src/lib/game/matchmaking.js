@@ -1,11 +1,16 @@
 /**
  * Matchmaking API Client
  * Connects to global Vercel KV backend to load and post challenges.
+ *
+ * Auth strategy (context-aware):
+ *   Farcaster miniapp → sdk.actions.signIn() (silent, zero popup)
+ *   Base App / Web    → wagmi signMessage (SIWE, one-time popup per session)
  */
 
 import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
 import { getBattleHistory as fetchBattleHistory } from '../api.js';
+import { isInMiniApp, isInFarcasterClient, getFarcasterSDK } from '../../farcaster.js';
 
 let tokenExpiry = 0;
 let battleAuthToken = null;
@@ -37,27 +42,52 @@ async function fetchWithBattleAuth(walletAddress, url, init = {}) {
     return response;
 }
 
+// ── Farcaster Silent Auth ──────────────────────────────────────────────
+// Uses sdk.actions.signIn() which produces a standard EIP-4361 message
+// signed by the user's custody address — zero wallet popup.
+async function getFarcasterToken(walletAddress, nonce) {
+    const sdk = getFarcasterSDK();
+    if (!sdk?.actions?.signIn) {
+        throw new Error('Farcaster SDK signIn unavailable');
+    }
+
+    const result = await sdk.actions.signIn({ nonce, acceptAuthAddress: true });
+    if (!result?.message || !result?.signature) {
+        throw new Error('Farcaster signIn returned empty result');
+    }
+
+    return { message: result.message, signature: result.signature };
+}
+
+// ── Standard SIWE Auth (Web / Base App) ────────────────────────────────
+async function getSiweToken(walletAddress, nonce) {
+    const chainId = wagmiAdapter.wagmiConfig.state?.chainId || 8453;
+    const domain = window.location.host;
+    const origin = window.location.origin;
+    const issuedAt = new Date().toISOString();
+    const message = `${domain} wants you to sign in with your Ethereum account:\n${walletAddress}\n\nSign in to Battle Arena\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;
+
+    const signature = await signMessage(wagmiAdapter.wagmiConfig, { message });
+    return { message, signature };
+}
+
+// ── Unified Token Acquisition ──────────────────────────────────────────
 async function getBattleToken(walletAddress, { forceRefresh = false } = {}) {
     if (!forceRefresh && Date.now() < tokenExpiry) return true;
 
     try {
-        const chainId = wagmiAdapter.wagmiConfig.state?.chainId || 8453;
-
-        // 1. Get Nonce
+        // 1. Get Nonce from server
         const nonceRes = await fetch(`/api/auth?action=nonce&address=${walletAddress}`);
         const nonceData = await nonceRes.json();
         if (!nonceData?.nonce) throw new Error('Failed to get nonce');
 
-        // 2. Construct SIWE Message
-        const domain = window.location.host;
-        const origin = window.location.origin;
-        const issuedAt = new Date().toISOString();
-        const message = `${domain} wants you to sign in with your Ethereum account:\n${walletAddress}\n\nSign in to Battle Arena\n\nURI: ${origin}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonceData.nonce}\nIssued At: ${issuedAt}`;
+        // 2. Sign — pick strategy by context
+        const useFarcasterAuth = isInMiniApp() && isInFarcasterClient();
+        const { message, signature } = useFarcasterAuth
+            ? await getFarcasterToken(walletAddress, nonceData.nonce)
+            : await getSiweToken(walletAddress, nonceData.nonce);
 
-        // 3. Sign Message
-        const signature = await signMessage(wagmiAdapter.wagmiConfig, { message });
-
-        // 4. Verify & Get Token
+        // 3. Verify & Get Token
         const verifyRes = await fetch('/api/auth?action=verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -77,6 +107,20 @@ async function getBattleToken(walletAddress, { forceRefresh = false } = {}) {
         throw e;
     }
 }
+
+/**
+ * Pre-authenticate before battle starts.
+ * Call this on the loadout/preview screen so the wallet popup (if any)
+ * happens BEFORE the fight — never after the dopamine moment.
+ *
+ * In Farcaster miniapp context this is completely silent (no popup).
+ * Returns true if auth succeeded, throws on failure.
+ */
+export async function ensureBattleAuth(walletAddress) {
+    if (!walletAddress) return false;
+    return getBattleToken(walletAddress, { forceRefresh: false });
+}
+
 /**
  * Gets all active player-posted challenges from the global API.
  */
@@ -272,4 +316,3 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
         return null;
     }
 }
-

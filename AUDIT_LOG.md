@@ -425,3 +425,32 @@ Post-Codex verification pass. Focused on build tooling, chunk splitting, and imp
 - `node --check api/track.js` passed.
 - `npm.cmd run build` completed successfully.
 - `node --check api/_lib/events.js` hit the existing Windows `EPERM` realpath issue; production build validation passed.
+
+---
+
+## [2026-05-01] - Pre-Battle Auth UX Refactor
+
+### Scope
+- Moved wallet signing from post-battle to pre-battle across all contexts.
+- Implemented context-aware auth: Farcaster silent signIn, Base App session, Web SIWE.
+- Ensured the post-battle dopamine moment is never interrupted by a wallet popup.
+
+### Implemented
+- **`src/lib/game/matchmaking.js` — Context-aware auth engine**:
+  - Refactored `getBattleToken()` into two internal strategies:
+    - `getFarcasterToken()` — uses `sdk.actions.signIn({ nonce, acceptAuthAddress: true })` for zero-popup auth inside Farcaster miniapps.
+    - `getSiweToken()` — existing SIWE flow for web/Base App contexts.
+  - Runtime detection via `isInMiniApp()` + `isInFarcasterClient()` from `farcaster.js`.
+  - Exported `ensureBattleAuth(walletAddress)` — a public pre-auth function that acquires a JWT session before battle starts.
+- **`src/pages/battle.js` — Pre-auth trigger point**:
+  - `ensureBattleAuth()` is called during the "Calculating Match..." loading overlay (before the engine runs).
+  - Auth failure is non-blocking for guest play — battle still runs but results won't persist.
+  - No wallet popup ever occurs after the battle concludes.
+- **`api/_lib/auth/verify.js` — SIWF domain relaxation**:
+  - When a SIWE message arrives with a domain mismatch but a valid server-issued nonce, it's accepted as a Farcaster-relayed sign-in instead of rejected.
+  - Added `authMethod: 'siwf' | 'siwe'` claim to the JWT payload for downstream context awareness.
+
+### Validation
+- `npm run build` completed successfully (exit code 0).
+- JS/CSS bundles compile cleanly with no compilation or syntax errors.
+

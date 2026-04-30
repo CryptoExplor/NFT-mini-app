@@ -10,7 +10,7 @@ import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
 import { renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { applyLayer } from '../lib/battle/metadataNormalizer.js';
-import { postChallenge, recordAiBattle, getChallengeById } from '../lib/game/matchmaking.js';
+import { postChallenge, recordAiBattle, getChallengeById, ensureBattleAuth } from '../lib/game/matchmaking.js';
 import {
     getCurrentBattleLoadout,
     getCurrentBattleSelection,
@@ -150,6 +150,22 @@ export async function renderBattlePage() {
 
             try {
                 setReplayIdInUrl('');
+
+                // ── Pre-Battle Auth ─────────────────────────────────────
+                // Acquire JWT BEFORE the battle engine runs.
+                // In Farcaster miniapp this is completely silent.
+                // On web this triggers the one-time SIWE popup now (during
+                // the loading overlay), so the post-battle moment is clean.
+                if (state.wallet?.address) {
+                    try {
+                        await ensureBattleAuth(state.wallet.address);
+                    } catch (authErr) {
+                        console.warn('[Battle] Pre-auth failed:', authErr.message);
+                        // Non-blocking for guest/anonymous play —
+                        // battle still runs, but result won't persist to server.
+                    }
+                }
+
                 const selectedLoadout = getCurrentBattleLoadout();
                 if (!selectedLoadout) {
                     $('#battle-loading-overlay')?.remove();
