@@ -4,6 +4,8 @@
 **Repository baseline:** `arena/01a02a40-nft-mini-app` / PR #7  
 **Scope reviewed:** the supplied 10-task V1 plan against the current client, shared battle domain, Vercel serverless battle functions, analytics, and tests.
 
+> The daily NFT release/marketplace initiative is tracked separately in [`daily-launch-plan.md`](./daily-launch-plan.md). It should launch as one umbrella mint series and should not expand Battle roles until the V1 battle contract is stable.
+
 ## 1. Executive assessment
 
 The repository is **not starting from zero**. Most V1 concepts have a visible implementation, but several are scaffolds or competing implementations rather than one complete contract.
