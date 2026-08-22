@@ -27,16 +27,19 @@ export async function setChallengeAtomic(id, data) {
         throw new Error('Challenge ID must be a non-empty string');
     }
 
+    const storedAt = Date.now();
     const serialized = JSON.stringify({
         ...data,
-        _storedAt: Date.now(),
+        _storedAt: storedAt,
+        // Expiry travels INSIDE the value. The previous design wrote a separate
+        // `challenge:ttl:<id>` key and listActiveChallenges() then issued one
+        // EXISTS per challenge — O(n) KV commands on every list (and the list
+        // runs on every challenge POST).
+        expiresAt: Number(data?.expiresAt) || (storedAt + CHALLENGE_TTL_SECONDS * 1000),
     });
 
     // Upstash hset signature: hset(key, { field: value })
     await redis.hset(CHALLENGE_HASH_KEY, { [id]: serialized });
-
-    // Set per-challenge expiry key for TTL tracking
-    await redis.set(`challenge:ttl:${id}`, '1', { ex: CHALLENGE_TTL_SECONDS });
 }
 
 /**
@@ -47,12 +50,41 @@ export async function getChallengeAtomic(id) {
     const raw = await redis.hget(CHALLENGE_HASH_KEY, id);
     if (!raw) return null;
 
+    let data;
     try {
-        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+        data = typeof raw === 'string' ? JSON.parse(raw) : raw;
     } catch {
         console.error(`[KV] Failed to parse challenge ${id}`);
         return null;
     }
+
+    if (isExpiredChallenge(data)) {
+        // Lazy cleanup — an expired challenge must never be fightable.
+        redis.hdel(CHALLENGE_HASH_KEY, id).catch(() => { });
+        return null;
+    }
+
+    return data;
+}
+
+/**
+ * A challenge is expired when its own `expiresAt` has passed. Records written
+ * before this change have no `expiresAt`, so fall back to `_storedAt` + TTL
+ * (and finally to the legacy `challenge:ttl:<id>` marker being gone).
+ */
+function isExpiredChallenge(data) {
+    if (!data || typeof data !== 'object') return true;
+
+    const explicit = Number(data.expiresAt);
+    if (Number.isFinite(explicit) && explicit > 0) return Date.now() > explicit;
+
+    const storedAt = Number(data._storedAt);
+    if (Number.isFinite(storedAt) && storedAt > 0) {
+        return Date.now() > storedAt + CHALLENGE_TTL_SECONDS * 1000;
+    }
+
+    // No timing information at all: treat as expired so it cannot linger forever.
+    return true;
 }
 
 /**
@@ -60,8 +92,11 @@ export async function getChallengeAtomic(id) {
  * @param {string} id - Challenge ID
  */
 export async function deleteChallengeAtomic(id) {
-    await redis.hdel(CHALLENGE_HASH_KEY, id);
-    await redis.del(`challenge:ttl:${id}`);
+    const pipe = redis.pipeline();
+    pipe.hdel(CHALLENGE_HASH_KEY, id);
+    // Legacy marker from the pre-inline-expiry layout; harmless once gone.
+    pipe.del(`challenge:ttl:${id}`);
+    await pipe.exec();
 }
 
 /**
@@ -74,25 +109,29 @@ export async function listActiveChallenges() {
     const challenges = [];
     const expiredIds = [];
 
+    // Single HGETALL, zero per-item round trips: expiry is read from the value.
     for (const [id, raw] of Object.entries(all)) {
-        const ttlExists = await redis.exists(`challenge:ttl:${id}`);
-
-        if (!ttlExists) {
+        let data;
+        try {
+            data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch {
             expiredIds.push(id);
             continue;
         }
 
-        try {
-            const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            challenges.push({ id, ...data });
-        } catch {
+        if (isExpiredChallenge(data)) {
             expiredIds.push(id);
+            continue;
         }
+
+        challenges.push({ id, ...data });
     }
 
     if (expiredIds.length > 0) {
-        // Non-blocking cleanup
-        Promise.all(expiredIds.map(id => redis.hdel(CHALLENGE_HASH_KEY, id))).catch(() => { });
+        // Non-blocking cleanup, batched into a single pipeline.
+        const pipe = redis.pipeline();
+        expiredIds.forEach((id) => pipe.hdel(CHALLENGE_HASH_KEY, id));
+        pipe.exec().catch(() => { });
     }
 
     return challenges;
