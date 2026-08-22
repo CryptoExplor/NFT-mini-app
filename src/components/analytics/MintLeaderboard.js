@@ -85,6 +85,12 @@ function renderViewerDivider() {
 }
 
 function renderRankChange(change) {
+    // null/undefined = unknown (no snapshot yet) — show a neutral dash rather
+    // than claiming every competitor is NEW.
+    if (!change) {
+        return '<span class="text-[10px] opacity-30 font-mono">—</span>';
+    }
+
     const tone = {
         up: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
         down: 'bg-rose-500/15 text-rose-300 border-rose-500/20',

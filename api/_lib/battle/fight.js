@@ -25,6 +25,13 @@ import {
 } from '../kv.js';
 import { processEvent } from '../events.js';
 import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
+import {
+    sanitizeFighterStats,
+    sanitizeModifierStats,
+    sanitizeTeamSnapshot
+} from './sanitize.js';
+import { reserveBattleCount } from './verifyClaim.js';
+import { verifyFighterOwnership } from './ownership.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -78,12 +85,34 @@ async function handler(req, res) {
             });
         }
 
-        // 3. Extract stats
-        const attackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
-        const defenderStats = defenderLoadout.fighter.stats || {};
+        // 2b. The defender fights with their own NFT, or not at all.
+        // (The attacker was checked when the challenge was posted.)
+        const defenderOwnership = await verifyFighterOwnership(kv, {
+            wallet: auth.address,
+            collectionSlug: defenderLoadout.fighter.collectionSlug
+                || defenderLoadout.fighter.collectionId
+                || defenderLoadout.fighter.collectionName,
+            tokenId: defenderLoadout.fighter.tokenId ?? defenderLoadout.fighter.nftId
+        });
 
-        // Use shared utility for deterministic verification
-        const snapshotHash = computeLoadoutSnapshot(challenge.loadout, attackerStats);
+        if (!defenderOwnership.owned) {
+            return res.status(403).json({
+                code: 'FIGHTER_NOT_OWNED',
+                message: 'You do not own the NFT you are trying to fight with.',
+                reason: defenderOwnership.reason
+            });
+        }
+
+        // 3. Extract stats
+        // NOTE: both sides are client-supplied, so both are clamped to the
+        // balance envelope. Previously the defender could post arbitrary stats
+        // (hp: 1e9) in the fight request and win every PvP match.
+        const rawAttackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
+        const rawDefenderStats = defenderLoadout.fighter.stats || {};
+
+        // Use shared utility for deterministic verification (hash the stored,
+        // untouched values — clamping happens after the anti-tamper check).
+        const snapshotHash = computeLoadoutSnapshot(challenge.loadout, rawAttackerStats);
 
         if (snapshotHash !== challenge.snapshotHash) {
             return res.status(409).json({
@@ -91,6 +120,18 @@ async function handler(req, res) {
                 message: 'Challenge data no longer matches the stored snapshot',
             });
         }
+
+        const attackerStats = sanitizeFighterStats(rawAttackerStats, {
+            name: challenge.loadout?.fighter?.name
+        });
+        const defenderStats = sanitizeFighterStats(rawDefenderStats, {
+            name: defenderLoadout.fighter?.name
+        });
+        const attackerItem = sanitizeModifierStats(challenge.loadout?.item?.stats);
+        const attackerArena = sanitizeModifierStats(challenge.loadout?.arena?.stats);
+        const defenderItem = sanitizeModifierStats(defenderLoadout.item?.stats);
+        const attackerTeam = sanitizeTeamSnapshot(challenge.loadout?.teamSnapshot);
+        const defenderTeam = sanitizeTeamSnapshot(defenderLoadout.teamSnapshot);
 
         // 4. Generate deterministic seed
         const attackerId = `${challenge.loadout?.fighter?.collectionSlug || 'unknown'}_${challenge.loadout?.fighter?.tokenId || '0'}`;
@@ -109,11 +150,11 @@ async function handler(req, res) {
             { name: `Defender ${defenderId}`, ...defenderStats },
             prng,
             {
-                playerItem: challenge.loadout?.item?.stats || null,
-                enemyItem: defenderLoadout.item?.stats || null,
-                environment: challenge.loadout?.arena?.stats || null,
-                playerTeam: challenge.loadout?.teamSnapshot || [],
-                enemyTeam: defenderLoadout.teamSnapshot || [],
+                playerItem: attackerItem,
+                enemyItem: defenderItem,
+                environment: attackerArena,
+                playerTeam: attackerTeam,
+                enemyTeam: defenderTeam,
                 isAiBattle: false,
             }
         );
@@ -140,17 +181,17 @@ async function handler(req, res) {
                     id: challenge.player,
                     name: attackerName,
                     stats: attackerStats,
-                    item: challenge.loadout?.item?.stats || null,
-                    arena: challenge.loadout?.arena?.stats || null,
-                    team: challenge.loadout?.teamSnapshot || []
+                    item: attackerItem,
+                    arena: attackerArena,
+                    team: attackerTeam
                 },
                 p2: {
                     id: auth.address,
                     name: defenderName,
                     stats: defenderStats,
-                    item: defenderLoadout.item?.stats || null,
-                    arena: null, 
-                    team: defenderLoadout.teamSnapshot || []
+                    item: defenderItem,
+                    arena: null,
+                    team: defenderTeam
                 }
             },
             options: {
@@ -171,37 +212,61 @@ async function handler(req, res) {
             return null;
         });
 
-        processEvent(kv, {
-            type: 'battle_result_v2',
-            wallet: auth.address,
-            timestamp: Date.now(),
-            metadata: {
-                won: battleResult.winnerSide === 'P2',
-                isAi: false,
-                rounds: battleResult.totalRounds || summary.totalRounds || 0,
-                opponent: attackerName,
-                battleId: generatedBattleId || null,
-                affectsGlobal: true
-            }
-        }).catch((err) => {
-            console.error('[Fight] battle_result_v2 analytics failed:', err.message);
-        });
+        // These results were produced by the server, so they are counted here
+        // directly. Reserving the (battleId, wallet) pairs also stops the client
+        // from re-claiming the same PvP battle through /api/track.
+        if (generatedBattleId) {
+            await Promise.allSettled([
+                reserveBattleCount(kv, generatedBattleId, auth.address),
+                reserveBattleCount(kv, generatedBattleId, challenge.player)
+            ]);
+        }
 
-        processEvent(kv, {
-            type: 'battle_result_v2',
-            wallet: challenge.player,
-            timestamp: Date.now(),
-            metadata: {
-                won: battleResult.winnerSide === 'P1',
-                isAi: false,
-                rounds: battleResult.totalRounds || summary.totalRounds || 0,
-                opponent: defenderName,
-                battleId: generatedBattleId || null,
-                affectsGlobal: false
-            }
-        }).catch((err) => {
-            console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);
-        });
+        // Analytics for both sides.
+        //  - affectsGlobal   : only the defender event, so a match counts once in
+        //                      battle_total / the live feed.
+        //  - countsGlobalWin : BOTH events, so an attacker victory is still counted
+        //                      in stats:global.battle_wins (the global win rate used
+        //                      to only ever see defender wins).
+        // Awaited (allSettled) — a serverless instance can be frozen the moment the
+        // response is sent, which silently dropped these writes before.
+        await Promise.allSettled([
+            processEvent(kv, {
+                type: 'battle_result_v2',
+                wallet: auth.address,
+                timestamp: Date.now(),
+                metadata: {
+                    won: battleResult.winnerSide === 'P2',
+                    isAi: false,
+                    rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                    opponent: attackerName,
+                    battleId: generatedBattleId || null,
+                    affectsGlobal: true,
+                    countsGlobalWin: true,
+                    ladderVerified: true
+                }
+            }).catch((err) => {
+                console.error('[Fight] battle_result_v2 analytics failed:', err.message);
+            }),
+
+            processEvent(kv, {
+                type: 'battle_result_v2',
+                wallet: challenge.player,
+                timestamp: Date.now(),
+                metadata: {
+                    won: battleResult.winnerSide === 'P1',
+                    isAi: false,
+                    rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                    opponent: defenderName,
+                    battleId: generatedBattleId || null,
+                    affectsGlobal: false,
+                    countsGlobalWin: true,
+                    ladderVerified: true
+                }
+            }).catch((err) => {
+                console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);
+            })
+        ]);
 
         return res.status(200).json({
             battleId: generatedBattleId,

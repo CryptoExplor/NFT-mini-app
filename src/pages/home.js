@@ -338,14 +338,13 @@ function renderCollectionCard(collection) {
                alt="${collection.name}"
                loading="lazy"
                class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
-               onerror="this.src='/placeholder.png'">
+               >
           
           <!-- Share Button Overlay -->
           <button class="share-btn absolute top-2 right-2 bg-indigo-500/20 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 hover:bg-indigo-500/40 border border-white/10 hover:border-indigo-400 z-10 flex items-center justify-center"
                   data-slug="${collection.slug}"
                   aria-label="Share ${collection.name}"
-                  title="Share ${collection.name}"
-                  onclick="event.stopPropagation();">
+                  title="Share ${collection.name}">
               <span class="text-white translate-x-[0.5px]">
                 ${renderIcon('SHARE', 'w-4 h-4')}
               </span>

@@ -57,8 +57,7 @@ export function showNFTDetailModal(nft, chain = 'base') {
             ? `<video src="${safeAnimationUrl}" poster="${safeImageUrl}" autoplay loop muted playsinline class="nft-modal-image"></video>`
             : `<img src="${safeImageUrl}"
                                     alt="${safeName}"
-                                    class="nft-modal-image"
-                                    onerror="this.src='/placeholder.png'" />`
+                                    class="nft-modal-image" />`
         }
                     </div>
                 </div>
@@ -142,8 +141,8 @@ export function showNFTDetailModal(nft, chain = 'base') {
     });
 
     // Event Listeners
-    document.getElementById('nft-modal-close').addEventListener('click', closeNFTDetailModal);
-    document.getElementById('nft-modal-backdrop').addEventListener('click', closeNFTDetailModal);
+    document.getElementById('nft-modal-close')?.addEventListener('click', closeNFTDetailModal);
+    document.getElementById('nft-modal-backdrop')?.addEventListener('click', closeNFTDetailModal);
 
     const escHandler = (e) => {
         if (e.key === 'Escape') {

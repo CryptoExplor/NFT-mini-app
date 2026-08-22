@@ -1,19 +1,32 @@
 {
+    "id": "/",
     "name": "Base Mint — NFT Battle Arena",
     "short_name": "Base Mint",
+    "description": "Cross-collection NFT battle game on Base. Pick your fighter, enter the arena.",
+    "start_url": "/",
+    "scope": "/",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
             "sizes": "192x192",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
             "src": "/android-chrome-512x512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
         }
     ],
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
-    "display": "standalone"
+    "theme_color": "#0f172a",
+    "background_color": "#0f0f23",
+    "display": "standalone",
+    "orientation": "portrait"
 }

@@ -59,23 +59,57 @@ npm run dev:full
 
 ### Environment Variables
 
-Create `.env` in project root:
+Create `.env` in the project root.
+
+> **Anything prefixed `VITE_` is compiled into the client bundle and is public.**
+> Never put a secret behind a `VITE_` name — the CI build fails if a server-only
+> key shows up in `dist/`.
 
 ```env
-# WalletConnect
+# ── Client (public — inlined into the bundle) ──
 VITE_WALLETCONNECT_PROJECT_ID=your_reown_project_id
+VITE_DEFAULT_CHAIN=base
+VITE_BASE_RPC_URL=                 # must be safe to expose (domain-restricted)
+VITE_ADMIN_WALLETS=0x123...,0x456...   # only reveals the admin UI; the API enforces auth
 
-# Backend (Vercel KV)
-KV_URL="redis://..."
-KV_REST_API_URL="https://..."
-KV_REST_API_TOKEN="..."
-KV_REST_API_READ_ONLY_TOKEN="..."
+# ── Server (secret) ──
+JWT_SECRET=your_jwt_secret         # required: auth is disabled without it
+OPENSEA_API_KEY=                   # used by /api/nfts, never reaches the browser
+RPC_URL=                           # server-side reads (NFT ownership verification)
+ADMIN_WALLETS=0x123...,0x456...    # the list the API actually trusts
+GEMINI_API_KEY=                    # optional: AI share-post generation
 
-# Security
-JWT_SECRET=your_jwt_secret
+# ── Storage (Upstash Redis / Vercel KV) ──
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+# Legacy Vercel KV names are also accepted:
+KV_REST_API_URL=
+KV_REST_API_TOKEN=
 
-# Admin Access
-VITE_ADMIN_WALLETS=0x123...,0x456...
+# ── Optional switches ──
+# ALLOWED_ORIGINS=https://preview.example.com   # extra CORS origins
+# STRICT_BATTLE_OWNERSHIP=true                  # reject unverifiable fighters
+# ALLOW_INSECURE_ADMIN=true                     # local-only admin auth bypass
+```
+
+### Testing
+
+```bash
+npm test          # battle integrity, analytics, KV, proxy allowlist, CSP guards
+npm run build     # production build
+```
+
+The CI workflow lives in [`ci/github-actions-ci.yml`](./ci/github-actions-ci.yml)
+(copy it to `.github/workflows/ci.yml` to enable — see [`ci/README.md`](./ci/README.md)).
+It runs both commands on every push and pull request, and additionally fails if
+an inline script/handler or a server secret reaches the build output.
+
+### Maintenance scripts
+
+```bash
+npm run analytics:migrate         # dry run: reconcile battle counters in KV
+npm run analytics:migrate:apply   # apply it
+npm run kv:cleanup                # dry run: remove stale/legacy KV keys
 ```
 
 ## 🏗️ Architecture
@@ -110,6 +144,8 @@ src/
 | Quantum Quills | Fighter | Drain | Sustain DPS |
 | Base Fortunes | Fighter | Iron Wall | Tank |
 | Neon Runes | Item Buff | — | V2 Modifier |
+| Neon Shapes | Item Buff | — | V2 Modifier |
+| ByteBeats | Item Buff | — | V2 Modifier |
 | Mini Worlds | Environment | — | V2 Modifier |
 
 ## 📸 Adding Collections
@@ -122,6 +158,38 @@ npm run collections:sync
 ```
 
 Auto-sync runs on `npm run dev`, `npm run build`, and `npm run dev:full`.
+
+## 🧩 API Routes
+
+The Vercel Hobby plan allows **12 Serverless Functions per deployment**, so
+related endpoints are grouped behind one function using an `?action=` router
+(helpers live in `api/_lib/`, which Vercel does not count):
+
+| Function | Actions |
+|---|---|
+| `/api/admin` | `overview`, `user`, `collection`, `cohort`, `daily`, `retention`, `reconcile`, `csp`, `export`, `cleanup_profile` |
+| `/api/auth` | `nonce`, `verify`, `logout` |
+| `/api/battle` | `challenge`, `fight`, `history`, `replay`, `record` |
+| `/api/share` | share page (GET), `generate-post` (POST) |
+| `/api/track`, `/api/leaderboard`, `/api/user`, `/api/nfts`, `/api/csp-report` | single purpose |
+
+`api/**/*.test.js` is excluded via `.vercelignore` — without that, each test file
+would be deployed as its own function. A test enforces the budget so the
+"No more than 12 Serverless Functions" deploy error cannot come back.
+
+## 🔒 Security Model
+
+| Concern | How it is handled |
+|---|---|
+| Arena results | Wins/points only count for a battle the server produced and stored: PvP is simulated server-side, AI battles are re-simulated from the seed and rejected on mismatch, and each battle counts once per wallet |
+| Fighter stats | Every client-supplied stat is clamped to the balance envelope before simulation |
+| NFT ownership | Verified on-chain (`ownerOf`/`balanceOf`) when posting a challenge, defending a fight and recording an AI battle, with an OpenSea inventory fallback |
+| API keys | Held server-side; the browser talks to `/api/nfts` instead of OpenSea directly |
+| Auth | SIWE/SIWF with single-use nonces and short-lived JWTs; admin routes need an allowlisted wallet |
+| XSS | Third-party NFT metadata is escaped, URLs sanitised, and a CSP without `script-src 'unsafe-inline'` is enforced |
+
+Full findings and fixes: [`FULL_APP_AUDIT.md`](./FULL_APP_AUDIT.md) and
+[`ANALYTICS_AUDIT.md`](./ANALYTICS_AUDIT.md).
 
 ## 🔗 Links
 

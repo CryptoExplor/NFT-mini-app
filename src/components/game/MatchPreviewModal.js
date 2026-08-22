@@ -159,14 +159,14 @@ export class MatchPreviewModal {
         `;
 
         // Bind events
-        $('#back-to-board-btn').addEventListener('click', () => this.onBack());
+        $('#back-to-board-btn')?.addEventListener('click', () => this.onBack());
 
-        $('#select-fighter-btn').addEventListener('click', () => {
+        $('#select-fighter-btn')?.addEventListener('click', () => {
             if (this.onSelectFighter) this.onSelectFighter();
         });
 
         if (this.playerData) {
-            $('#start-battle-btn').addEventListener('click', () => {
+            $('#start-battle-btn')?.addEventListener('click', () => {
                 const pCombat = { name: this.playerData.name, ...this.playerData.stats, image: this.playerData.imageUrl || '' };
                 const eCombat = {
                     name: this.enemyData.name || `${this.enemyData.collectionName || 'Enemy'} #${this.enemyData.nftId || '?'}`,

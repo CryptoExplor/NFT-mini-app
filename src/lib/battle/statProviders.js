@@ -1,49 +1,35 @@
 /**
- * Backend Stat Providers
- * 
- * Responsible for verifying on-chain ownership securely without relying on 
- * ERC721Enumerable or client-side assertions, and fetching dynamic raw stats.
+ * Stat providers (compatibility shim)
+ *
+ * This module used to export a `verifyOwnership()` that logged a message and
+ * returned `true` unconditionally, under a comment reading "CRITICAL MVP
+ * FUNCTION: Do not trust client-side ownership". It was never imported, but a
+ * stub that always says "yes" is a trap waiting to be wired into a security
+ * check.
+ *
+ * Real ownership verification now lives server-side in
+ * `api/_lib/battle/ownership.js` (on-chain ownerOf/balanceOf with an OpenSea
+ * inventory fallback, KV-cached), and is enforced when posting a challenge,
+ * defending a fight and recording an AI battle.
  */
-
-// Example Ethers.js usage or Viem usage would go here.
-// import { Contract, JsonRpcProvider } from 'ethers';
-
-const RPC_URL = process.env.RPC_URL || 'https://mainnet.base.org';
 
 /**
- * Verifies if a given addresses owns the specified token on the given contract.
- * CRITICAL MVP FUNCTION: Do not trust client-side ownership.
- * 
- * @param {string} contractAddress 
- * @param {string} tokenId 
- * @param {string} claimedOwnerAddress 
- * @returns {Promise<boolean>}
+ * @deprecated Ownership cannot be verified from the browser — the answer would
+ * be attacker-controlled. Use the server-side check instead.
+ * @throws {Error} always
  */
-export async function verifyOwnership(contractAddress, tokenId, claimedOwnerAddress) {
-    if (!contractAddress || !tokenId || !claimedOwnerAddress) return false;
-
-    try {
-        // Mock Implementation for scaffolding
-        // const provider = new JsonRpcProvider(RPC_URL);
-        // const contract = new Contract(contractAddress, ['function ownerOf(uint256) view returns (address)'], provider);
-        // const owner = await contract.ownerOf(tokenId);
-        // return owner.toLowerCase() === claimedOwnerAddress.toLowerCase();
-
-        console.log(`[StatProviders] Verifying ownership of ${contractAddress} #${tokenId} for ${claimedOwnerAddress}...`);
-
-        // MVP: Assume true for now until Ethers is wired up in the API layer
-        return true;
-    } catch (error) {
-        console.error(`Ownership verification failed for ${contractAddress} #${tokenId}:`, error);
-        return false;
-    }
+export async function verifyOwnership() {
+    throw new Error(
+        'verifyOwnership() was removed from the client: ownership is verified server-side ' +
+        '(api/_lib/battle/ownership.js). A client-side check can always be bypassed.'
+    );
 }
 
 /**
- * Fetches dynamic stats directly from a contract if the Capability Matrix 
- * defines a 'dynamicReads' requirement.
+ * Dynamic on-chain stat reads were never implemented; collections currently
+ * derive stats from metadata via metadataNormalizer.js.
+ * @returns {Promise<Object>} always an empty object
  */
-export async function fetchDynamicStats(collectionId, tokenId) {
-    // Example: if collectionId === 'neon-runes', call getRuneStats()
+export async function fetchDynamicStats() {
     return {};
 }

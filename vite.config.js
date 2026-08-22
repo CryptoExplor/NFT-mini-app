@@ -72,7 +72,10 @@ export default defineConfig(({ mode }) => ({
     host: true,
     port: 3000,
     open: false,
-    hmr: { overlay: true }
+    hmr: { overlay: true },
+    // Allow tunnelled/preview hosts (Vite blocks unknown Host headers by
+    // default, which breaks remote dev previews and mini-app testing).
+    allowedHosts: true
   },
 
   optimizeDeps: {
@@ -116,5 +119,5 @@ export default defineConfig(({ mode }) => ({
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
 
-  preview: { port: 4173, host: true }
+  preview: { port: 4173, host: true, allowedHosts: true }
 }));

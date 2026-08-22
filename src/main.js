@@ -24,6 +24,25 @@ import { initFarcasterSDK } from './farcaster.js';
 initTheme();
 
 // ============================================
+// GLOBAL IMAGE FALLBACK
+// ============================================
+// A single delegated handler replaces the inline `onerror="this.src=…"`
+// attributes that used to live in every template. Inline handlers require
+// `script-src 'unsafe-inline'`, which would defeat the CSP.
+const IMAGE_FALLBACK_SRC = '/placeholder.png';
+
+document.addEventListener('error', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement)) return;
+    if (target.dataset.fallbackApplied === '1') return;      // never loop
+    if (target.src.endsWith(IMAGE_FALLBACK_SRC)) return;
+    if (target.dataset.noFallback === 'true') return;
+
+    target.dataset.fallbackApplied = '1';
+    target.src = IMAGE_FALLBACK_SRC;
+}, true); // capture: 'error' from <img> does not bubble
+
+// ============================================
 // LAZY MODULE LOADERS
 // ============================================
 
@@ -117,8 +136,11 @@ async function init() {
         const walletMod = await getWalletModule();
         await walletMod.initWallet();
 
-        // Auto-connect in mini-app after wallet is ready
-        if (farcasterResult.inMiniApp) {
+        // Auto-connect in mini-app after wallet is ready.
+        // initWallet() already attempts this when reconnect() fails, so only
+        // run it here if we are still disconnected (avoids two parallel
+        // connect requests racing each other in the Farcaster webview).
+        if (farcasterResult.inMiniApp && !walletMod.getCurrentAccount()?.isConnected) {
             walletMod.connectMiniAppWalletSilently().catch(e => console.warn('Auto-connect failed:', e));
         }
     } catch (e) {
@@ -280,15 +302,19 @@ if (typeof window !== 'undefined' && import.meta.env.DEV) {
 
 init().catch(error => {
     console.error('❌ App initialization failed:', error);
-    document.getElementById('app').innerHTML = `
+    const app = document.getElementById('app');
+    if (!app) return;
+
+    app.innerHTML = `
         <div class="min-h-screen flex items-center justify-center bg-slate-900 app-text">
             <div class="text-center">
                 <h1 class="text-4xl font-bold mb-4">⚠️ Initialization Error</h1>
                 <p class="text-lg opacity-60 mb-4">Failed to start the app</p>
-                <button onclick="location.reload()" class="px-6 py-3 bg-indigo-600 rounded-xl">
+                <button id="init-error-reload" class="px-6 py-3 bg-indigo-600 rounded-xl">
                     Reload Page
                 </button>
             </div>
         </div>
     `;
+    document.getElementById('init-error-reload')?.addEventListener('click', () => location.reload());
 });

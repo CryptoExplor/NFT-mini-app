@@ -9,8 +9,10 @@ export function renderCollectionStats(collections) {
         return '<div class="text-center py-8 opacity-30 col-span-full">No collection data yet</div>';
     }
 
+    // Hoisted: this was recomputed (with a spread) for every card — O(n^2).
+    const maxViews = collections.reduce((max, c) => Math.max(max, Number(c.views) || 0), 1);
+
     return collections.map(col => {
-        const maxViews = Math.max(...collections.map(c => c.views), 1);
         const barWidth = Math.max((col.views / maxViews) * 100, 5);
         const safeSlug = escapeHtml(col.slug || 'unknown');
 

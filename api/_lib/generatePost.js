@@ -1,7 +1,14 @@
+/**
+ * AI share-post generation — served through `POST /api/share?action=generate-post`.
+ *
+ * Lives in _lib/ so Vercel does not count it as its own Serverless Function
+ * (the Hobby plan allows 12 per deployment).
+ */
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { setCors } from './_lib/cors.js';
-import { kv } from './_lib/kv.js';
-import { checkRateLimit } from './_lib/events.js';
+import { setCors } from './cors.js';
+import { kv } from './kv.js';
+import { checkRateLimit } from './events.js';
 
 const genAI = process.env.GEMINI_API_KEY
     ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
@@ -29,7 +36,10 @@ export default async function handler(req, res) {
         }
 
         const normalizedWallet = (wallet && wallet !== 'anonymous') ? String(wallet).toLowerCase() : 'anonymous';
-        const clientIp = req.headers['x-forwarded-for'] || 'unknown_ip';
+        const forwardedFor = req.headers['x-forwarded-for'];
+        const clientIp = (typeof forwardedFor === 'string' && forwardedFor.length > 0)
+            ? forwardedFor.split(',')[0].trim()
+            : (req.headers['x-real-ip'] || 'unknown_ip');
         const rateLimitKey = `ai_gen_${normalizedWallet !== 'anonymous' ? normalizedWallet : clientIp}`;
 
         try {

@@ -9,7 +9,7 @@
 
 import { signMessage } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
-import { getBattleHistory as fetchBattleHistory } from '../api.js';
+import { getBattleHistory as fetchBattleHistory, setAuthToken, clearAuthToken } from '../api.js';
 import { isInMiniApp, isInFarcasterClient, getFarcasterSDK } from '../../farcaster.js';
 
 let tokenExpiry = 0;
@@ -99,6 +99,15 @@ async function getBattleToken(walletAddress, { forceRefresh = false } = {}) {
         if (verifyData?.address) {
             battleAuthToken = typeof verifyData.token === 'string' ? verifyData.token : battleAuthToken;
             tokenExpiry = Number.isFinite(verifyData.expiresAt) ? verifyData.expiresAt : Date.now() + 3540000;
+
+            // Share the session with lib/api.js so analytics + admin calls can
+            // send the bearer token too. Without this the token lived only in
+            // this module and every /api/track call fell back to the cookie —
+            // which third-party-cookie blocking (Safari, in-app webviews) drops.
+            try {
+                setAuthToken({ ...verifyData, expiresAt: tokenExpiry });
+            } catch { /* non-fatal */ }
+
             return true;
         }
         throw new Error('Verification failed format');
@@ -251,6 +260,7 @@ export function readLegacyChallenge(raw) {
  * Clear cached auth token (call on wallet disconnect)
  */
 export function clearBattleAuth() {
+    try { clearAuthToken(); } catch { /* non-fatal */ }
     tokenExpiry = 0;
     battleAuthToken = null;
 }
@@ -266,7 +276,7 @@ export function clearBattleAuth() {
  * @param {string} walletAddress
  * @param {{ playerStats, enemyStats, result, loadout }} battle
  */
-export async function recordAiBattle(walletAddress, { seed, playerStats, enemyStats, result, loadout, extras, logs }) {
+export async function recordAiBattle(walletAddress, { seed, playerStats, enemyStats, result, loadout, extras, logs, aiWinRate }) {
     if (!walletAddress) return;
 
     try {
@@ -282,6 +292,16 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
                 seed: finalSeed,
                 p1: {
                     name: playerStats.name,
+                    // Explicit identity so the server can verify NFT ownership
+                    // without having to guess from the stat block.
+                    collectionSlug: loadout?.fighter?.collectionSlug
+                        || loadout?.fighter?.collectionId
+                        || playerStats.source
+                        || null,
+                    tokenId: loadout?.fighter?.tokenId
+                        ?? loadout?.fighter?.nftId
+                        ?? playerStats.tokenId
+                        ?? null,
                     stats: playerStats,
                     item: loadout?.item?.stats || null,
                     arena: loadout?.arena?.stats || null,
@@ -292,15 +312,16 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
                     stats: enemyStats,
                 },
                 options: { isAiBattle: true },
+                // Required for the server to reproduce the simulation and verify
+                // the reported winner (see api/_lib/battle/record.js).
+                aiWinRate,
                 result: {
                     winnerSide: result.winnerSide,
                     winnerName: result.winner,
                     rounds: result.totalRounds || 0,
                 },
                 // Pre-computed stats so the leaderboard doesn't re-simulate with the wrong engine
-                extras: extras || null,
-                // Store logs for replays
-                logs: logs || []
+                extras: extras || null
             }),
         });
 

@@ -8,7 +8,7 @@ import { renderBottomNav, bindBottomNavEvents } from '../components/BottomNav.js
 import { ChallengeBoard } from '../components/game/ChallengeBoard.js';
 import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
-import { renderCombatArena } from '../lib/game/arenaRenderer.js';
+import { stopArenaAnimation, renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { applyLayer } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge, recordAiBattle, getChallengeById, ensureBattleAuth } from '../lib/game/matchmaking.js';
 import {
@@ -287,6 +287,7 @@ export async function renderBattlePage() {
                         const loadout = getCurrentBattleLoadout();
                         persistedBattlePromise = recordAiBattle(state.wallet.address, {
                             seed: battleSeed,
+                            aiWinRate: previewModal.enemyData?.aiWinRate || 0.6,
                             playerStats: playerCombatStats,
                             enemyStats: enemyCombatStats,
                             result: {
@@ -387,13 +388,22 @@ export async function renderBattlePage() {
 
                     // V2 Analytics: AI battles still report from the client.
                     // PvP battles are emitted server-side after the replay record is saved.
+                    // This is the ONLY writer for AI wins on the arena ladder — the
+                    // /api/battle?action=record endpoint no longer increments it too.
                     if (isAi) {
+                        // Wait for the replay record so the event carries a battleId;
+                        // firing immediately raced the save and produced feed entries
+                        // with no "Watch replay" link.
+                        const resolvedBattleId = persistedBattlePromise
+                            ? await persistedBattlePromise.catch(() => null)
+                            : persistedBattleId;
+
                         trackBattleResult(state.wallet?.address, {
                             won: playerWon,
                             isAi: true,
                             rounds: totalRounds,
                             opponent: enemyCombatStats.name || null,
-                            battleId: persistedBattleId || null,
+                            battleId: resolvedBattleId || persistedBattleId || null,
                         });
                     }
                     // Refresh leaderboard if visible
@@ -781,6 +791,11 @@ function updateBattleHeader(account) {
 }
 
 export function cleanup() {
+    // Stop any battle still animating: its interval would otherwise keep
+    // ticking against a detached DOM and fire onBattleComplete (recording the
+    // battle, emitting analytics) for a page the user already left.
+    stopArenaAnimation();
+
     if (walletHandler) {
         document.removeEventListener(EVENTS.WALLET_UPDATE, walletHandler);
         walletHandler = null;
@@ -837,12 +852,24 @@ async function showRankUpCelebration(oldRank, newRank) {
 
     document.body.appendChild(overlay);
 
-    // Add particle effects if possible
-
-    $('#close-rank-up').addEventListener('click', () => {
+    // The overlay is fixed and covers the whole app, so dismissal must never
+    // depend on a single button existing. Backdrop click and Escape also close
+    // it, and the listeners are removed with the overlay.
+    const dismiss = () => {
+        document.removeEventListener('keydown', onKeydown);
         overlay.classList.add('animate-fade-out');
         setTimeout(() => overlay.remove(), 400);
+    };
+
+    function onKeydown(event) {
+        if (event.key === 'Escape') dismiss();
+    }
+
+    overlay.querySelector('#close-rank-up')?.addEventListener('click', dismiss);
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) dismiss();
     });
+    document.addEventListener('keydown', onKeydown);
 }
 
 async function showSharePrompt(address, conversion, outcome, cycleDay, shareUrlSource = null) {

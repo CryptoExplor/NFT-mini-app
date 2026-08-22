@@ -229,7 +229,7 @@ export async function renderMintPage(params) {
                      alt="${collection.name}"
                      loading="lazy"
                      class="w-full aspect-square object-cover rounded-xl shadow-2xl img-fade-in"
-                     onerror="this.src='/placeholder.png'">
+                     >
                 
 
               </div>
@@ -861,12 +861,24 @@ async function initMintInterface(collection) {
         tokenDiv.className = 'mt-3 pt-3 border-t border-white/10 text-xs flex justify-between items-center';
         tokenDiv.innerHTML = `
                 <span class="opacity-60">Token: <span class="font-mono text-indigo-300 ml-1">${stage.token.slice(0, 6)}...${stage.token.slice(-4)}</span></span>
-                <button class="bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors text-[10px]" 
-                        onclick="navigator.clipboard.writeText('${stage.token}'); this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1000);">
+                <button id="copy-burn-token" class="bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors text-[10px]">
                     Copy
                 </button>
             `;
         stageInfo.appendChild(tokenDiv);
+
+        // Bound as a listener (an inline onclick both violates the CSP and
+        // interpolates the token address straight into executable markup).
+        tokenDiv.querySelector('#copy-burn-token')?.addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            try {
+                await navigator.clipboard.writeText(stage.token);
+                button.innerText = 'Copied!';
+            } catch {
+                button.innerText = 'Copy failed';
+            }
+            setTimeout(() => { button.innerText = 'Copy'; }, 1000);
+        });
       }
     }
 
@@ -961,42 +973,45 @@ async function handleMint(collection, stage) {
   // Check chain
   if (state.wallet.chainId !== collection.chainId) {
     try {
-      mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
+      if (mintStatus) mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
       await switchChain(wagmiAdapter.wagmiConfig, { chainId: collection.chainId });
     } catch (e) {
       const errorMsg = handleMintError(e);
       toast.show(errorMsg, 'error');
-      mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
+      if (mintStatus) mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
       return;
     }
   }
 
   try {
-    mintBtn.disabled = true;
-    mintText.textContent = 'Minting...';
-    mintStatus.textContent = 'Confirm transaction in your wallet';
+    if (mintBtn) mintBtn.disabled = true;
+    if (mintText) mintText.textContent = 'Minting...';
+    if (mintStatus) mintStatus.textContent = 'Confirm transaction in your wallet';
 
     // Track attempt
 
     trackMintAttempt(state.wallet.address, collection.slug);
 
-    const hash = await mint(collection, stage);
+    const mintPrice = stage.price ? Number(stage.price) / 1e18 : 0;
 
-    // Track success
-
+    const hash = await mint(collection, stage, {
+        onHash: (txHash) => {
+            // Funnel step recorded when the tx is broadcast, not after it is
+            // confirmed — otherwise tx_sent could never exceed mint_success.
+            trackTxSent(state.wallet.address, collection.slug, txHash);
+            if (mintStatus) mintStatus.textContent = 'Transaction sent — waiting for confirmation...';
+        }
+    });
 
     toast.show('Successfully minted NFT! 🎉', 'success');
 
-    // Track on server (full funnel: tx_sent + mint_success)
-    const mintPrice = stage.price ? Number(stage.price) / 1e18 : 0;
-    trackTxSent(state.wallet.address, collection.slug, hash);
     trackMint(state.wallet.address, collection.slug, hash, mintPrice);
 
-    mintText.textContent = 'Success! 🎉';
-    mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
+    if (mintText) mintText.textContent = 'Success! 🎉';
+    if (mintStatus) mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
 
     const explorerBase = getExplorerUrl(collection.chainId);
-    mintStatus.innerHTML = `
+    if (mintStatus) mintStatus.innerHTML = `
       <div class="flex flex-col items-center space-y-4">
         <a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline text-sm mb-2">View on Explorer</a>
         ${collection.openseaUrl ? `
@@ -1060,9 +1075,9 @@ async function handleMint(collection, stage) {
     const friendlyMessage = handleMintError(error);
     toast.show(friendlyMessage, 'error');
 
-    mintText.textContent = 'Mint Failed';
-    mintStatus.textContent = friendlyMessage;
-    mintBtn.disabled = false;
+    if (mintText) mintText.textContent = 'Mint Failed';
+    if (mintStatus) mintStatus.textContent = friendlyMessage;
+    if (mintBtn) mintBtn.disabled = false;
 
     // Reset after error
     setTimeout(() => {

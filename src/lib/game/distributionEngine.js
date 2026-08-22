@@ -1,3 +1,4 @@
+import { storage } from '../../utils/storage.js';
 /**
  * Battle Arena growth system.
  * Generates short social copy and lightweight outcome analysis.
@@ -84,7 +85,7 @@ export async function generateGrowthPost(type, context = {}) {
     let usedTemplate = null;
 
     try {
-        const response = await fetch('/api/generate-post', {
+        const response = await fetch('/api/share?action=generate-post', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -144,15 +145,14 @@ export async function generateGrowthPost(type, context = {}) {
 export function getGrowthCycleDay(address) {
     if (!address) return 1;
     const key = `growth_cycle_${address}`;
-    const stored = localStorage.getItem(key);
     const now = Date.now();
+    const data = storage.getJSON(key, null);
 
-    if (!stored) {
-        localStorage.setItem(key, JSON.stringify({ day: 1, lastUpdate: now }));
+    if (!data || typeof data.day !== 'number' || typeof data.lastUpdate !== 'number') {
+        storage.setJSON(key, { day: 1, lastUpdate: now });
         return 1;
     }
 
-    const data = JSON.parse(stored);
     const daysSinceLast = Math.floor((now - data.lastUpdate) / (24 * 60 * 60 * 1000));
 
     if (daysSinceLast >= 1) {
@@ -161,7 +161,7 @@ export function getGrowthCycleDay(address) {
         const daysToAdvance = Math.min(daysSinceLast, 7);
         data.day = ((data.day - 1 + daysToAdvance) % 7) + 1;
         data.lastUpdate = now;
-        localStorage.setItem(key, JSON.stringify(data));
+        storage.setJSON(key, data);
     }
 
     return data.day;

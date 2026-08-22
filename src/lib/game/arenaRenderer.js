@@ -1,5 +1,6 @@
 import { $ } from '../../utils/dom.js';
 import { simulateBattle } from './engine.js';
+import { escapeHtml } from '../../utils/html.js';
 import { createShareCard, getFarcasterShareUrl } from '../../components/game/BattleShareCard.js';
 import { renderIcon } from '../../utils/icons.js';
 import { shareReplayToFeed, shareChallengeToFeed } from '../../utils/social.js';
@@ -135,7 +136,39 @@ function getBiomeClass(environmentStats) {
 // MAIN RENDER
 // ══════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════
+// TIMER LIFECYCLE
+// ══════════════════════════════════════════════════════════════════
+// The battle plays out on a setInterval. If the user navigates away mid-fight
+// the interval used to keep ticking against a detached DOM and still fire
+// onBattleComplete() — recording the battle and emitting analytics for a page
+// that no longer exists. Every long-running timer is tracked so the page
+// teardown can stop it.
+let activeBattleInterval = null;
+const pendingBattleTimeouts = new Set();
+
+function scheduleBattleTimeout(fn, delay) {
+    const id = setTimeout(() => {
+        pendingBattleTimeouts.delete(id);
+        fn();
+    }, delay);
+    pendingBattleTimeouts.add(id);
+    return id;
+}
+
+/** Stop any in-flight battle animation (called from the battle page cleanup). */
+export function stopArenaAnimation() {
+    if (activeBattleInterval !== null) {
+        clearInterval(activeBattleInterval);
+        activeBattleInterval = null;
+    }
+    for (const id of pendingBattleTimeouts) clearTimeout(id);
+    pendingBattleTimeouts.clear();
+}
+
 export function renderCombatArena(playerData, enemyData, onBattleComplete, options = {}) {
+    // A new fight supersedes anything still animating.
+    stopArenaAnimation();
     const preview = $('#match-preview-view');
     const arena = $('#arena-view');
     const container = $('#battle-container');
@@ -185,7 +218,7 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
                 <!-- Name + Stats -->
                 <div class="mt-2 md:mt-3 text-center">
                     <div class="flex items-center justify-center gap-2 mb-1">
-                        <div class="text-indigo-100 font-bold text-sm truncate max-w-[140px]">${playerData.name}</div>
+                        <div class="text-indigo-100 font-bold text-sm truncate max-w-[140px]">${escapeHtml(playerData.name)}</div>
                         ${playerData.rank ? formatRankBadge(playerData.rank) : ''}
                     </div>
                     ${playerData.points !== undefined ? `
@@ -288,11 +321,11 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
     if (battlefield) spawnParticles(battlefield, 25);
 
     // Start Simulation Process with dramatic intro
-    setTimeout(() => {
+    scheduleBattleTimeout(() => {
         showRoundSplash(battlefield, 1);
     }, 600);
 
-    setTimeout(() => {
+    scheduleBattleTimeout(() => {
         let battleData;
         if (options.precomputedLogs && options.precomputedLogs.length > 0) {
             // Use precomputed logs from battle.js (AI local or PvP server)
@@ -326,11 +359,12 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
     const interval = setInterval(() => {
         if (i >= totalLogs) {
             clearInterval(interval);
+            if (activeBattleInterval === interval) activeBattleInterval = null;
             // Update progress to 100%
             const progress = $('#battle-progress');
             if (progress) progress.style.width = '100%';
 
-            setTimeout(() => {
+            scheduleBattleTimeout(() => {
                 showResults(battleData, playerName, enemyName, totalLogs);
                 if (typeof onComplete === 'function') onComplete(battleData);
             }, 600);
@@ -373,7 +407,7 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
             if (logContainer) {
                 logContainer.innerHTML += `<div class="text-slate-500 flex items-center gap-2">
                     <span class="text-blue-400">${renderIcon('HISTORY', 'w-3 h-3')}</span>
-                    <span>${log.target} <span class="text-blue-400 font-bold italic tracking-tighter">DODGED</span> ${log.attacker}'s attack!</span>
+                    <span>${escapeHtml(log.target)} <span class="text-blue-400 font-bold italic tracking-tighter">DODGED</span> ${escapeHtml(log.attacker)}'s attack!</span>
                 </div>`;
             }
         } else {
@@ -427,7 +461,7 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
             if (logContainer) {
                 logContainer.innerHTML += `<div class="${color} flex items-start gap-2 border-l-2 border-transparent hover:border-white/5 pl-1 transition-colors">
                     <span class="flex-shrink-0 mt-0.5">${icon}</span>
-                    <span class="leading-tight">${log.attacker} dealt <b class="text-white">${log.damage}</b> dmg to ${log.target}${critBadge}${healText}</span>
+                    <span class="leading-tight">${escapeHtml(log.attacker)} dealt <b class="text-white">${Number(log.damage) || 0}</b> dmg to ${escapeHtml(log.target)}${critBadge}${healText}</span>
                 </div>`;
             }
         }
@@ -437,6 +471,9 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
 
         i++;
     }, 1000);
+
+    // Tracked so page teardown can stop a fight that is still animating.
+    activeBattleInterval = interval;
 }
 
 // ── HP Bar Update ────────────────────────────────────────────────
@@ -596,7 +633,10 @@ async function showResults(battleData, playerName, enemyName, totalRounds) {
     const domPill = $('#dominance-pill');
     if (domPill && playerWon) {
         const { getDominancePercentile } = await import('./conversion.js');
-        const score = parseInt(localStorage.getItem('arena_points_' + (window._lastPlayerAddress || '')) || '0');
+        const { getPlayerPoints } = await import('./points.js');
+        // Was reading `arena_points_<addr>` while points.js writes
+        // `arena_points_v2_<addr>`, so the pill always showed the floor value.
+        const score = getPlayerPoints(window._lastPlayerAddress || 'Anonymous');
         const percentile = getDominancePercentile(score);
         domPill.innerHTML = `<span class="inline-block mr-1">${renderIcon('FLAME', 'w-3 h-3')}</span> Defeated ${Math.floor(percentile)}% of Players`;
         domPill.classList.remove('hidden');
@@ -614,10 +654,10 @@ async function showResults(battleData, playerName, enemyName, totalRounds) {
         }
     } catch (_) { /* no-op */ }
 
-    $('#return-board-btn').addEventListener('click', () => {
-        $('#arena-view').classList.add('hidden');
-        $('#challenge-board-view').classList.remove('hidden');
-        $('#battle-container').classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
+    $('#return-board-btn')?.addEventListener('click', () => {
+        $('#arena-view')?.classList.add('hidden');
+        $('#challenge-board-view')?.classList.remove('hidden');
+        $('#battle-container')?.classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
     });
 
     // Challenge Friend button

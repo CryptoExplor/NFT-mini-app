@@ -1,4 +1,5 @@
 import { getCollectionBySlug } from '../src/lib/loadCollections.js';
+import generatePostHandler from './_lib/generatePost.js';
 
 const APP_NAME = 'Base Mint App';
 const DEFAULT_DESCRIPTION = 'Multi-collection minting in a Base mini app.';
@@ -59,6 +60,13 @@ function buildMiniAppMeta({ imageUrl, targetUrl, buttonTitle, splashImageUrl }) 
 }
 
 export default async function handler(req, res) {
+    // AI share-post generation used to be its own route (/api/generate-post).
+    // Folded in here to stay within the Serverless Function budget; it sets its
+    // own CORS headers and handles OPTIONS.
+    if (req.query?.action === 'generate-post') {
+        return generatePostHandler(req, res);
+    }
+
     if (req.method !== 'GET') {
         res.setHeader('Allow', 'GET');
         return res.status(405).json({ error: 'Method not allowed' });

@@ -132,7 +132,15 @@ export function normalizeSyncedBattleRecord(record, wallet) {
     const p2 = record?.players?.p2;
     if (!p1?.name || !p2?.name) return null;
 
-    const isWalletP1 = wallet && String(p1.id || '').toLowerCase() === wallet;
+    const p1Id = String(p1.id || '').toLowerCase();
+    const p2Id = String(p2.id || '').toLowerCase();
+    const isWalletP1 = Boolean(wallet) && p1Id === wallet;
+    const isWalletP2 = Boolean(wallet) && p2Id === wallet;
+
+    // Drop records the viewer did not take part in instead of silently
+    // attributing the P2 side (and its win/loss) to them.
+    if (!isWalletP1 && !isWalletP2) return null;
+
     const side = isWalletP1 ? 'P1' : 'P2';
     const opponent = isWalletP1 ? p2 : p1;
     const logs = Array.isArray(record.logs) ? record.logs : [];

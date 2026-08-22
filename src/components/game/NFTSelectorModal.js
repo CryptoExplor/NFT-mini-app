@@ -1,4 +1,5 @@
 import { $ } from '../../utils/dom.js';
+import { escapeHtml, sanitizeUrl } from '../../utils/html.js';
 import { renderIcon } from '../../utils/icons.js';
 
 /**
@@ -107,12 +108,14 @@ export class NFTSelectorModal {
     }
 
     showError(title, msg) {
+        const safeTitle = escapeHtml(title);
+        const safeMsg = escapeHtml(msg);
         this.container.innerHTML = `
             <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div class="p-8 text-center bg-slate-900 border border-red-500/20 rounded-2xl max-w-sm shadow-2xl">
                     <div class="text-3xl mb-3 text-red-500">${renderIcon('PLUG', 'w-10 h-10 mx-auto')}</div>
-                    <h3 class="text-lg font-bold text-white mb-2">${title}</h3>
-                    <p class="text-sm text-slate-400">${msg}</p>
+                    <h3 class="text-lg font-bold text-white mb-2">${safeTitle}</h3>
+                    <p class="text-sm text-slate-400">${safeMsg}</p>
                 </div>
             </div>
         `;
@@ -120,12 +123,14 @@ export class NFTSelectorModal {
     }
 
     showLoading(title, msg) {
+        const safeTitle = escapeHtml(title);
+        const safeMsg = escapeHtml(msg);
         this.container.innerHTML = `
             <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                 <div class="p-8 text-center bg-slate-900 border border-white/10 rounded-2xl max-w-sm shadow-2xl">
                     <div class="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <h3 class="text-lg font-bold text-white mb-1">${title}</h3>
-                    <p class="text-sm text-slate-400">${msg}</p>
+                    <h3 class="text-lg font-bold text-white mb-1">${safeTitle}</h3>
+                    <p class="text-sm text-slate-400">${safeMsg}</p>
                 </div>
             </div>
         `;
@@ -289,10 +294,11 @@ export class NFTSelectorModal {
 
         return `
             <div data-tab="${role}" class="loadout-tab flex-1 min-w-[80px] max-w-[120px] min-h-[56px] rounded-lg border-2 ${borderClass} bg-indigo-900/30 overflow-hidden relative cursor-pointer group flex items-center gap-1.5 p-1.5">
-                <img src="${entity.imageUrl}" class="w-8 h-8 sm:w-10 sm:h-10 rounded-md object-cover border border-white/10" />
+                <img src="${sanitizeUrl(entity.imageUrl) || '/placeholder.png'}" alt="" loading="lazy"
+                     class="w-8 h-8 sm:w-10 sm:h-10 rounded-md object-cover border border-white/10" />
                 <div class="flex-1 min-w-0">
                     <div class="text-[9px] text-indigo-400 font-bold uppercase leading-none mb-0.5">${label}</div>
-                    <div class="text-[10px] text-white truncate font-medium leading-none">#${entity.nftId}</div>
+                    <div class="text-[10px] text-white truncate font-medium leading-none">#${escapeHtml(entity.nftId)}</div>
                 </div>
             </div>
         `;
@@ -333,12 +339,16 @@ export class NFTSelectorModal {
 
         const borderClass = isSelected ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] bg-emerald-900/20' : 'border-white/10 bg-white/[0.03] hover:border-indigo-400/50 hover:bg-indigo-900/20';
 
-        const imageElement = nft.imageUrl
-            ? `<img src="${nft.imageUrl}" alt="${nft.collectionName}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />`
+        // NFT metadata is third-party data — escape it, and only allow http(s) images.
+        const safeImage = sanitizeUrl(nft.imageUrl);
+        const safeCollectionName = escapeHtml(nft.collectionName || 'Unknown');
+        const imageElement = safeImage
+            ? `<img src="${safeImage}" alt="${safeCollectionName}" loading="lazy"
+                    class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />`
             : `<div class="w-full h-full flex items-center justify-center text-xl font-black text-white/20">NFT</div>`;
 
         return `
-            <div data-nft-id="${nft.id}"
+            <div data-nft-id="${escapeHtml(nft.id)}"
                  class="nft-card group rounded-2xl border-2 ${borderClass} overflow-hidden cursor-pointer transition-all duration-200 active:scale-95 flex flex-col">
                 
                 <!-- Image -->
@@ -346,7 +356,7 @@ export class NFTSelectorModal {
                     ${imageElement}
                     ${passiveMeta ? `
                         <div class="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded border ${passiveMeta.color} backdrop-blur-sm shadow-black/50 shadow-sm font-bold">
-                            ${passiveMeta.icon} ${passiveMeta.name || passive}
+                            ${passiveMeta.icon} ${escapeHtml(passiveMeta.name || passive)}
                         </div>
                     ` : ''}
                     ${isSelected ? `
@@ -358,10 +368,10 @@ export class NFTSelectorModal {
 
                 <!-- Info -->
                 <div class="p-3 flex-1 flex flex-col">
-                    <div class="font-bold text-sm truncate text-white/90">${nft.collectionName}</div>
-                    <div class="text-xs text-slate-500 mb-2">#${nft.nftId}</div>
+                    <div class="font-bold text-sm truncate text-white/90">${safeCollectionName}</div>
+                    <div class="text-xs text-slate-500 mb-2">#${escapeHtml(nft.nftId)}</div>
 
-                    ${nft.trait ? `<div class="text-[10px] uppercase font-bold text-indigo-400 tracking-wider mb-2">${nft.trait}</div>` : ''}
+                    ${nft.trait ? `<div class="text-[10px] uppercase font-bold text-indigo-400 tracking-wider mb-2">${escapeHtml(nft.trait)}</div>` : ''}
 
                     ${isFighter ? this.renderFighterStats(stats) : this.renderModifierStats(stats)}
                 </div>

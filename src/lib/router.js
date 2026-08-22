@@ -19,12 +19,18 @@ class Router {
 
         // Intercept clicks on elements with data-link attribute
         document.addEventListener('click', (e) => {
-            const link = e.target.closest('[data-link]');
-            if (link) {
-                e.preventDefault();
-                const href = link.getAttribute('href') || link.dataset.link;
-                this.navigate(href);
-            }
+            const link = e.target?.closest?.('[data-link]');
+            if (!link) return;
+
+            const href = link.getAttribute('href') || link.dataset.link;
+            if (!href) return;
+
+            // External / protocol links must be left to the browser.
+            const isExternal = /^(?:[a-z]+:)?\/\//i.test(href) || href.startsWith('mailto:') || href.startsWith('tel:');
+            if (isExternal || link.target === '_blank') return;
+
+            e.preventDefault();
+            this.navigate(href);
         });
     }
 
@@ -85,9 +91,25 @@ class Router {
             }
         } else {
             console.warn(`⚠️ 404 - Route not found: ${path}`);
-            // Fallback to home
-            if (path !== '/') {
+            // Fallback to home. Guard against recursing forever if '/' itself
+            // is not registered (previously this silently did nothing and left
+            // the user on a blank screen).
+            if (path !== '/' && this.routes['/']) {
                 this.navigate('/');
+                return;
+            }
+
+            const app = document.getElementById('app');
+            if (app && !this.routes['/']) {
+                app.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center p-6 text-center">
+                        <div>
+                            <h1 class="text-2xl font-bold mb-2">Page not found</h1>
+                            <p class="opacity-60 mb-4">We could not find anything at this address.</p>
+                            <a href="/" data-link class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white inline-block">Go home</a>
+                        </div>
+                    </div>
+                `;
             }
         }
     }

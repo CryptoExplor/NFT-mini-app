@@ -1,3 +1,4 @@
+import { storage } from '../../utils/storage.js';
 import { $, shortenAddress } from '../../utils/dom.js';
 import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
@@ -186,7 +187,7 @@ export class ChallengeBoard {
         const playerRank = getRankByPoints(playerPoints);
         
         // Async fetch for leaderboard - we can use the mock for now
-        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const leaderboard = storage.getJSON('arena_leaderboard_mock', []);
         const topPlayer = leaderboard[0];
 
         this.container.innerHTML = `
@@ -270,7 +271,7 @@ export class ChallengeBoard {
             </div>
         `;
 
-        $('#post-challenge-btn').addEventListener('click', () => this.onPostRequested());
+        $('#post-challenge-btn')?.addEventListener('click', () => this.onPostRequested());
 
         // Daily Boss Event
         const boss = getDailyBoss();
@@ -285,6 +286,18 @@ export class ChallengeBoard {
                 btn.addEventListener('click', () => this.onPreviewRequested(challenge));
             }
         });
+
+        // Featured replay card (was an inline onclick with an interpolated id —
+        // both a CSP violation and an injection point).
+        const featuredReplay = this.container?.querySelector?.('[data-featured-replay]')
+            || document.querySelector('[data-featured-replay]');
+        if (featuredReplay) {
+            featuredReplay.addEventListener('click', () => {
+                const battleId = featuredReplay.getAttribute('data-featured-replay');
+                if (!battleId) return;
+                document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', { detail: { battleId } }));
+            });
+        }
 
         // Tournament Banner Event
         const tourneyBanner = $('#tournament-banner-cta');
@@ -500,14 +513,14 @@ export class ChallengeBoard {
     }
 
     renderFeaturedBattle() {
-        const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+        const history = storage.getJSON('battle_history', []);
         const featured = history.find(b => b.playerWon && b.rounds > 5) || history[0];
 
         if (!featured) return '';
 
         return `
-            <div class="relative p-5 rounded-2xl border border-indigo-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-indigo-500/40 transition-all cursor-pointer" 
-                 onclick="document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', { detail: { battleId: '${featured.id}' } }))">
+            <div class="relative p-5 rounded-2xl border border-indigo-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-indigo-500/40 transition-all cursor-pointer"
+                 data-featured-replay="${escapeHtml(String(featured.id ?? ''))}">
                 <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
                 <div class="flex items-center justify-between mb-3">
                     <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">Featured Replay</span>
@@ -527,7 +540,7 @@ export class ChallengeBoard {
     }
 
     renderTopPlayerShowcase() {
-        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const leaderboard = storage.getJSON('arena_leaderboard_mock', []);
         const top = leaderboard[0];
 
         if (!top) return '';

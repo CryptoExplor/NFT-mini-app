@@ -401,7 +401,7 @@ function buildNFTCard(nft, index) {
                 ${nft.image_url
             ? `<img src="${encodeURI(nft.image_url)}" alt="${displayName}" loading="lazy"
                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
-                            onerror="this.src='/placeholder.png'" />`
+                            />`
             : `<div class="w-full h-full flex items-center justify-center text-slate-500 opacity-30">${renderIcon('IMAGE', 'w-12 h-12')}</div>`
         }
                 <!-- Hover Overlay -->
@@ -428,9 +428,9 @@ function renderCollectionSidebar() {
                 <span class="text-xs opacity-50 font-mono">${allNFTs.length}</span>
            </button>` +
         collections.map(c => `
-            <button class="collection-item w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 transition-colors flex justify-between items-center ${selectedCollection === c.slug ? 'bg-white/10' : ''}" data-collection="${c.slug}">
-                <span class="truncate capitalize mr-2">${c.slug.replace(/-/g, ' ')}</span>
-                <span class="text-xs opacity-50 font-mono shrink-0">${c.count}</span>
+            <button class="collection-item w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 transition-colors flex justify-between items-center ${selectedCollection === c.slug ? 'bg-white/10' : ''}" data-collection="${esc(c.slug)}">
+                <span class="truncate capitalize mr-2">${esc(String(c.slug).replace(/-/g, ' '))}</span>
+                <span class="text-xs opacity-50 font-mono shrink-0">${Number(c.count) || 0}</span>
             </button>
           `).join('')
         : '<div class="text-xs opacity-30 py-4 text-center">No collections found</div>';
