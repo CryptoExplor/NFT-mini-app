@@ -292,6 +292,16 @@ export async function recordAiBattle(walletAddress, { seed, playerStats, enemySt
                 seed: finalSeed,
                 p1: {
                     name: playerStats.name,
+                    // Explicit identity so the server can verify NFT ownership
+                    // without having to guess from the stat block.
+                    collectionSlug: loadout?.fighter?.collectionSlug
+                        || loadout?.fighter?.collectionId
+                        || playerStats.source
+                        || null,
+                    tokenId: loadout?.fighter?.tokenId
+                        ?? loadout?.fighter?.nftId
+                        ?? playerStats.tokenId
+                        ?? null,
                     stats: playerStats,
                     item: loadout?.item?.stats || null,
                     arena: loadout?.arena?.stats || null,

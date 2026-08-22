@@ -31,6 +31,7 @@ import {
     sanitizeTeamSnapshot
 } from './sanitize.js';
 import { reserveBattleCount } from './verifyClaim.js';
+import { verifyFighterOwnership } from './ownership.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -81,6 +82,24 @@ async function handler(req, res) {
             return res.status(403).json({
                 code: 'SELF_CHALLENGE',
                 message: 'Cannot fight your own challenge',
+            });
+        }
+
+        // 2b. The defender fights with their own NFT, or not at all.
+        // (The attacker was checked when the challenge was posted.)
+        const defenderOwnership = await verifyFighterOwnership(kv, {
+            wallet: auth.address,
+            collectionSlug: defenderLoadout.fighter.collectionSlug
+                || defenderLoadout.fighter.collectionId
+                || defenderLoadout.fighter.collectionName,
+            tokenId: defenderLoadout.fighter.tokenId ?? defenderLoadout.fighter.nftId
+        });
+
+        if (!defenderOwnership.owned) {
+            return res.status(403).json({
+                code: 'FIGHTER_NOT_OWNED',
+                message: 'You do not own the NFT you are trying to fight with.',
+                reason: defenderOwnership.reason
             });
         }
 

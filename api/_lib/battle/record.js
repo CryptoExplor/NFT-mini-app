@@ -18,6 +18,7 @@ import { withCors } from '../cors.js';
 import { verifyAuth } from '../authMiddleware.js';
 import { saveBattleRecord, kv } from '../kv.js';
 import { checkRateLimit, RateLimitError } from '../events.js';
+import { verifyFighterOwnership } from './ownership.js';
 import {
     sanitizeFighterStats,
     sanitizeModifierStats,
@@ -63,6 +64,21 @@ async function handler(req, res) {
     try {
         // Throttle: bounds how fast a wallet can manufacture AI battles.
         await checkRateLimit(kv, auth.address, 'battle_record', 40, 3600);
+
+        // The recorded fighter must belong to the caller.
+        const ownership = await verifyFighterOwnership(kv, {
+            wallet: auth.address,
+            collectionSlug: p1.collectionSlug || p1.collectionId || p1.stats?.source,
+            tokenId: p1.tokenId ?? p1.nftId ?? p1.stats?.tokenId
+        });
+
+        if (!ownership.owned) {
+            return res.status(403).json({
+                code: 'FIGHTER_NOT_OWNED',
+                message: 'You do not own the NFT used in this battle.',
+                reason: ownership.reason
+            });
+        }
 
         // ── Sanitise every client-supplied value ──
         // Stats are clamped to the balance envelope, so a tampered payload can

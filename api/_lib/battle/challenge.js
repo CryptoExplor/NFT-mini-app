@@ -10,9 +10,11 @@
 import { withCors } from '../cors.js';
 import { verifyAuth } from '../authMiddleware.js';
 import {
+    kv,
     setChallengeAtomic,
     listActiveChallenges,
 } from '../kv.js';
+import { verifyFighterOwnership, getFighterIdentity } from './ownership.js';
 import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
 
 const CHALLENGE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
@@ -89,6 +91,22 @@ async function handler(req, res) {
             });
         }
 
+        // Ownership: a challenge must be posted with an NFT the wallet owns.
+        const identity = getFighterIdentity(loadout);
+        const ownership = await verifyFighterOwnership(kv, {
+            wallet: auth.address,
+            collectionSlug: identity.collectionSlug,
+            tokenId: identity.tokenId
+        });
+
+        if (!ownership.owned) {
+            return res.status(403).json({
+                code: 'FIGHTER_NOT_OWNED',
+                message: 'You do not own the NFT you are trying to fight with.',
+                reason: ownership.reason
+            });
+        }
+
         try {
             // Rate limit: 1 active challenge per wallet
             const activeChallenges = await listActiveChallenges();
@@ -119,6 +137,7 @@ async function handler(req, res) {
                 expiresAt,
                 isAi: false,
                 schemaVersion: 'battle-loadout-v1',
+                ownershipVerified: !ownership.skipped,
             };
 
 
