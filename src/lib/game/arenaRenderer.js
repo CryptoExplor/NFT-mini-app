@@ -654,10 +654,10 @@ async function showResults(battleData, playerName, enemyName, totalRounds) {
         }
     } catch (_) { /* no-op */ }
 
-    $('#return-board-btn').addEventListener('click', () => {
-        $('#arena-view').classList.add('hidden');
-        $('#challenge-board-view').classList.remove('hidden');
-        $('#battle-container').classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
+    $('#return-board-btn')?.addEventListener('click', () => {
+        $('#arena-view')?.classList.add('hidden');
+        $('#challenge-board-view')?.classList.remove('hidden');
+        $('#battle-container')?.classList.remove('bg-black/50', 'backdrop-blur-md', 'rounded-t-3xl', 'min-h-[80vh]');
     });
 
     // Challenge Friend button

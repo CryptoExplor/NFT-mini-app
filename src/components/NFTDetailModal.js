@@ -141,8 +141,8 @@ export function showNFTDetailModal(nft, chain = 'base') {
     });
 
     // Event Listeners
-    document.getElementById('nft-modal-close').addEventListener('click', closeNFTDetailModal);
-    document.getElementById('nft-modal-backdrop').addEventListener('click', closeNFTDetailModal);
+    document.getElementById('nft-modal-close')?.addEventListener('click', closeNFTDetailModal);
+    document.getElementById('nft-modal-backdrop')?.addEventListener('click', closeNFTDetailModal);
 
     const escHandler = (e) => {
         if (e.key === 'Escape') {

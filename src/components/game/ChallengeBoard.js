@@ -271,7 +271,7 @@ export class ChallengeBoard {
             </div>
         `;
 
-        $('#post-challenge-btn').addEventListener('click', () => this.onPostRequested());
+        $('#post-challenge-btn')?.addEventListener('click', () => this.onPostRequested());
 
         // Daily Boss Event
         const boss = getDailyBoss();
