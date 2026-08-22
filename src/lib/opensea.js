@@ -8,10 +8,38 @@ import { cache } from '../utils/cache.js';
 import { wagmiAdapter } from '../wallet.js';
 
 const API_BASE = 'https://api.opensea.io/api/v2';
-// WARNING: this is a CLIENT-side key — Vite inlines VITE_* into the bundle, so
-// it is visible to anyone. Use a key that is restricted to this domain and
-// treat it as public; move to a server proxy if a private key is ever needed.
-const API_KEY = import.meta.env.VITE_OPENSEA_API_KEY;
+const PROXY_BASE = `${import.meta.env.VITE_API_URL || ''}/api/nfts`;
+
+// The API key must NOT live in the browser: every VITE_* value is inlined into
+// the bundle at build time, so shipping one publishes it. Requests go through
+// /api/nfts, which holds `OPENSEA_API_KEY` server-side.
+//
+// VITE_OPENSEA_API_KEY is only honoured as a legacy escape hatch for local
+// development against `vite dev` (no serverless runtime); set
+// VITE_OPENSEA_DIRECT=true to opt into it explicitly.
+const LEGACY_CLIENT_KEY = import.meta.env.VITE_OPENSEA_API_KEY;
+const USE_DIRECT_OPENSEA = import.meta.env.VITE_OPENSEA_DIRECT === 'true' && Boolean(LEGACY_CLIENT_KEY);
+
+if (LEGACY_CLIENT_KEY && !USE_DIRECT_OPENSEA && import.meta.env.DEV) {
+    console.warn('[OpenSea] VITE_OPENSEA_API_KEY is set but ignored — requests go through /api/nfts. Move the key to OPENSEA_API_KEY (server env).');
+}
+
+/**
+ * Build the URL actually requested by the browser.
+ * @param {string} path - OpenSea v2 path, e.g. `chain/base/account/0x../nfts`
+ * @param {URLSearchParams} [params]
+ */
+function buildRequestUrl(path, params) {
+    const query = params ? params.toString() : '';
+
+    if (USE_DIRECT_OPENSEA) {
+        return `${API_BASE}/${path}${query ? `?${query}` : ''}`;
+    }
+
+    const proxyParams = new URLSearchParams(query);
+    proxyParams.set('path', path);
+    return `${PROXY_BASE}?${proxyParams}`;
+}
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 const CHAIN_ID_TO_OPENSEA = {
     1: 'ethereum',
@@ -77,10 +105,9 @@ async function openseaFetch(url, retries = 2) {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
             const res = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json',
-                    'X-API-KEY': API_KEY || ''
-                }
+                headers: USE_DIRECT_OPENSEA
+                    ? { Accept: 'application/json', 'X-API-KEY': LEGACY_CLIENT_KEY || '' }
+                    : { Accept: 'application/json' }
             });
 
             if (res.status === 429) {
@@ -133,7 +160,7 @@ export async function fetchNFTsByWallet(address, options = {}) {
     if (next) params.set('next', next);
     if (collection) params.set('collection', collection);
 
-    const url = `${API_BASE}/chain/${chain}/account/${address}/nfts?${params}`;
+    const url = buildRequestUrl(`chain/${chain}/account/${address}/nfts`, params);
     const data = await openseaFetch(url);
 
     const result = {
@@ -157,7 +184,7 @@ export async function fetchNFTDetails(chain, contractAddress, tokenId) {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const url = `${API_BASE}/chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`;
+    const url = buildRequestUrl(`chain/${chain}/contract/${contractAddress}/nfts/${tokenId}`);
     const data = await openseaFetch(url);
 
     const result = normalizeNFT(data.nft || data);
