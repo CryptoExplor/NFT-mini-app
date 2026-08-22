@@ -295,7 +295,6 @@ export class NFTSelectorModal {
         return `
             <div data-tab="${role}" class="loadout-tab flex-1 min-w-[80px] max-w-[120px] min-h-[56px] rounded-lg border-2 ${borderClass} bg-indigo-900/30 overflow-hidden relative cursor-pointer group flex items-center gap-1.5 p-1.5">
                 <img src="${sanitizeUrl(entity.imageUrl) || '/placeholder.png'}" alt="" loading="lazy"
-                     onerror="this.onerror=null;this.src='/placeholder.png'"
                      class="w-8 h-8 sm:w-10 sm:h-10 rounded-md object-cover border border-white/10" />
                 <div class="flex-1 min-w-0">
                     <div class="text-[9px] text-indigo-400 font-bold uppercase leading-none mb-0.5">${label}</div>
@@ -345,7 +344,6 @@ export class NFTSelectorModal {
         const safeCollectionName = escapeHtml(nft.collectionName || 'Unknown');
         const imageElement = safeImage
             ? `<img src="${safeImage}" alt="${safeCollectionName}" loading="lazy"
-                    onerror="this.onerror=null;this.src='/placeholder.png'"
                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />`
             : `<div class="w-full h-full flex items-center justify-center text-xl font-black text-white/20">NFT</div>`;
 

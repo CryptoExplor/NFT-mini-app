@@ -401,7 +401,7 @@ function buildNFTCard(nft, index) {
                 ${nft.image_url
             ? `<img src="${encodeURI(nft.image_url)}" alt="${displayName}" loading="lazy"
                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
-                            onerror="this.onerror=null;this.src='/placeholder.png'" />`
+                            />`
             : `<div class="w-full h-full flex items-center justify-center text-slate-500 opacity-30">${renderIcon('IMAGE', 'w-12 h-12')}</div>`
         }
                 <!-- Hover Overlay -->

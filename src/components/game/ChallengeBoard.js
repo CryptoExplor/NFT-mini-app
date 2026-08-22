@@ -287,6 +287,18 @@ export class ChallengeBoard {
             }
         });
 
+        // Featured replay card (was an inline onclick with an interpolated id —
+        // both a CSP violation and an injection point).
+        const featuredReplay = this.container?.querySelector?.('[data-featured-replay]')
+            || document.querySelector('[data-featured-replay]');
+        if (featuredReplay) {
+            featuredReplay.addEventListener('click', () => {
+                const battleId = featuredReplay.getAttribute('data-featured-replay');
+                if (!battleId) return;
+                document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', { detail: { battleId } }));
+            });
+        }
+
         // Tournament Banner Event
         const tourneyBanner = $('#tournament-banner-cta');
         if (tourneyBanner) {
@@ -507,8 +519,8 @@ export class ChallengeBoard {
         if (!featured) return '';
 
         return `
-            <div class="relative p-5 rounded-2xl border border-indigo-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-indigo-500/40 transition-all cursor-pointer" 
-                 onclick="document.dispatchEvent(new CustomEvent('BATTLE_REPLAY_REQUEST', { detail: { battleId: '${featured.id}' } }))">
+            <div class="relative p-5 rounded-2xl border border-indigo-500/20 bg-slate-900/40 backdrop-blur-md overflow-hidden group hover:border-indigo-500/40 transition-all cursor-pointer"
+                 data-featured-replay="${escapeHtml(String(featured.id ?? ''))}">
                 <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
                 <div class="flex items-center justify-between mb-3">
                     <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">Featured Replay</span>

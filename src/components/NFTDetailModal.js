@@ -57,8 +57,7 @@ export function showNFTDetailModal(nft, chain = 'base') {
             ? `<video src="${safeAnimationUrl}" poster="${safeImageUrl}" autoplay loop muted playsinline class="nft-modal-image"></video>`
             : `<img src="${safeImageUrl}"
                                     alt="${safeName}"
-                                    class="nft-modal-image"
-                                    onerror="this.onerror=null;this.src='/placeholder.png'" />`
+                                    class="nft-modal-image" />`
         }
                     </div>
                 </div>

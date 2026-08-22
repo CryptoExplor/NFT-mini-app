@@ -229,7 +229,7 @@ export async function renderMintPage(params) {
                      alt="${collection.name}"
                      loading="lazy"
                      class="w-full aspect-square object-cover rounded-xl shadow-2xl img-fade-in"
-                     onerror="this.onerror=null;this.src='/placeholder.png'">
+                     >
                 
 
               </div>
@@ -861,12 +861,24 @@ async function initMintInterface(collection) {
         tokenDiv.className = 'mt-3 pt-3 border-t border-white/10 text-xs flex justify-between items-center';
         tokenDiv.innerHTML = `
                 <span class="opacity-60">Token: <span class="font-mono text-indigo-300 ml-1">${stage.token.slice(0, 6)}...${stage.token.slice(-4)}</span></span>
-                <button class="bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors text-[10px]" 
-                        onclick="navigator.clipboard.writeText('${stage.token}'); this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1000);">
+                <button id="copy-burn-token" class="bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors text-[10px]">
                     Copy
                 </button>
             `;
         stageInfo.appendChild(tokenDiv);
+
+        // Bound as a listener (an inline onclick both violates the CSP and
+        // interpolates the token address straight into executable markup).
+        tokenDiv.querySelector('#copy-burn-token')?.addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            try {
+                await navigator.clipboard.writeText(stage.token);
+                button.innerText = 'Copied!';
+            } catch {
+                button.innerText = 'Copy failed';
+            }
+            setTimeout(() => { button.innerText = 'Copy'; }, 1000);
+        });
       }
     }
 
