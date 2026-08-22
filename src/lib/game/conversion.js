@@ -2,6 +2,7 @@
  * Conversion & Retention Engine
  * Handles streaks, win tracking, and social prompts.
  */
+import { storage } from '../../utils/storage.js';
 
 const CONVERSION_STATE_KEY = 'arena_conversion_state';
 
@@ -10,15 +11,14 @@ const CONVERSION_STATE_KEY = 'arena_conversion_state';
  */
 export function getConversionState(address) {
     if (!address) return null;
-    const data = localStorage.getItem(`${CONVERSION_STATE_KEY}_${address}`);
-    return data ? JSON.parse(data) : {
+    return storage.getJSON(`${CONVERSION_STATE_KEY}_${address}`, {
         lastWinDate: null,
         streak: 0,
         totalWins: 0,
         lastShareDate: null,
         lastPromptDate: null,
         milestones: []
-    };
+    });
 }
 
 /**
@@ -50,7 +50,7 @@ export function recordBattleResult(address, won) {
         state.lastWinDate = null;
     }
 
-    localStorage.setItem(`${CONVERSION_STATE_KEY}_${address}`, JSON.stringify(state));
+    storage.setJSON(`${CONVERSION_STATE_KEY}_${address}`, state);
     return state;
 }
 
@@ -75,7 +75,7 @@ export function shouldShowSharePrompt(address) {
     }
 
     state.lastPromptDate = now;
-    localStorage.setItem(`${CONVERSION_STATE_KEY}_${address}`, JSON.stringify(state));
+    storage.setJSON(`${CONVERSION_STATE_KEY}_${address}`, state);
     return true;
 }
 
@@ -86,7 +86,7 @@ export function recordShare(address) {
     if (!address) return;
     const state = getConversionState(address);
     state.lastShareDate = new Date().toISOString().split('T')[0];
-    localStorage.setItem(`${CONVERSION_STATE_KEY}_${address}`, JSON.stringify(state));
+    storage.setJSON(`${CONVERSION_STATE_KEY}_${address}`, state);
 }
 
 /**

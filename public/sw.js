@@ -1,7 +1,12 @@
 // Service Worker for NFT Mint App
-const CACHE_NAME = 'nft-mint-app-v1';
-const STATIC_CACHE = 'static-v1';
-const DYNAMIC_CACHE = 'dynamic-v1';
+const CACHE_VERSION = 'v2';
+const CACHE_NAME = `nft-mint-app-${CACHE_VERSION}`;
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
+
+// Hard cap so the dynamic cache cannot grow without bound (it used to cache
+// every cross-origin image/API response forever).
+const DYNAMIC_CACHE_MAX_ENTRIES = 60;
 
 // Assets to cache immediately on install
 const STATIC_ASSETS = [
@@ -29,9 +34,12 @@ self.addEventListener('install', (event) => {
     
     event.waitUntil(
         caches.open(STATIC_CACHE)
-            .then((cache) => {
+            .then(async (cache) => {
                 console.log('[SW] Caching static assets');
-                return cache.addAll(STATIC_ASSETS);
+                // addAll() rejects the whole install if ONE asset 404s.
+                await Promise.all(STATIC_ASSETS.map((asset) =>
+                    cache.add(asset).catch((err) => console.warn('[SW] Skipped', asset, err?.message))
+                ));
             })
             .then(() => self.skipWaiting())
     );
@@ -74,7 +82,14 @@ self.addEventListener('fetch', (event) => {
     if (request.method !== 'GET') {
         return;
     }
-    
+
+    // Only ever handle same-origin traffic. Cross-origin requests (RPC, OpenSea,
+    // WalletConnect, IPFS gateways) must reach the network untouched — caching
+    // opaque responses filled the cache with unusable entries.
+    if (url.origin !== self.location.origin) {
+        return;
+    }
+
     // Skip items that should never be cached
     if (NEVER_CACHE.some(pattern => url.href.includes(pattern))) {
         return;
@@ -115,9 +130,14 @@ async function cacheFirst(request) {
         return response;
     } catch (error) {
         console.error('[SW] Fetch failed:', error);
-        
-        // Return offline fallback if available
-        return caches.match('/offline.html') || new Response('Offline', {
+
+        // NOTE: caches.match() returns a Promise (always truthy), so the old
+        // `caches.match(...) || new Response(...)` form resolved to undefined
+        // and made respondWith() throw. Await it explicitly.
+        const offline = await caches.match('/index.html');
+        if (offline) return offline;
+
+        return new Response('Offline', {
             status: 503,
             statusText: 'Service Unavailable'
         });
@@ -131,11 +151,12 @@ async function networkFirst(request) {
     try {
         const response = await fetch(request);
         
-        if (response.ok) {
-            // Cache successful responses
-            cache.put(request, response.clone());
+        if (response.ok && response.type === 'basic') {
+            // Cache successful same-origin responses only, then trim.
+            await cache.put(request, response.clone());
+            void trimCache(DYNAMIC_CACHE, DYNAMIC_CACHE_MAX_ENTRIES);
         }
-        
+
         return response;
     } catch (error) {
         console.log('[SW] Network failed, trying cache:', request.url);
@@ -158,6 +179,18 @@ async function networkFirst(request) {
 // HELPER FUNCTIONS
 // ============================================
 
+async function trimCache(cacheName, maxEntries) {
+    try {
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        if (keys.length <= maxEntries) return;
+        // FIFO eviction of the oldest entries.
+        await Promise.all(keys.slice(0, keys.length - maxEntries).map((key) => cache.delete(key)));
+    } catch (err) {
+        console.warn('[SW] Cache trim failed:', err?.message);
+    }
+}
+
 function isStaticAsset(url) {
     const staticExtensions = [
         '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', 
@@ -172,17 +205,22 @@ function isStaticAsset(url) {
 // ============================================
 
 self.addEventListener('message', (event) => {
-    if (event.data.action === 'skipWaiting') {
+    // Other libraries (and DevTools) post messages here too — `event.data` is
+    // not guaranteed to be an object, and reading .action threw a TypeError.
+    const action = (event.data && typeof event.data === 'object') ? event.data.action : null;
+    if (!action) return;
+
+    if (action === 'skipWaiting') {
         self.skipWaiting();
     }
-    
-    if (event.data.action === 'clearCache') {
+
+    if (action === 'clearCache') {
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((name) => caches.delete(name))
             );
         }).then(() => {
-            event.ports[0].postMessage({ status: 'Cache cleared' });
+            event.ports?.[0]?.postMessage({ status: 'Cache cleared' });
         });
     }
 });
@@ -213,7 +251,7 @@ self.addEventListener('push', (event) => {
     const options = {
         body: event.data ? event.data.text() : 'New notification',
         icon: '/icon.png',
-        badge: '/badge.png',
+        badge: '/favicon-32x32.png',
         vibrate: [200, 100, 200],
     };
     
@@ -226,6 +264,6 @@ self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     
     event.waitUntil(
-        clients.openWindow('/')
+        self.clients.openWindow('/')
     );
 });

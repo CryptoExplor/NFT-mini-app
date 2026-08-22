@@ -102,7 +102,7 @@ test('AI win increments the arena ladder exactly once', async () => {
     await processEvent(kv, {
         type: 'battle_result_v2',
         wallet: WALLET,
-        metadata: { won: true, isAi: true }
+        metadata: { won: true, isAi: true, ladderVerified: true }
     });
 
     assert.equal(kv._zsets.get('leaderboard:battle_wins:all_time').get(WALLET), 1);
@@ -120,7 +120,7 @@ test('an already-counted ladder write is not repeated (ladderCounted)', async ()
     await processEvent(kv, {
         type: 'battle_result_v2',
         wallet: WALLET,
-        metadata: { won: true, isAi: true, ladderCounted: true }
+        metadata: { won: true, isAi: true, ladderCounted: true, ladderVerified: true }
     });
 
     assert.equal(kv._zsets.has('leaderboard:battle_wins:all_time'), false);
@@ -134,13 +134,13 @@ test('PvP counts one battle and one global win even when the attacker wins', asy
     await processEvent(kv, {
         type: 'battle_result_v2',
         wallet: WALLET,
-        metadata: { won: false, isAi: false, affectsGlobal: true, countsGlobalWin: true }
+        metadata: { won: false, isAi: false, affectsGlobal: true, countsGlobalWin: true, ladderVerified: true }
     });
     // Attacker won — mirrored event, not counted in global volume
     await processEvent(kv, {
         type: 'battle_result_v2',
         wallet: OPPONENT,
-        metadata: { won: true, isAi: false, affectsGlobal: false, countsGlobalWin: true }
+        metadata: { won: true, isAi: false, affectsGlobal: false, countsGlobalWin: true, ladderVerified: true }
     });
 
     const global = kv._hashes.get('stats:global');
@@ -155,7 +155,7 @@ test('battle wins award weekly points and TTL only the touched weekly keys', asy
     await processEvent(kv, {
         type: 'battle_result_v2',
         wallet: WALLET,
-        metadata: { won: true, isAi: true }
+        metadata: { won: true, isAi: true, ladderVerified: true }
     });
 
     assert.equal(kv._zsets.get(`leaderboard:points:week:${WEEK}`).get(WALLET), 5);
@@ -181,6 +181,21 @@ test('guest battles move global counters without touching wallet state', async (
     assert.equal(kv._hashes.get('stats:global').get('battle_wins'), 1);
     assert.equal(kv._hashes.has('user:anonymous:profile'), false);
     assert.equal(kv._zsets.has('leaderboard:battle_wins:all_time'), false);
+});
+
+test('an unverified battle claim never touches the ladder, points or profile', async () => {
+    const kv = createFakeKv();
+
+    // No ladderVerified flag = the claim was not tied to a stored battle record.
+    await processEvent(kv, {
+        type: 'battle_result_v2',
+        wallet: WALLET,
+        metadata: { won: true, isAi: true }
+    });
+
+    assert.equal(kv._zsets.has('leaderboard:battle_wins:all_time'), false);
+    assert.equal(kv._zsets.has('leaderboard:points'), false);
+    assert.equal(kv._hashes.get(`user:${WALLET}:profile`)?.get('battle_wins'), undefined);
 });
 
 test('duplicate mint_success does not inflate global or daily counters', async () => {

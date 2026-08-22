@@ -199,6 +199,11 @@ export function handleBattleWon(pipe, event, helpers) {
  *  - ladderCounted  : the caller already wrote to leaderboard:battle_wins:*
  *                     (legacy AI path did this via incrementBattleWins). When
  *                     true we skip the zincrby so wins are not double counted.
+ *  - ladderVerified : the outcome was proven against a server-stored battle
+ *                     record (see api/_lib/battle/verifyClaim.js). Wallet-level
+ *                     wins, points and the ladder are ONLY written when this is
+ *                     true — otherwise any authenticated client could mint wins
+ *                     by POSTing {won:true} to /api/track.
  */
 export function handleBattleResultV2(pipe, event, helpers) {
     const { weekNum, timestamp } = helpers;
@@ -210,6 +215,7 @@ export function handleBattleResultV2(pipe, event, helpers) {
     const affectsGlobal = metadata?.affectsGlobal !== false;
     const countsGlobalWin = metadata?.countsGlobalWin ?? affectsGlobal;
     const ladderCounted = metadata?.ladderCounted === true;
+    const ladderVerified = metadata?.ladderVerified === true;
 
     if (affectsGlobal) {
         pipe.hincrby('stats:global', 'battle_total', 1);
@@ -233,7 +239,8 @@ export function handleBattleResultV2(pipe, event, helpers) {
         pipe.hincrby('stats:global', 'battle_wins', 1);
     }
 
-    if (wallet && wallet !== 'anonymous') {
+    // Wallet-scoped progression requires a verified battle record.
+    if (wallet && wallet !== 'anonymous' && ladderVerified) {
         pipe.hincrby(`user:${wallet}:profile`, 'battle_total', 1);
         if (won) {
             pipe.hincrby(`user:${wallet}:profile`, 'battle_wins', 1);

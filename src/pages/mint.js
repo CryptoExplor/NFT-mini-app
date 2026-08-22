@@ -229,7 +229,7 @@ export async function renderMintPage(params) {
                      alt="${collection.name}"
                      loading="lazy"
                      class="w-full aspect-square object-cover rounded-xl shadow-2xl img-fade-in"
-                     onerror="this.src='/placeholder.png'">
+                     onerror="this.onerror=null;this.src='/placeholder.png'">
                 
 
               </div>
@@ -961,42 +961,45 @@ async function handleMint(collection, stage) {
   // Check chain
   if (state.wallet.chainId !== collection.chainId) {
     try {
-      mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
+      if (mintStatus) mintStatus.textContent = `Switching to ${getChainName(collection.chainId)}...`;
       await switchChain(wagmiAdapter.wagmiConfig, { chainId: collection.chainId });
     } catch (e) {
       const errorMsg = handleMintError(e);
       toast.show(errorMsg, 'error');
-      mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
+      if (mintStatus) mintStatus.textContent = `Please switch to ${getChainName(collection.chainId)}`;
       return;
     }
   }
 
   try {
-    mintBtn.disabled = true;
-    mintText.textContent = 'Minting...';
-    mintStatus.textContent = 'Confirm transaction in your wallet';
+    if (mintBtn) mintBtn.disabled = true;
+    if (mintText) mintText.textContent = 'Minting...';
+    if (mintStatus) mintStatus.textContent = 'Confirm transaction in your wallet';
 
     // Track attempt
 
     trackMintAttempt(state.wallet.address, collection.slug);
 
-    const hash = await mint(collection, stage);
+    const mintPrice = stage.price ? Number(stage.price) / 1e18 : 0;
 
-    // Track success
-
+    const hash = await mint(collection, stage, {
+        onHash: (txHash) => {
+            // Funnel step recorded when the tx is broadcast, not after it is
+            // confirmed — otherwise tx_sent could never exceed mint_success.
+            trackTxSent(state.wallet.address, collection.slug, txHash);
+            if (mintStatus) mintStatus.textContent = 'Transaction sent — waiting for confirmation...';
+        }
+    });
 
     toast.show('Successfully minted NFT! 🎉', 'success');
 
-    // Track on server (full funnel: tx_sent + mint_success)
-    const mintPrice = stage.price ? Number(stage.price) / 1e18 : 0;
-    trackTxSent(state.wallet.address, collection.slug, hash);
     trackMint(state.wallet.address, collection.slug, hash, mintPrice);
 
-    mintText.textContent = 'Success! 🎉';
-    mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
+    if (mintText) mintText.textContent = 'Success! 🎉';
+    if (mintStatus) mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
 
     const explorerBase = getExplorerUrl(collection.chainId);
-    mintStatus.innerHTML = `
+    if (mintStatus) mintStatus.innerHTML = `
       <div class="flex flex-col items-center space-y-4">
         <a href="${explorerBase}/tx/${hash}" target="_blank" class="text-indigo-400 underline text-sm mb-2">View on Explorer</a>
         ${collection.openseaUrl ? `
@@ -1060,9 +1063,9 @@ async function handleMint(collection, stage) {
     const friendlyMessage = handleMintError(error);
     toast.show(friendlyMessage, 'error');
 
-    mintText.textContent = 'Mint Failed';
-    mintStatus.textContent = friendlyMessage;
-    mintBtn.disabled = false;
+    if (mintText) mintText.textContent = 'Mint Failed';
+    if (mintStatus) mintStatus.textContent = friendlyMessage;
+    if (mintBtn) mintBtn.disabled = false;
 
     // Reset after error
     setTimeout(() => {

@@ -29,7 +29,10 @@ export default async function handler(req, res) {
         }
 
         const normalizedWallet = (wallet && wallet !== 'anonymous') ? String(wallet).toLowerCase() : 'anonymous';
-        const clientIp = req.headers['x-forwarded-for'] || 'unknown_ip';
+        const forwardedFor = req.headers['x-forwarded-for'];
+        const clientIp = (typeof forwardedFor === 'string' && forwardedFor.length > 0)
+            ? forwardedFor.split(',')[0].trim()
+            : (req.headers['x-real-ip'] || 'unknown_ip');
         const rateLimitKey = `ai_gen_${normalizedWallet !== 'anonymous' ? normalizedWallet : clientIp}`;
 
         try {

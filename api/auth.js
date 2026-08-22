@@ -1,7 +1,14 @@
+import { setCors } from './_lib/cors.js';
 import nonce from './_lib/auth/nonce.js';
 import verify from './_lib/auth/verify.js';
 
 export default async function handler(req, res) {
+    setCors(req, res, {
+        methods: 'GET,POST,OPTIONS',
+        headers: 'Content-Type, Authorization'
+    });
+    if (req.method === 'OPTIONS') return res.status(204).end();
+
     const { action } = req.query;
 
     switch (action) {

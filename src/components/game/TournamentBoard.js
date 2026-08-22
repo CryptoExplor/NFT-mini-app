@@ -5,6 +5,7 @@ import { renderIcon } from '../../utils/icons.js';
 import { getPlayerTournamentStatus, getTournamentLeaderboard } from '../../lib/game/tournament.js';
 import { formatRankBadge, getRankByPoints } from '../../lib/game/rankSystem.js';
 import { shortenAddress } from '../../utils/dom.js';
+import { escapeHtml } from '../../utils/html.js';
 
 /**
  * TournamentBoard UI Component
@@ -49,7 +50,7 @@ export class TournamentBoard {
                                 <div class="flex items-center justify-center md:justify-start gap-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
                                     <span class="flex items-center gap-1.5 text-yellow-500/80">${renderIcon('CLOCK', 'w-4 h-4')} Ends in: ${timeLeft}</span>
                                     <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
-                                    <span>ID: ${tournament.id}</span>
+                                    <span>ID: ${escapeHtml(tournament.id)}</span>
                                 </div>
                             </div>
                         </div>

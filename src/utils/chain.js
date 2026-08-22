@@ -1,6 +1,9 @@
 import { base as baseChain, baseSepolia } from 'viem/chains';
 
-// Override Base Mainnet RPC — use env var so the key is never in the bundle
+// Override Base Mainnet RPC.
+// WARNING: every VITE_* value is INLINED into the client bundle at build time —
+// it is public. Only ever put a rate-limited, domain-restricted RPC URL here;
+// route anything that needs a real secret through an /api route instead.
 const rpcUrl = import.meta.env.VITE_BASE_RPC_URL || baseChain.rpcUrls.default.http[0];
 const base = {
     ...baseChain,

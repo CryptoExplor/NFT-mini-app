@@ -129,6 +129,14 @@ export async function connectMiniAppWalletSilently() {
 export async function initWallet() {
     console.log('🔌 Initializing wallet connection...');
 
+    // initWallet() can run more than once (route remounts, reconnect retries).
+    // Without this, every call stacked another watchAccount subscription and
+    // each account change fired N duplicate WALLET_UPDATE events.
+    if (typeof currentUnwatch === 'function') {
+        try { currentUnwatch(); } catch { /* ignore */ }
+        currentUnwatch = null;
+    }
+
     // 1. Get initial account state FIRST (synchronously)
     const initialAccount = getAccount(wagmiAdapter.wagmiConfig);
     console.log('Initial account state:', {
@@ -247,6 +255,14 @@ export async function disconnectWallet() {
         import('./lib/api.js').then(m => { if (typeof m.clearAuthToken === 'function') m.clearAuthToken(); }).catch(() => {});
     } catch (error) {
         console.error('Failed to disconnect:', error);
+    }
+}
+
+/** Tear down the account watcher (used on teardown/tests). */
+export function stopWalletWatcher() {
+    if (typeof currentUnwatch === 'function') {
+        try { currentUnwatch(); } catch { /* ignore */ }
+        currentUnwatch = null;
     }
 }
 

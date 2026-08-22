@@ -1,3 +1,4 @@
+import { storage } from '../../utils/storage.js';
 import { $, shortenAddress } from '../../utils/dom.js';
 import { normalizeFighter } from '../../lib/battle/metadataNormalizer.js';
 import { getActiveChallenges } from '../../lib/game/matchmaking.js';
@@ -186,7 +187,7 @@ export class ChallengeBoard {
         const playerRank = getRankByPoints(playerPoints);
         
         // Async fetch for leaderboard - we can use the mock for now
-        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const leaderboard = storage.getJSON('arena_leaderboard_mock', []);
         const topPlayer = leaderboard[0];
 
         this.container.innerHTML = `
@@ -500,7 +501,7 @@ export class ChallengeBoard {
     }
 
     renderFeaturedBattle() {
-        const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+        const history = storage.getJSON('battle_history', []);
         const featured = history.find(b => b.playerWon && b.rounds > 5) || history[0];
 
         if (!featured) return '';
@@ -527,7 +528,7 @@ export class ChallengeBoard {
     }
 
     renderTopPlayerShowcase() {
-        const leaderboard = JSON.parse(localStorage.getItem('arena_leaderboard_mock') || '[]');
+        const leaderboard = storage.getJSON('arena_leaderboard_mock', []);
         const top = leaderboard[0];
 
         if (!top) return '';

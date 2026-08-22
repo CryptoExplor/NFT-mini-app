@@ -3,6 +3,8 @@
  * Manages weekly tournament state, enrollment, and points.
  */
 
+import { storage } from '../../utils/storage.js';
+
 const TOURNAMENT_META_KEY = 'arena_tournament_current';
 const TOURNAMENT_POINTS_KEY = 'arena_tournament_points';
 const TOURNAMENT_HISTORY_KEY = 'arena_tournament_history';
@@ -12,7 +14,7 @@ const TOURNAMENT_HISTORY_KEY = 'arena_tournament_history';
  */
 export function getCurrentTournament() {
     const now = Date.now();
-    let tournament = JSON.parse(localStorage.getItem(TOURNAMENT_META_KEY));
+    let tournament = storage.getJSON(TOURNAMENT_META_KEY, null);
 
     // If no tournament or current one expired, rotate
     if (!tournament || now > tournament.end) {
@@ -46,10 +48,10 @@ function rotateTournament(previous) {
         status: 'active'
     };
 
-    localStorage.setItem(TOURNAMENT_META_KEY, JSON.stringify(newTournament));
+    storage.setJSON(TOURNAMENT_META_KEY, newTournament);
     
     // Clear current points for the new tournament
-    localStorage.removeItem(`${TOURNAMENT_POINTS_KEY}_${newTournament.id}`);
+    storage.removeItem(`${TOURNAMENT_POINTS_KEY}_${newTournament.id}`);
     
     console.log(`[Tournament] Rotated to new tournament: ${weekId}`);
     return newTournament;
@@ -59,8 +61,8 @@ function rotateTournament(previous) {
  * Archives completed tournament data
  */
 function archiveTournament(tournament) {
-    const history = JSON.parse(localStorage.getItem(TOURNAMENT_HISTORY_KEY) || '[]');
-    const points = JSON.parse(localStorage.getItem(`${TOURNAMENT_POINTS_KEY}_${tournament.id}`) || '[]');
+    const history = storage.getJSON(TOURNAMENT_HISTORY_KEY, []);
+    const points = storage.getJSON(`${TOURNAMENT_POINTS_KEY}_${tournament.id}`, []);
     
     const winner = points.length > 0 ? points[0] : null;
     
@@ -72,7 +74,7 @@ function archiveTournament(tournament) {
     });
     
     // Keep last 10 tournaments in history
-    localStorage.setItem(TOURNAMENT_HISTORY_KEY, JSON.stringify(history.slice(-10)));
+    storage.setJSON(TOURNAMENT_HISTORY_KEY, history.slice(-10));
 }
 
 /**
@@ -83,7 +85,8 @@ export function addTournamentPoints(address, pointsToAdd) {
     if (!tournament || tournament.status !== 'active') return null;
 
     const key = `${TOURNAMENT_POINTS_KEY}_${tournament.id}`;
-    let board = JSON.parse(localStorage.getItem(key) || '[]');
+    let board = storage.getJSON(key, []);
+    if (!Array.isArray(board)) board = [];
     
     const index = board.findIndex(entry => entry.address === address);
     let newScore = pointsToAdd;
@@ -99,7 +102,7 @@ export function addTournamentPoints(address, pointsToAdd) {
     board.sort((a, b) => b.score - a.score);
     board = board.slice(0, 100);
     
-    localStorage.setItem(key, JSON.stringify(board));
+    storage.setJSON(key, board);
 
     const rank = board.findIndex(entry => entry.address === address) + 1;
     
@@ -118,7 +121,7 @@ export function getTournamentLeaderboard(tournamentId) {
     const id = tournamentId || getCurrentTournament()?.id;
     if (!id) return [];
     
-    return JSON.parse(localStorage.getItem(`${TOURNAMENT_POINTS_KEY}_${id}`) || '[]');
+    return storage.getJSON(`${TOURNAMENT_POINTS_KEY}_${id}`, []);
 }
 
 /**

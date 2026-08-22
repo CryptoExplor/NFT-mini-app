@@ -8,6 +8,9 @@ import { cache } from '../utils/cache.js';
 import { wagmiAdapter } from '../wallet.js';
 
 const API_BASE = 'https://api.opensea.io/api/v2';
+// WARNING: this is a CLIENT-side key — Vite inlines VITE_* into the bundle, so
+// it is visible to anyone. Use a key that is restricted to this domain and
+// treat it as public; move to a server proxy if a private key is ever needed.
 const API_KEY = import.meta.env.VITE_OPENSEA_API_KEY;
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 const CHAIN_ID_TO_OPENSEA = {

@@ -25,6 +25,12 @@ import {
 } from '../kv.js';
 import { processEvent } from '../events.js';
 import { computeLoadoutSnapshot } from '../../../src/lib/battle/snapshot.js';
+import {
+    sanitizeFighterStats,
+    sanitizeModifierStats,
+    sanitizeTeamSnapshot
+} from './sanitize.js';
+import { reserveBattleCount } from './verifyClaim.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -79,11 +85,15 @@ async function handler(req, res) {
         }
 
         // 3. Extract stats
-        const attackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
-        const defenderStats = defenderLoadout.fighter.stats || {};
+        // NOTE: both sides are client-supplied, so both are clamped to the
+        // balance envelope. Previously the defender could post arbitrary stats
+        // (hp: 1e9) in the fight request and win every PvP match.
+        const rawAttackerStats = challenge.fighterStats || challenge.loadout?.fighter?.stats || {};
+        const rawDefenderStats = defenderLoadout.fighter.stats || {};
 
-        // Use shared utility for deterministic verification
-        const snapshotHash = computeLoadoutSnapshot(challenge.loadout, attackerStats);
+        // Use shared utility for deterministic verification (hash the stored,
+        // untouched values — clamping happens after the anti-tamper check).
+        const snapshotHash = computeLoadoutSnapshot(challenge.loadout, rawAttackerStats);
 
         if (snapshotHash !== challenge.snapshotHash) {
             return res.status(409).json({
@@ -91,6 +101,18 @@ async function handler(req, res) {
                 message: 'Challenge data no longer matches the stored snapshot',
             });
         }
+
+        const attackerStats = sanitizeFighterStats(rawAttackerStats, {
+            name: challenge.loadout?.fighter?.name
+        });
+        const defenderStats = sanitizeFighterStats(rawDefenderStats, {
+            name: defenderLoadout.fighter?.name
+        });
+        const attackerItem = sanitizeModifierStats(challenge.loadout?.item?.stats);
+        const attackerArena = sanitizeModifierStats(challenge.loadout?.arena?.stats);
+        const defenderItem = sanitizeModifierStats(defenderLoadout.item?.stats);
+        const attackerTeam = sanitizeTeamSnapshot(challenge.loadout?.teamSnapshot);
+        const defenderTeam = sanitizeTeamSnapshot(defenderLoadout.teamSnapshot);
 
         // 4. Generate deterministic seed
         const attackerId = `${challenge.loadout?.fighter?.collectionSlug || 'unknown'}_${challenge.loadout?.fighter?.tokenId || '0'}`;
@@ -109,11 +131,11 @@ async function handler(req, res) {
             { name: `Defender ${defenderId}`, ...defenderStats },
             prng,
             {
-                playerItem: challenge.loadout?.item?.stats || null,
-                enemyItem: defenderLoadout.item?.stats || null,
-                environment: challenge.loadout?.arena?.stats || null,
-                playerTeam: challenge.loadout?.teamSnapshot || [],
-                enemyTeam: defenderLoadout.teamSnapshot || [],
+                playerItem: attackerItem,
+                enemyItem: defenderItem,
+                environment: attackerArena,
+                playerTeam: attackerTeam,
+                enemyTeam: defenderTeam,
                 isAiBattle: false,
             }
         );
@@ -140,17 +162,17 @@ async function handler(req, res) {
                     id: challenge.player,
                     name: attackerName,
                     stats: attackerStats,
-                    item: challenge.loadout?.item?.stats || null,
-                    arena: challenge.loadout?.arena?.stats || null,
-                    team: challenge.loadout?.teamSnapshot || []
+                    item: attackerItem,
+                    arena: attackerArena,
+                    team: attackerTeam
                 },
                 p2: {
                     id: auth.address,
                     name: defenderName,
                     stats: defenderStats,
-                    item: defenderLoadout.item?.stats || null,
-                    arena: null, 
-                    team: defenderLoadout.teamSnapshot || []
+                    item: defenderItem,
+                    arena: null,
+                    team: defenderTeam
                 }
             },
             options: {
@@ -170,6 +192,16 @@ async function handler(req, res) {
             console.error('[Fight] KV Battle Record save failed:', err.message);
             return null;
         });
+
+        // These results were produced by the server, so they are counted here
+        // directly. Reserving the (battleId, wallet) pairs also stops the client
+        // from re-claiming the same PvP battle through /api/track.
+        if (generatedBattleId) {
+            await Promise.allSettled([
+                reserveBattleCount(kv, generatedBattleId, auth.address),
+                reserveBattleCount(kv, generatedBattleId, challenge.player)
+            ]);
+        }
 
         // Analytics for both sides.
         //  - affectsGlobal   : only the defender event, so a match counts once in
@@ -191,7 +223,8 @@ async function handler(req, res) {
                     opponent: attackerName,
                     battleId: generatedBattleId || null,
                     affectsGlobal: true,
-                    countsGlobalWin: true
+                    countsGlobalWin: true,
+                    ladderVerified: true
                 }
             }).catch((err) => {
                 console.error('[Fight] battle_result_v2 analytics failed:', err.message);
@@ -208,7 +241,8 @@ async function handler(req, res) {
                     opponent: defenderName,
                     battleId: generatedBattleId || null,
                     affectsGlobal: false,
-                    countsGlobalWin: true
+                    countsGlobalWin: true,
+                    ladderVerified: true
                 }
             }).catch((err) => {
                 console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);

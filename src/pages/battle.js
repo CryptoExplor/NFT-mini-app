@@ -287,6 +287,7 @@ export async function renderBattlePage() {
                         const loadout = getCurrentBattleLoadout();
                         persistedBattlePromise = recordAiBattle(state.wallet.address, {
                             seed: battleSeed,
+                            aiWinRate: previewModal.enemyData?.aiWinRate || 0.6,
                             playerStats: playerCombatStats,
                             enemyStats: enemyCombatStats,
                             result: {

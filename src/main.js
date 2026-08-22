@@ -117,8 +117,11 @@ async function init() {
         const walletMod = await getWalletModule();
         await walletMod.initWallet();
 
-        // Auto-connect in mini-app after wallet is ready
-        if (farcasterResult.inMiniApp) {
+        // Auto-connect in mini-app after wallet is ready.
+        // initWallet() already attempts this when reconnect() fails, so only
+        // run it here if we are still disconnected (avoids two parallel
+        // connect requests racing each other in the Farcaster webview).
+        if (farcasterResult.inMiniApp && !walletMod.getCurrentAccount()?.isConnected) {
             walletMod.connectMiniAppWalletSilently().catch(e => console.warn('Auto-connect failed:', e));
         }
     } catch (e) {

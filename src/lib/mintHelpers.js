@@ -10,8 +10,9 @@ import { wagmiAdapter, DATA_SUFFIX } from '../wallet.js';
 import { state } from '../state.js';
 import { getContractConfig } from '../../contracts/index.js';
 import { readContract, writeContract, waitForTransactionReceipt, getBalance } from '@wagmi/core';
-import { encodePacked, keccak256, encodeFunctionData, getAddress, isAddress } from 'viem';
+import { encodePacked, keccak256, encodeFunctionData, getAddress, isAddress, parseUnits } from 'viem';
 import { cache } from '../utils/cache.js';
+import { storage } from '../utils/storage.js';
 
 // ============================================
 // EIP-5792 BATCH TRANSACTION SUPPORT
@@ -76,6 +77,18 @@ async function supportsBatchCalls(wagmiConfig, chainId) {
         _batchCapabilityByChain.set(cacheKey, false);
         return false;
     }
+}
+
+/**
+ * Robust user-rejection detection. `e.message` can be undefined on provider
+ * errors, and `e.message.includes(...)` then threw inside the catch block.
+ */
+function isUserRejection(error) {
+    if (!error) return false;
+    if (error.name === 'UserRejectedRequestError') return true;
+    if (error.code === 4001) return true;
+    const message = String(error.shortMessage || error.message || '').toLowerCase();
+    return message.includes('user rejected') || message.includes('user denied');
 }
 
 function isTxHash(value) {
@@ -396,7 +409,16 @@ export async function fetchNextTokenId(collection, config, wagmiConfig) {
  * @param {Object} stage - Current mint stage
  * @returns {string} Transaction hash
  */
-export async function mint(collection, stage) {
+/**
+ * @param {Object} collection
+ * @param {Object} stage
+ * @param {{ onHash?: (hash: string) => void }} [hooks]
+ *        onHash fires the moment the transaction is broadcast, BEFORE waiting
+ *        for the receipt — the tx_sent funnel step used to be reported only
+ *        after confirmation, so reverted/dropped transactions never appeared
+ *        between mint_click and mint_success.
+ */
+export async function mint(collection, stage, hooks = {}) {
     const config = getContractConfig(collection);
     const wagmiConfig = wagmiAdapter.wagmiConfig;
 
@@ -421,11 +443,24 @@ export async function mint(collection, stage) {
             throw new Error(`Unknown mint type: ${stage.type}`);
     }
 
+    if (typeof hooks.onHash === 'function') {
+        try {
+            hooks.onHash(hash);
+        } catch (err) {
+            console.warn('onHash hook failed (non-fatal):', err?.message || err);
+        }
+    }
+
     // Wait for confirmation
-    await waitForTransactionReceipt(wagmiConfig, {
+    const receipt = await waitForTransactionReceipt(wagmiConfig, {
         hash,
         confirmations: 1
     });
+
+    // A mined-but-reverted transaction is NOT a successful mint.
+    if (receipt?.status && receipt.status !== 'success') {
+        throw new Error('Transaction reverted on-chain');
+    }
 
     console.log(`✅ Mint successful! TX: ${hash}`);
     return hash;
@@ -445,7 +480,11 @@ function getMintArgs(abi, functionName, tokenId) {
         return [];
     }
 
-    const firstInputName = abiItem.inputs[0].name.toLowerCase();
+    // ABI inputs are often unnamed (`{ "name": "", "type": "uint256" }`) or the
+    // key is missing entirely — `.name.toLowerCase()` threw a TypeError and
+    // aborted the whole mint before any wallet request.
+    const firstInput = abiItem.inputs[0] || {};
+    const firstInputName = String(firstInput.name || '').toLowerCase();
 
     // Heuristic: If first arg is 'quantity' or 'amount', use 1. Otherwise use tokenId.
     if (firstInputName.includes('quantity') || firstInputName.includes('amount')) {
@@ -482,10 +521,10 @@ async function mintFree(config, wagmiConfig, tokenId) {
             return hash;
         } catch (e) {
             // STOP if user explicitly rejected the transaction
-            if (e.name === 'UserRejectedRequestError' || e.message.includes('User rejected')) {
+            if (isUserRejection(e)) {
                 throw e;
             }
-            console.log(`${funcName} failed, trying next...`, e.shortMessage || e.message);
+            console.log(`${funcName} failed, trying next...`, e?.shortMessage || e?.message || e);
         }
     }
 
@@ -520,10 +559,10 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
             return hash;
         } catch (e) {
             // STOP if user explicitly rejected the transaction
-            if (e.name === 'UserRejectedRequestError' || e.message.includes('User rejected')) {
+            if (isUserRejection(e)) {
                 throw e;
             }
-            console.log(`${funcName} failed, trying next...`, e.shortMessage || e.message);
+            console.log(`${funcName} failed, trying next...`, e?.shortMessage || e?.message || e);
         }
     }
 
@@ -535,8 +574,19 @@ async function mintPaid(config, wagmiConfig, tokenId, price) {
  * Supports EIP-5792 batch transactions when available.
  */
 async function mintBurn(config, wagmiConfig, tokenId, stage) {
-    const decimals = stage.decimals || 18;
-    const amountToBurn = BigInt(stage.amount) * (10n ** BigInt(decimals)); // Respect decimals
+    const decimals = Number.isFinite(Number(stage.decimals)) ? Number(stage.decimals) : 18;
+    // parseUnits handles fractional amounts ("0.5"); the old
+    // `BigInt(stage.amount) * 10n ** decimals` threw SyntaxError on anything
+    // that was not an integer string.
+    let amountToBurn;
+    try {
+        amountToBurn = parseUnits(String(stage.amount ?? '0'), decimals);
+    } catch {
+        throw new Error(`Invalid burn amount configured for this stage: ${stage.amount}`);
+    }
+    if (amountToBurn <= 0n) {
+        throw new Error('Burn amount must be greater than zero');
+    }
     console.log(`🔥 Executing BURN mint (${stage.amount} tokens)...`);
 
     const tokenAddress = stage.token;
@@ -578,7 +628,8 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
     });
 
     if (balance < amountToBurn) {
-        throw new Error(`Insufficient ${stage.tokenName || 'token'} balance. You have ${Number(balance) / 1e18}, need ${stage.amount}.`);
+        const held = Number(balance) / 10 ** decimals;
+        throw new Error(`Insufficient ${stage.tokenName || 'token'} balance. You have ${held}, need ${stage.amount}.`);
     }
 
     // 2. Check Allowance
@@ -633,7 +684,7 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
                     console.log(`Batched approve+mint sent, tx hash: ${batchTxHash}`);
                     return batchTxHash;
                 } catch (e) {
-                    if (e.name === 'UserRejectedRequestError' || e.message?.includes('User rejected')) {
+                    if (isUserRejection(e)) {
                         throw e;
                     }
                     console.log(`Batched ${funcName} failed:`, e?.shortMessage || e?.message || e);
@@ -680,7 +731,7 @@ async function mintBurn(config, wagmiConfig, tokenId, stage) {
             });
             return hash;
         } catch (e) {
-            if (e.name === 'UserRejectedRequestError' || e.message?.includes('User rejected')) {
+            if (isUserRejection(e)) {
                 throw e;
             }
             console.log(`${funcName} failed:`, e);
@@ -776,7 +827,12 @@ export async function verifyAllowlist(address, proof, merkleRoot) {
             const normalizedSibling = String(sibling || '').toLowerCase();
             if (!/^0x[a-f0-9]{64}$/.test(normalizedSibling)) return false;
 
-            const [left, right] = [computedHash, normalizedSibling].sort((a, b) => a.localeCompare(b));
+            // Byte-wise ordering (OpenZeppelin's commutative hashing). String
+            // localeCompare() is locale sensitive and could order hex digits
+            // differently under a non-C collation.
+            const [left, right] = computedHash < normalizedSibling
+                ? [computedHash, normalizedSibling]
+                : [normalizedSibling, computedHash];
             computedHash = keccak256(`0x${left.slice(2)}${right.slice(2)}`);
         }
 
@@ -791,17 +847,19 @@ export async function verifyAllowlist(address, proof, merkleRoot) {
  * Store a successful transaction in localStorage
  */
 export function storeTransaction(tx) {
-    const transactions = JSON.parse(localStorage.getItem('nft_transactions') || '[]');
+    const stored = storage.getJSON('nft_transactions', []);
+    const transactions = Array.isArray(stored) ? stored : [];
     transactions.unshift({
         ...tx,
         timestamp: Date.now()
     });
-    localStorage.setItem('nft_transactions', JSON.stringify(transactions.slice(0, 50)));
+    storage.setJSON('nft_transactions', transactions.slice(0, 50));
 }
 
 /**
  * Get stored transactions from localStorage
  */
 export function getStoredTransactions() {
-    return JSON.parse(localStorage.getItem('nft_transactions') || '[]');
+    const stored = storage.getJSON('nft_transactions', []);
+    return Array.isArray(stored) ? stored : [];
 }

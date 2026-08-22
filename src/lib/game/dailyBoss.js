@@ -1,3 +1,4 @@
+import { storage } from '../../utils/storage.js';
 /**
  * Daily Boss Simulation Engine
  * Generates a unique "World Boss" every 24 hours.
@@ -55,10 +56,10 @@ export function getDailyBoss() {
 }
 
 export function checkBossVictory(bossId, playerId = 'anonymous') {
-    return !!localStorage.getItem(getBossVictoryKey(bossId, playerId));
+    return !!storage.getItem(getBossVictoryKey(bossId, playerId));
 }
 
 export function recordBossVictory(bossId, playerId = 'anonymous') {
-    localStorage.setItem(getBossVictoryKey(bossId, playerId), Date.now().toString());
+    storage.setItem(getBossVictoryKey(bossId, playerId), Date.now().toString());
     // In a real app, this would be a server-side record
 }

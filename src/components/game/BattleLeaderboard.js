@@ -1,3 +1,4 @@
+import { storage } from '../../utils/storage.js';
 import { $ } from '../../utils/dom.js';
 import { getAccount } from '@wagmi/core';
 import { wagmiAdapter } from '../../wallet.js';
@@ -19,7 +20,7 @@ export function getReplayHref(battleId) {
  */
 export function saveBattleResult(result) {
     try {
-        const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        const history = storage.getJSON(HISTORY_KEY, []);
         history.unshift({
             id: `battle_${Date.now()}`,
             playerName: result.playerName,
@@ -34,7 +35,7 @@ export function saveBattleResult(result) {
             timestamp: Date.now()
         });
         if (history.length > 50) history.length = 50;
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        storage.setJSON(HISTORY_KEY, history);
     } catch (_) { }
 }
 
@@ -43,7 +44,7 @@ export function saveBattleResult(result) {
  */
 function getLegacyBattleStats() {
     try {
-        const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]').map((battle) => ({
+        const history = storage.getJSON(HISTORY_KEY, []).map((battle) => ({
             ...battle,
             canReplay: false,
         }));

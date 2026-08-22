@@ -3,6 +3,7 @@ import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { setCors } from './_lib/cors.js';
 import { verifyAuth } from './_lib/authMiddleware.js';
+import { verifyBattleClaim } from './_lib/battle/verifyClaim.js';
 import {
     VALID_EVENTS,
     processEvent,
@@ -126,6 +127,32 @@ export default async function handler(req, res) {
         const safeMetadata = { ...(metadata && typeof metadata === 'object' ? metadata : {}) };
         if (platform && typeof platform === 'string') {
             safeMetadata.platform = safeMetadata.platform || platform.slice(0, 40);
+        }
+
+        // ── Battle claims must reference a server-stored battle record ──
+        // The ladder is only allowed to move for a battle the server produced
+        // (PvP via the fight endpoint, AI via the verified record endpoint) and
+        // each battle can only be counted once per wallet. The stored record —
+        // not the request body — decides whether the wallet actually won.
+        let battleVerification = null;
+        if (type === 'battle_result_v2' && normalizedWallet !== 'anonymous') {
+            battleVerification = await verifyBattleClaim(kv, normalizedWallet, safeMetadata);
+            safeMetadata.ladderVerified = battleVerification.verified;
+
+            if (battleVerification.verified) {
+                safeMetadata.won = battleVerification.won;
+                if (battleVerification.opponent) safeMetadata.opponent = battleVerification.opponent;
+                safeMetadata.isAi = battleVerification.isAi;
+            } else {
+                // Unverifiable claim: never counted, never rejected loudly (the
+                // record write may simply still be in flight on a slow network).
+                console.warn(`[Track] Unverified battle claim (${battleVerification.reason}) from ${normalizedWallet}`);
+                return res.status(202).json({
+                    success: true,
+                    counted: false,
+                    reason: battleVerification.reason
+                });
+            }
         }
 
         const event = {

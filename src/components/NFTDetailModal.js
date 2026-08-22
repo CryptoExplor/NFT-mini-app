@@ -58,7 +58,7 @@ export function showNFTDetailModal(nft, chain = 'base') {
             : `<img src="${safeImageUrl}"
                                     alt="${safeName}"
                                     class="nft-modal-image"
-                                    onerror="this.src='/placeholder.png'" />`
+                                    onerror="this.onerror=null;this.src='/placeholder.png'" />`
         }
                     </div>
                 </div>
