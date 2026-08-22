@@ -29,7 +29,11 @@
         },
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.base.org https://api.opensea.io https://*.walletconnect.com https://*.walletconnect.org https://api.web3modal.org https://api.coingecko.com https://*.farcaster.xyz https://*.upstash.io wss://*.walletconnect.com wss://*.walletconnect.org; frame-src 'self' https://*.walletconnect.com https://*.walletconnect.org https://secure.walletconnect.org; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.base.org https://api.opensea.io https://*.walletconnect.com https://*.walletconnect.org https://api.web3modal.org https://api.coingecko.com https://*.farcaster.xyz https://*.upstash.io wss://*.walletconnect.com wss://*.walletconnect.org; frame-src 'self' https://*.walletconnect.com https://*.walletconnect.org https://secure.walletconnect.org; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report; report-to csp-endpoint"
+        },
+        {
+          "key": "Reporting-Endpoints",
+          "value": "csp-endpoint=\"/api/csp-report\""
         }
       ]
     },

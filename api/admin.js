@@ -145,6 +145,27 @@ export default async function handler(req, res) {
             return res.status(200).json({ cleaned: corruptFields });
         }
 
+        // Action: aggregated CSP violation reports (from /api/csp-report)
+        if (action === 'csp') {
+            const [counters, samples] = await Promise.all([
+                kv.hgetall('csp:violations'),
+                kv.lrange('csp:samples', 0, 49)
+            ]);
+
+            const violations = Object.entries(counters || {})
+                .map(([key, count]) => {
+                    const [directive, blockedOrigin] = String(key).split('|');
+                    return { directive, blockedOrigin, count: parseInt(count, 10) || 0 };
+                })
+                .sort((a, b) => b.count - a.count);
+
+            return res.status(200).json({
+                violations,
+                totalReports: violations.reduce((sum, v) => sum + v.count, 0),
+                recent: parseList(samples)
+            });
+        }
+
         // Action: reconcile counters that historical double-writes corrupted.
         // ?action=reconcile&target=dry-run (default) or target=apply
         if (action === 'reconcile') {
@@ -153,7 +174,7 @@ export default async function handler(req, res) {
             return res.status(200).json(report);
         }
 
-        return res.status(400).json({ error: 'Invalid action. Use: overview, user, collection, cohort, daily, retention, reconcile, cleanup_profile' });
+        return res.status(400).json({ error: 'Invalid action. Use: overview, user, collection, cohort, daily, retention, reconcile, csp, cleanup_profile' });
 
     } catch (error) {
         console.error('Admin API error:', error);

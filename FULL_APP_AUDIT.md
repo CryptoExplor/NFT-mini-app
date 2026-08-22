@@ -180,8 +180,11 @@ Remaining known trade-offs (by design, documented rather than fixed):
   falls back to an OpenSea inventory lookup — a real check whenever
   `OPENSEA_API_KEY` is set. It only degrades to `skipped` with no key or an
   upstream failure; `STRICT_BATTLE_OWNERSHIP=true` rejects those too.
-* The report-only CSP still needs a production reporting endpoint before the
-  enumerated `connect-src` can be promoted to enforced.
+* The enumerated `connect-src`/`frame-src` in the report-only CSP can be
+  promoted to enforced once real traffic has been observed:
+  reports now land at `POST /api/csp-report` and are aggregated per
+  (directive, blocked-origin) — read them with
+  `GET /api/admin?action=csp` (admin only).
 
 ## Verification
 

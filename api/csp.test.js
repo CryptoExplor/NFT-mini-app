@@ -14,6 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { normalizeReports, toOrigin } from './csp-report.js';
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function walk(dir, files = []) {
@@ -77,4 +79,66 @@ test('the deployed CSP keeps script-src free of unsafe-inline', () => {
         !globalHeaders.headers.some((h) => h.key.toLowerCase() === 'x-frame-options'),
         'X-Frame-Options would break mini-app embedding'
     );
+});
+
+
+// ── report collector ───────────────────────────────────────────
+
+test('parses the CSP2 report shape', () => {
+    const reports = normalizeReports({
+        'csp-report': {
+            'document-uri': 'https://app.example.com/battle?x=1',
+            'violated-directive': "script-src 'self'",
+            'effective-directive': 'script-src',
+            'blocked-uri': 'https://evil.example.com/inject.js?a=b'
+        }
+    });
+
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].directive, 'script-src');
+    assert.equal(reports[0].blockedOrigin, 'https://evil.example.com');
+    assert.equal(reports[0].documentUri, 'https://app.example.com');
+});
+
+test('parses the Reporting API shape and ignores other report types', () => {
+    const reports = normalizeReports([
+        { type: 'csp-violation', body: { effectiveDirective: 'connect-src', blockedURL: 'https://api.other.com/x' } },
+        { type: 'deprecation', body: { id: 'something-else' } }
+    ]);
+
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].directive, 'connect-src');
+    assert.equal(reports[0].blockedOrigin, 'https://api.other.com');
+});
+
+test('keyword sources survive, and cardinality stays bounded', () => {
+    assert.equal(toOrigin('inline'), 'inline');
+    assert.equal(toOrigin('eval'), 'eval');
+    assert.equal(toOrigin(''), 'unknown');
+    // Query strings and paths are stripped so counters cannot explode.
+    assert.equal(toOrigin('https://cdn.example.com/a/b/c.js?v=123'), 'https://cdn.example.com');
+    assert.ok(toOrigin('x'.repeat(500)).length <= 80);
+});
+
+test('a burst of reports is capped per request', () => {
+    const many = new Array(100).fill({ type: 'csp-violation', body: { effectiveDirective: 'img-src' } });
+    assert.equal(normalizeReports(many).length, 10);
+});
+
+test('garbage payloads produce no reports', () => {
+    assert.deepEqual(normalizeReports(null), []);
+    assert.deepEqual(normalizeReports({}), [], 'an empty report carries no information');
+    assert.deepEqual(normalizeReports({ 'csp-report': {} }), []);
+    assert.deepEqual(normalizeReports([null, 'nope']), []);
+});
+
+test('the report-only policy points at the collector', () => {
+    const vercel = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8'));
+    const globalHeaders = vercel.headers.find((h) => h.source === '/(.*)');
+    const reportOnly = globalHeaders.headers.find((h) => h.key === 'Content-Security-Policy-Report-Only');
+    const reportingEndpoints = globalHeaders.headers.find((h) => h.key === 'Reporting-Endpoints');
+
+    assert.ok(reportOnly.value.includes('report-uri /api/csp-report'));
+    assert.ok(reportOnly.value.includes('report-to csp-endpoint'));
+    assert.ok(reportingEndpoints.value.includes('/api/csp-report'));
 });
