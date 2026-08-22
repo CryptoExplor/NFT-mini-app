@@ -380,27 +380,124 @@ export function resolveStage(mintPolicy, mintedCount) {
 // ============================================
 
 /**
- * Fetch the next available tokenId
+ * Check whether a token id has already been minted.
+ * Uses `exists(uint256)` when the contract exposes it, otherwise `ownerOf`
+ * (which reverts for an unminted id — that revert IS the answer).
+ *
+ * @returns {Promise<boolean|null>} true/false, or null when it cannot be told.
  */
-export async function fetchNextTokenId(collection, config, wagmiConfig) {
-    if (collection.tokenIdRange) {
-        const { start, end } = collection.tokenIdRange;
-        const range = end - start + 1;
-        return Math.floor(Math.random() * range) + start;
+async function isTokenMinted(config, wagmiConfig, tokenId) {
+    const hasExists = config.abi.some(item => item?.type === 'function' && item?.name === 'exists');
+
+    if (hasExists) {
+        try {
+            return Boolean(await readContract(wagmiConfig, {
+                address: config.address,
+                abi: config.abi,
+                functionName: 'exists',
+                args: [BigInt(tokenId)],
+                chainId: config.chainId
+            }));
+        } catch {
+            return null; // Unknown — treat as "cannot verify"
+        }
     }
 
+    const hasOwnerOf = config.abi.some(item => item?.type === 'function' && item?.name === 'ownerOf');
+    if (!hasOwnerOf) return null;
+
     try {
-        const totalMinted = await readContract(wagmiConfig, {
+        const owner = await readContract(wagmiConfig, {
             address: config.address,
             abi: config.abi,
-            functionName: 'totalMinted',
+            functionName: 'ownerOf',
+            args: [BigInt(tokenId)],
             chainId: config.chainId
         });
-        return Number(totalMinted);
-    } catch (e) {
-        const max = collection.mintPolicy.maxSupply || 1_000_000_000;
-        return Math.floor(Math.random() * max);
+        // A zero address means "not minted" on contracts that do not revert.
+        return Boolean(owner) && owner !== '0x0000000000000000000000000000000000000000';
+    } catch {
+        // ownerOf reverts (TokenDoesNotExist) → the id is free.
+        return false;
     }
+}
+
+/**
+ * Fetch the next available tokenId.
+ *
+ * Collections with a `tokenIdRange` let the caller choose the id, and the
+ * contracts revert with AlreadyMinted / TokenAlreadyExists on a collision.
+ * Picking a single random id (the previous behaviour) therefore failed more and
+ * more often as a collection filled up — at 90% minted, 9 of 10 attempts
+ * reverted *after* the user had already approved the transaction.
+ *
+ * Now: sample random candidates and verify each on-chain before using it, then
+ * fall back to a linear scan from the current supply.
+ */
+export async function fetchNextTokenId(collection, config, wagmiConfig) {
+    const readSupply = async () => {
+        for (const fn of ['totalMinted', 'totalSupply']) {
+            const exists = config.abi.some(item => item?.type === 'function' && item?.name === fn);
+            if (!exists) continue;
+            try {
+                const value = await readContract(wagmiConfig, {
+                    address: config.address,
+                    abi: config.abi,
+                    functionName: fn,
+                    chainId: config.chainId
+                });
+                const num = Number(value);
+                if (Number.isFinite(num)) return num;
+            } catch { /* try the next accessor */ }
+        }
+        return null;
+    };
+
+    if (collection.tokenIdRange) {
+        const start = Number(collection.tokenIdRange.start) || 0;
+        const end = Number(collection.tokenIdRange.end) || 0;
+        const range = Math.max(1, end - start + 1);
+
+        // 1. Random probing — cheap and keeps ids well distributed.
+        const MAX_RANDOM_PROBES = 8;
+        let verificationAvailable = true;
+
+        for (let attempt = 0; attempt < MAX_RANDOM_PROBES; attempt++) {
+            const candidate = Math.floor(Math.random() * range) + start;
+            const minted = await isTokenMinted(config, wagmiConfig, candidate);
+
+            if (minted === false) return candidate;
+            if (minted === null) {
+                // Contract exposes no way to check — keep the legacy behaviour.
+                verificationAvailable = false;
+                break;
+            }
+        }
+
+        if (!verificationAvailable) {
+            return Math.floor(Math.random() * range) + start;
+        }
+
+        // 2. Deterministic sweep from the current supply (dense collections).
+        const supply = await readSupply();
+        const scanStart = Number.isFinite(supply) ? Math.min(start + supply, end) : start;
+        const MAX_SCAN = 25;
+
+        for (let i = 0; i < MAX_SCAN; i++) {
+            const candidate = scanStart + i;
+            if (candidate > end) break;
+            if (await isTokenMinted(config, wagmiConfig, candidate) === false) return candidate;
+        }
+
+        throw new Error('Could not find an unminted token id — the collection may be sold out.');
+    }
+
+    const supply = await readSupply();
+    if (Number.isFinite(supply)) return supply;
+
+    // Last resort for contracts that expose no supply accessor at all.
+    const max = collection.mintPolicy?.maxSupply || 1_000_000_000;
+    return Math.floor(Math.random() * max);
 }
 
 /**
