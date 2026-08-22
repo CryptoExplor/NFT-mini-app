@@ -26,3 +26,24 @@ Original prompt: do all and make sure my app work on web, farcaster miniapp and 
   - daily boss completion is now tracked per player key instead of once per browser storage bucket
   - deterministic Farcaster synergy replaced the old random 80% follow mock
   - `npm run build` passed after the fixes; remaining warnings are chunking/static-vs-dynamic import warnings rather than correctness failures
+
+- 2026-08-22: Analytics audit + full-application audit, then the follow-up work.
+  - analytics: fixed double-counted arena wins, the PvP global win-rate bias, silent
+    401s on /api/track (bearer + credentials), the inverted session-expiry check and
+    unreadable weekly leaderboards; added `npm run analytics:migrate` to repair the
+    historical counters in place (no data deleted)
+  - battle integrity: wins now only count for a server-produced, one-time-counted
+    battle record; PvP/AI stats are clamped to the balance envelope; AI results are
+    re-simulated server-side and rejected on mismatch; NFT ownership is verified
+    on-chain (OpenSea inventory fallback for profile-only collections)
+  - app: added the missing /placeholder.png and stopped the onerror loop, repaired the
+    service worker (offline fallback, unbounded cross-origin caching, message guard),
+    made all localStorage access private-mode/quota safe, fixed mint-flow crashes
+    (unnamed ABI inputs, fractional burn amounts, reverted receipts) and token-id
+    collisions, stopped the arena animation leaking past teardown
+  - security: OpenSea key moved server-side behind /api/nfts, CSP enforced without
+    script-src 'unsafe-inline' (every inline handler removed), CSP report collector,
+    admin bypass now behind ALLOW_INSECURE_ADMIN, third-party metadata escaped
+  - CI added (tests + build + inline-handler and leaked-secret checks); 78 tests
+  - the earlier note about avoiding a CSP because it risks breaking embeds is now
+    resolved: frame-ancestors is deliberately left unset so mini-app embedding works

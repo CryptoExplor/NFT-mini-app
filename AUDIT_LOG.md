@@ -8,26 +8,30 @@ Full audit of all architectural, logical, and visual changes made since the last
 ## NEW SYSTEMS & MODULES
 **Goal:** Expand core functionality and introduce new competitive layers.
 
-### [NEW] [dailyBoss.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/game/dailyBoss.js)
+### [NEW] [dailyBoss.js](./src/lib/game/dailyBoss.js)
 - **Deterministic Simulation**: 24-hour boss rotation engine using date-based seeds.
 - **Mythic Scaling**: Unique stats and passive abilities (`DIVINE`, `IRON_WALL`) for world bosses.
 
-### [NEW] [rankSystem.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/game/rankSystem.js)
+### [NEW] [rankSystem.js](./src/lib/game/rankSystem.js)
 - **Rank Tiers**: Rookie, Warrior, Elite, Legend, Mythic.
 - **Visual Design System**: SVG badges, glow effects, and Tailwind status classes.
 
-### [NEW] [points.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/game/points.js)
+### [NEW] [points.js](./src/lib/game/points.js)
 - **Persistence Engine**: Point-based progression with rank-up detection logic.
 - **Leaderboard API**: Global sorted-set simulation for global rankings.
 
-### [NEW] [base-gods.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/collections/base-gods.js)
-- **Collection Integration**: New playable fighter class for the "Base Gods" collection.
+### [NEW] Base Gods battle profile
+- **Collection Integration**: Playable fighter class for the "Base Gods" collection.
 - **Passive Ability**: Implemented the "Divine" passive mapping for this collection.
+- **NOTE (2026-08-22)**: `collections/base-gods.js` no longer exists — Base Gods
+  lives only as a battle profile in `src/lib/battle/collectionProfiles.js`, with
+  no mintable contract. Ownership for it is verified through the OpenSea
+  inventory fallback rather than `ownerOf`.
 
-### [NEW] [nftInventory.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/nftInventory.js)
+### [NEW] [nftInventory.js](./src/lib/nftInventory.js)
 - **State Management**: New centralized logic for managing cross-collection NFT inventory and player loadouts.
 
-### [NEW] [icons.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/utils/icons.js)
+### [NEW] [icons.js](./src/utils/icons.js)
 - **UI Standardization**: Professional SVG icon library replacing legacy emojis.
 
 ---
@@ -35,21 +39,21 @@ Full audit of all architectural, logical, and visual changes made since the last
 ## CORE COMPONENT & PAGE UPDATES
 **Goal:** Improve UX, stability, and conversion paths.
 
-### [MODIFY] [battle.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/pages/battle.js)
+### [MODIFY] [battle.js](./src/pages/battle.js)
 - **Guest Play Mode**: Enabled frictionless access without wallet connection.
 - **Silent Auto-Connect**: Farcaster/Base App account synchronization.
 - **Progression Logic**: Points award system and Rank-up celebration sequences.
 - **Bug Fixes**: Resolved async callback issues and variable shadowing.
 
-### [MODIFY] [ChallengeBoard.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/components/game/ChallengeBoard.js)
+### [MODIFY] [ChallengeBoard.js](./src/components/game/ChallengeBoard.js)
 - **Redesigned Hero**: High-status display featuring "Top Fighter Today" and current user rank.
 - **Boss Banner**: Integrated the world boss retention hook.
 
-### [MODIFY] [BattleLeaderboard.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/components/game/BattleLeaderboard.js)
+### [MODIFY] [BattleLeaderboard.js](./src/components/game/BattleLeaderboard.js)
 - **Dual-View System**: Global standings vs. Personal verifiable history.
 - **Identity Cards**: Premium player status cards with rank badges.
 
-### [MODIFY] [arenaRenderer.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/game/arenaRenderer.js)
+### [MODIFY] [arenaRenderer.js](./src/lib/game/arenaRenderer.js)
 - **Conversion CTAs**: Added "Fight This Opponent" button to battle replays.
 - **Icon Migration**: Unified SVG icons across the combat UI.
 
@@ -58,22 +62,22 @@ Full audit of all architectural, logical, and visual changes made since the last
 ## ENGINE & INFRASTRUCTURE REFINEMENTS
 **Goal:** Harden game logic and balancing.
 
-### [MODIFY] [engine.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/game/engine.js)
+### [MODIFY] [engine.js](./src/lib/game/engine.js)
 - **Simulation V2**: Enhanced replay precision and passive ability execution logic.
 
-### [MODIFY] [balanceConfig.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/battle/balanceConfig.js)
+### [MODIFY] [balanceConfig.js](./src/lib/battle/balanceConfig.js)
 - **Stat Normalization**: Tuned RPG stats for Base Gods and World Boss archetypes.
 
-### [MODIFY] [snapshot.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/lib/battle/snapshot.js)
+### [MODIFY] [snapshot.js](./src/lib/battle/snapshot.js)
 - **Verifiability**: Improved trait-to-stat mapping logic for cryptographic consistency.
 
-### [MODIFY] [wallet.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/wallet.js)
+### [MODIFY] [wallet.js](./src/wallet.js)
 - **Connection Stability**: Improved wagmi/wallet-connect state handling for auto-connect flows.
 
-### [FIX] [ChallengeBoard.js](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/src/components/game/ChallengeBoard.js)
+### [FIX] [ChallengeBoard.js](./src/components/game/ChallengeBoard.js)
 - **Syntax Error Resolution**: Removed duplicate import of `shortenAddress` causing runtime crashes.
 
-### [FIX] [vercel.json](file:///c:/Users/ravi/Downloads/NFT-mini-app-main/vercel.json)
+### [FIX] [vercel.json](./vercel.json)
 - **Production Connectivity**: Removed restrictive `Content-Security-Policy` and `X-Frame-Options` blocking Farcaster/Base App iframes.
 
 ---
