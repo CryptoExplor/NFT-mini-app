@@ -136,7 +136,39 @@ function getBiomeClass(environmentStats) {
 // MAIN RENDER
 // ══════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════
+// TIMER LIFECYCLE
+// ══════════════════════════════════════════════════════════════════
+// The battle plays out on a setInterval. If the user navigates away mid-fight
+// the interval used to keep ticking against a detached DOM and still fire
+// onBattleComplete() — recording the battle and emitting analytics for a page
+// that no longer exists. Every long-running timer is tracked so the page
+// teardown can stop it.
+let activeBattleInterval = null;
+const pendingBattleTimeouts = new Set();
+
+function scheduleBattleTimeout(fn, delay) {
+    const id = setTimeout(() => {
+        pendingBattleTimeouts.delete(id);
+        fn();
+    }, delay);
+    pendingBattleTimeouts.add(id);
+    return id;
+}
+
+/** Stop any in-flight battle animation (called from the battle page cleanup). */
+export function stopArenaAnimation() {
+    if (activeBattleInterval !== null) {
+        clearInterval(activeBattleInterval);
+        activeBattleInterval = null;
+    }
+    for (const id of pendingBattleTimeouts) clearTimeout(id);
+    pendingBattleTimeouts.clear();
+}
+
 export function renderCombatArena(playerData, enemyData, onBattleComplete, options = {}) {
+    // A new fight supersedes anything still animating.
+    stopArenaAnimation();
     const preview = $('#match-preview-view');
     const arena = $('#arena-view');
     const container = $('#battle-container');
@@ -289,11 +321,11 @@ export function renderCombatArena(playerData, enemyData, onBattleComplete, optio
     if (battlefield) spawnParticles(battlefield, 25);
 
     // Start Simulation Process with dramatic intro
-    setTimeout(() => {
+    scheduleBattleTimeout(() => {
         showRoundSplash(battlefield, 1);
     }, 600);
 
-    setTimeout(() => {
+    scheduleBattleTimeout(() => {
         let battleData;
         if (options.precomputedLogs && options.precomputedLogs.length > 0) {
             // Use precomputed logs from battle.js (AI local or PvP server)
@@ -327,11 +359,12 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
     const interval = setInterval(() => {
         if (i >= totalLogs) {
             clearInterval(interval);
+            if (activeBattleInterval === interval) activeBattleInterval = null;
             // Update progress to 100%
             const progress = $('#battle-progress');
             if (progress) progress.style.width = '100%';
 
-            setTimeout(() => {
+            scheduleBattleTimeout(() => {
                 showResults(battleData, playerName, enemyName, totalLogs);
                 if (typeof onComplete === 'function') onComplete(battleData);
             }, 600);
@@ -438,6 +471,9 @@ function animateBattle(battleData, pInitialHp, eInitialHp, playerName, enemyName
 
         i++;
     }, 1000);
+
+    // Tracked so page teardown can stop a fight that is still animating.
+    activeBattleInterval = interval;
 }
 
 // ── HP Bar Update ────────────────────────────────────────────────

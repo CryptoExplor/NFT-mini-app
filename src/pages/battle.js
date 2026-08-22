@@ -8,7 +8,7 @@ import { renderBottomNav, bindBottomNavEvents } from '../components/BottomNav.js
 import { ChallengeBoard } from '../components/game/ChallengeBoard.js';
 import { MatchPreviewModal } from '../components/game/MatchPreviewModal.js';
 import { NFTSelectorModal } from '../components/game/NFTSelectorModal.js';
-import { renderCombatArena } from '../lib/game/arenaRenderer.js';
+import { stopArenaAnimation, renderCombatArena } from '../lib/game/arenaRenderer.js';
 import { applyLayer } from '../lib/battle/metadataNormalizer.js';
 import { postChallenge, recordAiBattle, getChallengeById, ensureBattleAuth } from '../lib/game/matchmaking.js';
 import {
@@ -791,6 +791,11 @@ function updateBattleHeader(account) {
 }
 
 export function cleanup() {
+    // Stop any battle still animating: its interval would otherwise keep
+    // ticking against a detached DOM and fire onBattleComplete (recording the
+    // battle, emitting analytics) for a page the user already left.
+    stopArenaAnimation();
+
     if (walletHandler) {
         document.removeEventListener(EVENTS.WALLET_UPDATE, walletHandler);
         walletHandler = null;
@@ -847,12 +852,24 @@ async function showRankUpCelebration(oldRank, newRank) {
 
     document.body.appendChild(overlay);
 
-    // Add particle effects if possible
-
-    $('#close-rank-up').addEventListener('click', () => {
+    // The overlay is fixed and covers the whole app, so dismissal must never
+    // depend on a single button existing. Backdrop click and Escape also close
+    // it, and the listeners are removed with the overlay.
+    const dismiss = () => {
+        document.removeEventListener('keydown', onKeydown);
         overlay.classList.add('animate-fade-out');
         setTimeout(() => overlay.remove(), 400);
+    };
+
+    function onKeydown(event) {
+        if (event.key === 'Escape') dismiss();
+    }
+
+    overlay.querySelector('#close-rank-up')?.addEventListener('click', dismiss);
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) dismiss();
     });
+    document.addEventListener('keydown', onKeydown);
 }
 
 async function showSharePrompt(address, conversion, outcome, cycleDay, shareUrlSource = null) {
