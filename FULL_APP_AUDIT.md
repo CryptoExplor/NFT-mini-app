@@ -159,39 +159,36 @@ reproduction is exact.
 
 ---
 
-## Recommendations (deliberately not auto-applied)
+## Recommendations — now implemented
 
-1. **Move the OpenSea key server-side.** `VITE_OPENSEA_API_KEY` is compiled into
-   the public bundle. Either keep it domain-restricted and treat it as public
-   (current state, now documented), or add an `/api/nfts` proxy that holds the
-   key. Same reasoning for `VITE_BASE_RPC_URL` if the RPC provider issues
-   secret URLs.
-2. **Verify NFT ownership for battles.** Stats are now clamped, but a player can
-   still fight with a fighter they do not own. A `balanceOf`/`ownerOf` check at
-   challenge-post time (cached per wallet+token) would close this. It needs a
-   slug → contract map for the non-first-party battle collections, so it is a
-   product decision rather than a bug fix.
-3. **`fetchNextTokenId` picks random token ids** (`Math.random()` inside
-   `tokenIdRange`, or a random id up to `maxSupply` when `totalMinted` reverts).
-   For contracts where the caller chooses the id this will collide with an
-   already-minted token and revert. Contract-specific — worth confirming per
-   collection.
-4. **`listActiveChallenges()` does one `EXISTS` per challenge** (O(n) KV commands
-   per call, and it is called on every challenge POST). Store the TTL inside the
-   hash value instead.
-5. **Add a CSP header.** `vercel.json` sets nosniff/HSTS/Referrer-Policy but no
-   `Content-Security-Policy`; the app is inline-style heavy, so this needs a
-   careful rollout (`report-only` first).
+All five follow-ups from the first pass have been delivered, one commit each.
 
----
+| Item | Commit | What shipped |
+|---|---|---|
+| OpenSea key was public | `feat(api): proxy OpenSea…` | New `GET /api/nfts` holds `OPENSEA_API_KEY` server-side and forwards only an allowlist of read-only v2 paths (account NFTs, contract NFTs, single NFT). Path validation rejects traversal, absolute URLs, query smuggling, unknown chains, malformed addresses and oversized token ids; only `limit`/`next`/`collection` are forwarded (`limit` clamped to 200); 120 req/min per IP, 12s upstream timeout, 60s shared cache. The client uses the proxy by default — the direct path survives behind `VITE_OPENSEA_DIRECT=true` for `vite dev`. `.env.example` now separates public `VITE_*` values from real secrets. |
+| No NFT ownership check | `feat(battle): verify the player owns…` | New `api/_lib/battle/ownership.js` maps a collection slug (plus battle-profile aliases like `BaseMoods`/`base_moods`) to its contract through the collection registry, then reads `ownerOf` (falling back to `balanceOf` for non-721s). Enforced when posting a challenge, defending a fight and recording an AI battle → `403 FIGHTER_NOT_OWNED`. Owners are cached in KV for 10 minutes so a fight costs at most one RPC call. Fail-open for unmapped collections and RPC/KV outages (flagged `skipped`), with `STRICT_BATTLE_OWNERSHIP=true` to fail closed. |
+| Random token ids collided | `fix(mint): stop handing the wallet…` | `fetchNextTokenId` probes up to 8 random candidates and verifies each on-chain (`exists()`, else `ownerOf()`'s revert), then sweeps linearly from the current supply, and raises a clear "sold out" error instead of letting the wallet submit a doomed transaction. Degrades to the old behaviour when the ABI exposes neither accessor. |
+| `listActiveChallenges()` was O(n) | `perf(kv): store challenge expiry inline…` | Expiry now lives inside the stored value, so listing is a single `HGETALL` with zero per-item `EXISTS`. `getChallengeAtomic` also refuses (and lazily deletes) expired challenges, so an expired challenge can no longer be fought; legacy rows fall back to `_storedAt + 1h`. |
+| No CSP | `security: add a Content-Security-Policy…` | Enforced `default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'` — **no `unsafe-inline`/`unsafe-eval`** — plus `object-src 'none'`, `base-uri`/`form-action 'self'` and `upgrade-insecure-requests`. Getting there meant deleting every inline handler: a global delegated image-error fallback replaces 5 inline `onerror=`s, and the featured-replay card / copy-token button became data attributes with real listeners (closing two markup-injection points). `frame-ancestors` is deliberately unset so the mini app stays embeddable. A stricter enumerated policy ships in report-only mode for tightening later. |
+
+Remaining known trade-offs (by design, documented rather than fixed):
+
+* `VITE_BASE_RPC_URL` is still a client value — it must be a domain-restricted,
+  publicly safe endpoint. Anything secret belongs behind an `/api` route.
+* Ownership verification is fail-open for collections that have no contract in
+  the registry (currently `base-gods`); flip `STRICT_BATTLE_OWNERSHIP` once every
+  battle collection is mapped.
+* The report-only CSP still needs a production reporting endpoint before the
+  enumerated `connect-src` can be promoted to enforced.
 
 ## Verification
 
 ```
-npm test          → 45 passing (0 failing)
+npm test          → 70 passing (0 failing)
 npm run build     → ✓ 3307 modules, no errors
 served-build smoke test → / /battle /analytics /gallery /mint/:slug
                           /placeholder.png /sw.js /site.webmanifest all 200
+build output      → 0 inline <script> blocks, 0 inline event handlers
 ```
 
 New tests added by this audit:
@@ -203,6 +200,15 @@ New tests added by this audit:
   engine determinism across JSON round-trips.
 * Extended `api/_lib/events.test.js` — an unverified battle claim must not touch
   the ladder, points or the profile.
+
+* `api/_lib/kv.test.js` — challenge listing costs one command, expired
+  challenges are filtered/cleaned and can never be fought, legacy rows still work.
+* `api/nfts.test.js` — proxy allowlist (traversal, absolute URLs, unknown chains,
+  bad addresses/token ids) and query filtering.
+* `api/_lib/battle/ownership.test.js` — slug/alias resolution, cached-owner
+  decisions, malformed wallets, skip policy and strict mode, KV outage behaviour.
+* `api/csp.test.js` — fails if an inline handler, an inline script or an
+  `unsafe-inline` script-src ever comes back.
 
 Plus the suites from the analytics pass (`events`, `leaderboard`, `cors`), all
 still green.
