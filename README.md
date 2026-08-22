@@ -159,6 +159,24 @@ npm run collections:sync
 
 Auto-sync runs on `npm run dev`, `npm run build`, and `npm run dev:full`.
 
+## 🧩 API Routes
+
+The Vercel Hobby plan allows **12 Serverless Functions per deployment**, so
+related endpoints are grouped behind one function using an `?action=` router
+(helpers live in `api/_lib/`, which Vercel does not count):
+
+| Function | Actions |
+|---|---|
+| `/api/admin` | `overview`, `user`, `collection`, `cohort`, `daily`, `retention`, `reconcile`, `csp`, `export`, `cleanup_profile` |
+| `/api/auth` | `nonce`, `verify`, `logout` |
+| `/api/battle` | `challenge`, `fight`, `history`, `replay`, `record` |
+| `/api/share` | share page (GET), `generate-post` (POST) |
+| `/api/track`, `/api/leaderboard`, `/api/user`, `/api/nfts`, `/api/csp-report` | single purpose |
+
+`api/**/*.test.js` is excluded via `.vercelignore` — without that, each test file
+would be deployed as its own function. A test enforces the budget so the
+"No more than 12 Serverless Functions" deploy error cannot come back.
+
 ## 🔒 Security Model
 
 | Concern | How it is handled |

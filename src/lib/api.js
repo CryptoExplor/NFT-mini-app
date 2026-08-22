@@ -524,7 +524,7 @@ export async function downloadCSV(type) {
             headers.Authorization = `Bearer ${session.token}`;
         }
 
-        const response = await fetch(`${API_BASE}/api/export?type=${type}`, {
+        const response = await fetch(`${API_BASE}/api/admin?action=export&type=${encodeURIComponent(type)}`, {
             credentials: 'include',
             headers,
         });

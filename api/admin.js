@@ -1,6 +1,7 @@
 import { kv } from './_lib/kv.js';
 import { requireAdmin } from './_lib/authMiddleware.js';
 import { setCors } from './_lib/cors.js';
+import exportHandler from './_lib/export.js';
 
 export default async function handler(req, res) {
     setCors(req, res, {
@@ -23,6 +24,13 @@ export default async function handler(req, res) {
     }
 
     const { action, target } = req.query;
+
+    // CSV export used to be its own route (/api/export). It is admin-gated in
+    // exactly the same way, so it is delegated here to stay within the
+    // Serverless Function budget. It sets its own CSV headers.
+    if (action === 'export') {
+        return exportHandler(req, res);
+    }
 
     try {
         // Default: return system overview
@@ -174,7 +182,7 @@ export default async function handler(req, res) {
             return res.status(200).json(report);
         }
 
-        return res.status(400).json({ error: 'Invalid action. Use: overview, user, collection, cohort, daily, retention, reconcile, csp, cleanup_profile' });
+        return res.status(400).json({ error: 'Invalid action. Use: overview, user, collection, cohort, daily, retention, reconcile, csp, export, cleanup_profile' });
 
     } catch (error) {
         console.error('Admin API error:', error);

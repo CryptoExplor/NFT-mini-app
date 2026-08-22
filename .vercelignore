@@ -1,0 +1,25 @@
+# Keep the deployment (and the Serverless Function count) lean.
+#
+# Vercel turns every file under api/ into a Serverless Function unless it lives
+# in an underscore-prefixed path or is ignored here — and the Hobby plan allows
+# 12 per deployment.
+#
+# NOTE: this file also controls what is uploaded to the BUILD container, so
+# anything the build needs (scripts/ runs during `prebuild`) must stay.
+
+# Test suites — run in CI, never deployed, and each api/*.test.js would
+# otherwise be counted as a Serverless Function.
+*.test.js
+
+# CI definition (not used by the build)
+ci/
+
+# Docs
+*.md
+!README.md
+
+# Local artefacts
+.env*
+!.env.example
+dist/
+coverage/

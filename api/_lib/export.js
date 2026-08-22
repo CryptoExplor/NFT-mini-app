@@ -1,8 +1,15 @@
-import { kv } from './_lib/kv.js';
-import { requireAdmin } from './_lib/authMiddleware.js';
-import { setCors } from './_lib/cors.js';
+import { kv } from './kv.js';
+import { requireAdmin } from './authMiddleware.js';
+import { setCors } from './cors.js';
 
 const BATCH_SIZE = 1000;
+
+/**
+ * Admin CSV export — served through `GET /api/admin?action=export&type=...`.
+ *
+ * Lives in _lib/ so Vercel does not count it as its own Serverless Function
+ * (the Hobby plan allows 12 per deployment).
+ */
 
 /**
  * Sanitize CSV cell values to prevent formula injection.

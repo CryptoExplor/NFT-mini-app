@@ -85,7 +85,7 @@ export async function generateGrowthPost(type, context = {}) {
     let usedTemplate = null;
 
     try {
-        const response = await fetch('/api/generate-post', {
+        const response = await fetch('/api/share?action=generate-post', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
