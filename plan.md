@@ -1,6 +1,6 @@
 # Multi-NFT Battle V1 — Current-State Audit and Revised Delivery Plan
 
-**Audit date:** 2026-08-22  
+**Audit date:** 2026-08-23  
 **Repository baseline:** `arena/01a02a40-nft-mini-app` / PR #7  
 **Scope reviewed:** the supplied 10-task V1 plan against the current client, shared battle domain, Vercel serverless battle functions, analytics, and tests.
 
