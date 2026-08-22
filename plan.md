@@ -34,6 +34,172 @@ The recommended order is:
 5. add the missing battle tests and balance simulations;
 6. then split large files without changing behavior.
 
+## Master ecosystem plan V2 — merge decision
+
+The second “Web3 Gaming Ecosystem” document should **not be merged literally into the V1 implementation contract**. It is useful as a product vision, but it mixes four years of scope levels, introduces a different stat economy and team model, and assumes a different technical stack.
+
+The best structure is:
+
+- this document remains the executable V1 stabilization and refactor plan;
+- selected V2 ideas become a gated product roadmap after V1;
+- conflicting V2 rules are explicitly rejected or deferred instead of silently overriding V1.
+
+### Master-roadmap progress against the current repository
+
+| Master phase | Current progress | Assessment |
+|---|---:|---|
+| Unified Arena | ~65% | Live capability exists, but contracts, balance parity, tests, and arena effects need completion |
+| Multi-NFT Synergy Layer | ~30% | Item/arena/team scaffolds exist; the documented three-active-NFT team system does not |
+| Arcade / Multiverse | ~5% | Shared stats could support it, but dungeon/card modes are not implemented |
+| Faction Wars & DAO | 0% | No faction contract, season economy, governance, or crafting system |
+| **Complete master roadmap** | **~20%** | Appropriate: later phases should not be built before V1 retention is proven |
+
+### What should be merged now
+
+| V2 idea | Decision | How it enters the executable plan |
+|---|---|---|
+| One universal normalized stat object | Accept | Complete the shared normalizer/resolver and test it before refactoring |
+| Pure portable combat logic | Accept | Keep battle domain free of DOM, storage, wallet, and network imports |
+| Phased product delivery | Accept | Use release gates rather than calendar-only promises |
+| Cross-collection identity and counters | Accept | Keep profiles and role rules collection-specific while engine stays collection-agnostic |
+| Multi-NFT synergies | Defer to Phase 2 | Add a new `TeamCompositionV2`; do not overload V1 `teamSnapshot` |
+| More game modes reusing normalized stats | Defer to Phase 3 | Begin only after the Arena contract and balance suite are stable |
+| Faction competition | Defer to Phase 4 | Requires real usage, season design, anti-sybil rules, and reward policy |
+| Data-driven balance guardrails | Accept | Add matchup simulator and telemetry before setting final caps |
+| Live balance configuration | Accept with integrity | Keep checksum support and add schema/version validation plus rollback |
+| Retention and collection-diversity metrics | Accept | Instrument canonical loadout/result payloads first |
+
+### What should not be merged into V1
+
+| V2 proposal | Decision | Reason |
+|---|---|---|
+| HP 400–1000 and ATK 50–200 schema | Reject for V1 | It forces a total rebalance and conflicts with every current cap, replay, sanitizer, and UI scale |
+| BaseMoods becomes only a modifier | Reject for V1 | It conflicts with the locked V1 fighter role and current profile/passive implementation |
+| Client-authoritative battle resolution | Reject | Current serverless PvP and verified AI are safer and already implemented |
+| `spd + random(0,10)` using ambient randomness | Reject as written | Any variation must use the stored seeded PRNG so replay remains exact |
+| 1.75x crit plus 60% crit cap | Defer to simulation | Current engine uses 1.5x; changing both multiplier and cap together creates a large burst-meta shift |
+| Three active fighter NFTs in current loadout | Defer to a new schema | V1 has one fighter, one item, one arena, and a passive roster snapshot |
+| MiniWorld staking and 2% rewards in Phase 1 | Defer | Adds contract, custody, reward-economy, audit, abuse, and legal scope before arena usage is proven |
+| On-chain BattleResult writes in Phase 1 | Defer | Serverless replay records already provide verification without transaction friction or gas |
+| Both players sign commitment transactions | Reject for current Arena | High-friction wallet prompts are unnecessary when the serverless function simulates PvP authoritatively |
+| React, Phaser, RainbowKit, Alchemy migration | Reject as a feature requirement | Current stack is Vanilla JS, CSS/canvas effects, Reown AppKit, Viem, and OpenSea; stack migration does not deliver game value |
+| Month 1–12 commitments | Replace with gates | Quality, player activity, audit readiness, and retention should unlock phases—not elapsed time alone |
+| “Any NFT from any collection” at launch | Reword | V1 is “any supported NFT”; a safe generic adapter is a later capability |
+
+### Unified product roadmap
+
+#### Release 0 — Stabilize the current layered arena
+
+This is the work defined by the rest of this document:
+
+- canonical loadout and inventory contracts;
+- one shared stat/layer resolver;
+- deterministic snapshot and combat;
+- serverless role/ownership validation;
+- preview/server parity;
+- tests and balance simulation.
+
+**Gate to release:** all V1 definition-of-done checks in this document pass.
+
+#### Release 1 — Unified Layered Arena
+
+Ship and tune the product that already exists:
+
+```text
+1 active Fighter
++ 0/1 Item
++ 0/1 creator-selected Arena
++ deterministic passive roster snapshot
+```
+
+Mini Worlds is an off-chain/serverless-verified arena choice in this release. No staking or reward percentage is required.
+
+**Gate to Release 2:**
+
+- battle-start failure rate below 2%;
+- no collection over 58% sustained win rate after a meaningful sample;
+- deterministic replay mismatch rate 0%;
+- at least 30% seven-day retention target or an evidence-based revised baseline;
+- optional-slot telemetry is reliable.
+
+#### Release 2 — Active Team & Synergy Mode
+
+Create a new schema rather than mutate V1:
+
+```text
+TeamCompositionV2
+- activeFighter
+- support or second active NFT
+- amplifier/equipment
+- arena reference
+- synergy IDs derived from canonical refs
+- schemaVersion: 'battle-team-v2'
+```
+
+The supplied seven synergies are design candidates, not automatic launch rules. Each needs profile mapping, cap analysis, tests, and simulation. BaseMoods can gain support behavior in this mode without losing its V1 fighter identity.
+
+**Gate to Release 3:** synergy usage, item advantage, and team diversity meet agreed targets without invalidating common NFTs.
+
+#### Release 3 — Arcade consumers of the battle domain
+
+Build one additional mode first, not two in parallel. Recommended first candidate: idle dungeon, because it can consume normalized stats without requiring a second real-time combat UX.
+
+Requirements:
+
+- mode-specific resolver separate from battle caps;
+- shared canonical NFT identity/profile adapters;
+- separate replay/reward integrity model;
+- no imports from Arena UI components.
+
+#### Release 4 — Factions, seasons, and optional on-chain commitments
+
+Only begin after durable player activity. Before contracts:
+
+- define reward source and liabilities;
+- define anti-sybil rules;
+- model staking custody and emergency withdrawal;
+- obtain contract/security review;
+- decide whether results need on-chain attestations or only periodic season roots;
+- treat DAO and burn/crafting mechanics as separate audited products.
+
+### Unified stat strategy
+
+Do not replace the current compact combat scale with HP 400–1000 merely for presentation. Keep a stable internal normalized scale and, if larger numbers feel more exciting, apply a **display-only multiplier** in the UI.
+
+Recommended internal V1 envelope remains:
+
+```text
+hp 30–220
+atk 5–48
+def 5–48
+spd 5–48
+crit 0–0.40
+dodge 0–0.35
+lifesteal 0–0.15
+magicResist 0–80
+regen 0–10
+```
+
+The matchup simulator may revise these values, but all consumers must move together. Never maintain one scale for preview, one for client combat, and one for server sanitization.
+
+### Technology decision
+
+Portability requires **pure modules**, not necessarily a TypeScript/React rewrite. The existing ESM code can be shared by browser and Vercel Node today. TypeScript may be introduced incrementally after runtime schemas and tests exist, but it is not a prerequisite for V1 correctness.
+
+Likewise, OpenSea versus Alchemy and Reown versus RainbowKit are provider choices behind adapters. They should not be coupled to the game-domain plan.
+
+### Smart-contract decision gate
+
+No new gameplay contract is recommended for the current V1 milestone. Consider contracts only when the trust requirement cannot be met serverlessly:
+
+| Proposed contract | Earliest gate |
+|---|---|
+| Battle result attestation | After replay model is stable and users need portable on-chain proof |
+| MiniWorld staking | After arena usage is proven and reward economics/audit are approved |
+| Team registry | Only if on-chain team identity creates product value beyond signed serverless loadouts |
+| Faction seasons | After meaningful collection participation and anti-sybil design |
+| Governance | After there is a governed asset, active community, and safe upgrade process |
+
 ---
 
 ## 2. Important correction to the original architecture plan
