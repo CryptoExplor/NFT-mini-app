@@ -186,10 +186,32 @@ Remaining known trade-offs (by design, documented rather than fixed):
   (directive, blocked-origin) — read them with
   `GET /api/admin?action=csp` (admin only).
 
+## Follow-up sweep (after the recommendations)
+
+A second pass over the modules that had only been skimmed, plus the two
+remaining trade-offs:
+
+| Issue | Fix |
+|---|---|
+| **Ownership unverifiable for profile-only collections** (`base-gods` has a battle profile but no collection file, so `ownerOf` could never resolve and every claim was waved through) | Falls back to an OpenSea inventory lookup for that wallet+collection — a real check whenever `OPENSEA_API_KEY` is set, cached 5 minutes |
+| **Nothing collected CSP reports**, so the report-only policy could never be promoted | New `POST /api/csp-report` (both CSP2 and Reporting API shapes), aggregated as (directive, blocked-origin) counters with a rolling sample; `report-uri`/`report-to`/`Reporting-Endpoints` wired up; `GET /api/admin?action=csp` for triage |
+| **`scripts/kv-cleanup.mjs` could not run — and would have been destructive** (imported a missing `dotenv`, unconditionally reset the live `global:battle_count`, targeted pre-rename keys, used blocking `KEYS('*')`, no dry run) | Rewritten SCAN-based with a dry run default, correct key names, preserved-key report, and the counter reset behind `--reset-battle-count` |
+| **Arena animation kept running after teardown** — the battle interval ticked against a detached DOM and still fired `onBattleComplete()`, recording a battle and emitting analytics for a page the user had left | All battle timers tracked; `stopArenaAnimation()` called from the battle page `cleanup()` and when a new fight starts |
+| **Rank-up overlay could trap the user** — full-screen fixed overlay dismissable only by one button, and the unguarded lookup threw if it was missing | Backdrop click and Escape also dismiss; listener removed with the overlay |
+| **`statProviders.verifyOwnership()` always returned `true`** under a "do not trust client-side ownership" comment (dead code, but a trap) | Throws and points at the server-side check |
+| **Unguarded `addEventListener` in 5 places** — one missing node aborted the whole binding function, silently killing every listener after it | Optional chaining throughout |
+
+Confirmed correct while sweeping (no change): the AI difficulty ladder
+(`aiWinRate` = probability the *AI* wins, 0.35 Rookie → 0.75 Champion) is
+consistent between the client simulation and the server re-simulation; the
+engine only reads `isAi`/`aiWinRate` from battle options, so the stat sanitiser
+dropping them cannot cause divergence; toast rendering uses `textContent`;
+gallery/home/mint page teardowns release their listeners.
+
 ## Verification
 
 ```
-npm test          → 70 passing (0 failing)
+npm test          → 78 passing (0 failing)
 npm run build     → ✓ 3307 modules, no errors
 served-build smoke test → / /battle /analytics /gallery /mint/:slug
                           /placeholder.png /sw.js /site.webmanifest all 200
