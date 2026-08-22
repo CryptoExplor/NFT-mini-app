@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test
+        # Covers the battle-integrity, analytics, KV, proxy-allowlist and CSP
+        # regression suites.
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check for inline handlers in the built output
+        # The deployed CSP has no script-src 'unsafe-inline', so an inline
+        # <script> or on*= attribute reaching dist/ would break in production.
+        run: |
+          if grep -rEq '<script[^>]*>[[:space:]]*[^[:space:]<]' dist/index.html; then
+            echo "::error::Inline <script> found in dist/index.html — it will be blocked by the CSP"
+            exit 1
+          fi
+          if grep -rEq ' on(click|error|load|change|submit)="' dist/index.html; then
+            echo "::error::Inline event handler found in dist/index.html — it will be blocked by the CSP"
+            exit 1
+          fi
+          echo "No inline scripts or handlers in the build output."
+
+      - name: Verify no secrets were inlined into the bundle
+        # VITE_* values are compiled into the client bundle. OPENSEA_API_KEY and
+        # JWT_SECRET are server-only and must never appear there.
+        env:
+          JWT_SECRET: ci-canary-jwt-secret
+          OPENSEA_API_KEY: ci-canary-opensea-key
+        run: |
+          if grep -rq "ci-canary-jwt-secret\|ci-canary-opensea-key" dist/ 2>/dev/null; then
+            echo "::error::A server-only secret was inlined into the client bundle"
+            exit 1
+          fi
+          echo "No server secrets in dist/."
