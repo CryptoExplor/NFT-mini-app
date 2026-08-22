@@ -23,6 +23,10 @@ test('allows the read-only account and contract paths', () => {
     const token = resolveOpenSeaPath(`chain/ethereum/contract/${ADDRESS}/nfts/42`);
     assert.equal(token.ok, true);
     assert.equal(token.path, `chain/ethereum/contract/${ADDRESS}/nfts/42`);
+
+    const events = resolveOpenSeaPath(`events/accounts/${ADDRESS}`);
+    assert.equal(events.ok, true);
+    assert.equal(events.path, `events/accounts/${ADDRESS}`);
 });
 
 test('addresses are normalised to lowercase', () => {
@@ -66,6 +70,10 @@ test('only known query params are forwarded, with limit clamped', () => {
         limit: '9999',
         next: 'cursor-abc',
         collection: 'base-moods',
+        event_type: 'mint',
+        chain: 'base',
+        after: '1700000000',
+        before: 'not-a-timestamp',
         // must not be forwarded
         'X-API-KEY': 'leak',
         redirect: 'https://evil.example.com',
@@ -75,6 +83,10 @@ test('only known query params are forwarded, with limit clamped', () => {
     assert.equal(params.get('limit'), '200');
     assert.equal(params.get('next'), 'cursor-abc');
     assert.equal(params.get('collection'), 'base-moods');
+    assert.equal(params.get('event_type'), 'mint');
+    assert.equal(params.get('chain'), 'base');
+    assert.equal(params.get('after'), '1700000000');
+    assert.equal(params.get('before'), null);
     assert.equal(params.get('redirect'), null);
     assert.equal(params.get('path'), null);
     assert.equal(params.get('X-API-KEY'), null);

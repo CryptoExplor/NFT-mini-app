@@ -136,6 +136,16 @@ async function init() {
         const walletMod = await getWalletModule();
         await walletMod.initWallet();
 
+        // A confirmed mint may have been queued while offline or while the app
+        // was closing. Retry the persistent outbox as soon as connectivity returns.
+        window.addEventListener('online', () => {
+            const account = walletMod.getCurrentAccount?.();
+            if (!account?.address) return;
+            import('./lib/api.js')
+                .then(({ reconcileMintAnalytics }) => reconcileMintAnalytics(account.address, { discover: false }))
+                .catch(() => { });
+        });
+
         // Auto-connect in mini-app after wallet is ready.
         // initWallet() already attempts this when reconnect() fails, so only
         // run it here if we are still disconnected (avoids two parallel

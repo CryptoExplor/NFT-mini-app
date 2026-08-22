@@ -60,6 +60,7 @@ function createFakeKv() {
         },
         sadd: (k, m) => (set(k).has(m) ? 0 : (set(k).add(m), 1)),
         lpush: (k, v) => list(k).unshift(v),
+        lrange: (k, start, stop) => list(k).slice(start, stop + 1),
         ltrim: (k, start, stop) => lists.set(k, list(k).slice(start, stop + 1)),
         expire: (k, ttl) => expirations.set(k, ttl),
         del: (k) => strings.delete(k)
@@ -198,6 +199,110 @@ test('an unverified battle claim never touches the ladder, points or profile', a
     assert.equal(kv._hashes.get(`user:${WALLET}:profile`)?.get('battle_wins'), undefined);
 });
 
+test('confirmed mint updates the feed, user profile, and journey together', async () => {
+    const kv = createFakeKv();
+    const verifiedCalls = [];
+    const event = {
+        type: 'mint_success',
+        wallet: WALLET,
+        collection: 'test-collection',
+        txHash: '0xconfirmed',
+        price: 0.01,
+        timestamp: Date.now()
+    };
+
+    const result = await processEvent(kv, event, {
+        verifyMintTransaction: async (...args) => {
+            verifiedCalls.push(args);
+            return {
+                valid: true,
+                tokenId: '42',
+                tokenIds: ['42'],
+                quantity: 1,
+                collectionName: 'Test Collection',
+                contract: '0x3333333333333333333333333333333333333333',
+                imageUrl: '/test.webp',
+                openseaUrl: 'https://opensea.io/assets/base/0x3333333333333333333333333333333333333333/42',
+                chain: 'base',
+                chainId: 8453,
+                gas: 0.00001,
+                mintedAt: event.timestamp
+            };
+        }
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(verifiedCalls, [['0xconfirmed', WALLET, 'test-collection']]);
+    assert.equal(kv._hashes.get(`user:${WALLET}:profile`).get('total_mints'), 1);
+    assert.equal(kv._zsets.get('leaderboard:mints:all_time').get(WALLET), 1);
+
+    const feedItem = JSON.parse(kv._lists.get('activity:global')[0]);
+    assert.equal(feedItem.wallet, WALLET);
+    assert.equal(feedItem.collection, 'test-collection');
+    assert.equal(feedItem.txHash, '0xconfirmed');
+    assert.equal(feedItem.tokenId, '42');
+    assert.equal(feedItem.collectionName, 'Test Collection');
+    assert.equal(feedItem.imageUrl, '/test.webp');
+    assert.equal(feedItem.quantity, 1);
+
+    const journeyItem = JSON.parse(kv._lists.get(`user:${WALLET}:journey`)[0]);
+    assert.equal(journeyItem.type, 'mint_success');
+    assert.equal(journeyItem.txHash, '0xconfirmed');
+    assert.equal(journeyItem.tokenId, '42');
+    assert.equal(journeyItem.openseaUrl.includes('/42'), true);
+});
+
+test('historical reconciliation keeps the on-chain timestamp and does not reset streaks', async () => {
+    const kv = createFakeKv();
+    const mintedAt = Date.now() - 10 * 24 * 60 * 60 * 1000;
+    const mintDay = new Date(mintedAt).toISOString().split('T')[0];
+
+    await processEvent(kv, {
+        type: 'mint_success',
+        wallet: WALLET,
+        collection: 'test-collection',
+        txHash: '0xhistorical',
+        timestamp: Date.now()
+    }, {
+        verifyMintTransaction: async () => ({
+            valid: true,
+            tokenId: '7',
+            quantity: 1,
+            mintedAt
+        })
+    });
+
+    const feedItem = JSON.parse(kv._lists.get('activity:global')[0]);
+    assert.equal(feedItem.timestamp, mintedAt);
+    assert.equal(feedItem.reconciled, true);
+    assert.equal(kv._hashes.get(`daily:stats:${mintDay}`).get('mint_success'), 1);
+    assert.equal(kv._hashes.get(`user:${WALLET}:profile`).get('streak'), undefined);
+});
+
+test('historical replay detects pre-migration transactions in the user journey', async () => {
+    const kv = createFakeKv();
+    const txHash = '0xpre-migration';
+    await kv.lpush(`user:${WALLET}:journey`, JSON.stringify({
+        type: 'mint_success',
+        collection: 'test-collection',
+        txHash,
+        timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000
+    }));
+
+    const result = await processEvent(kv, {
+        type: 'mint_success',
+        wallet: WALLET,
+        collection: 'test-collection',
+        txHash
+    }, {
+        verifyMintTransaction: async () => true
+    });
+
+    assert.equal(result.duplicate, true);
+    assert.equal(kv._hashes.get('stats:global')?.get('total_mints'), undefined);
+    assert.equal(await kv.hget('mint:processed:all', txHash), 1);
+});
+
 test('duplicate mint_success does not inflate global or daily counters', async () => {
     const kv = createFakeKv();
     const event = {
@@ -239,7 +344,7 @@ test('rate limiting throws a typed error the API can map to 429', async () => {
     const kv = createFakeKv();
     let thrown = null;
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 15; i++) {
         try {
             await checkRateLimit(kv, WALLET, 'mint_success');
         } catch (err) {

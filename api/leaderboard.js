@@ -26,7 +26,14 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+        // A post-mint request carries a unique _mint marker and must bypass the
+        // edge so the live feed appears immediately. Normal polling keeps a
+        // short shared cache to protect KV without making a 30s feed wait 3min.
+        const isPostMintRefresh = typeof req.query?._mint === 'string' && req.query._mint.length > 0;
+        res.setHeader(
+            'Cache-Control',
+            isPostMintRefresh ? 'private, no-store' : 's-maxage=10, stale-while-revalidate=10'
+        );
 
         const {
             type = 'mints',

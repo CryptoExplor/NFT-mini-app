@@ -6,6 +6,7 @@
 import { readContract } from '@wagmi/core';
 import { cache } from '../utils/cache.js';
 import { wagmiAdapter } from '../wallet.js';
+import { normalizeOpenSeaMedia } from './nftMedia.js';
 
 const API_BASE = 'https://api.opensea.io/api/v2';
 const PROXY_BASE = `${import.meta.env.VITE_API_URL || ''}/api/nfts`;
@@ -402,33 +403,79 @@ export async function fetchOwnedTokenIdsForContract(address, options = {}) {
 }
 
 /**
- * Normalize OpenSea NFT data into a consistent shape
+ * Normalize OpenSea NFT data into a consistent shape.
+ *
+ * `image_url` intentionally remains the bandwidth-friendly preview for legacy
+ * consumers in the app. Detail views opt into `full_image_url` only after the
+ * user opens an NFT. OpenSea documents display/original media separately on
+ * both account and single-NFT responses.
  */
-function normalizeNFT(nft) {
+export function normalizeNFT(nft = {}) {
     const contractAddress = normalizeContractAddress(
         nft.contract ||
         nft.contract_address ||
         nft.contractAddress
     );
+    const identifier = nft.identifier ?? nft.token_id ?? '';
+    const media = normalizeOpenSeaMedia(nft);
+    const estimatedValue = nft.estimated_value_usd === null || nft.estimated_value_usd === undefined || nft.estimated_value_usd === ''
+        ? Number.NaN
+        : Number(nft.estimated_value_usd);
+    const rarityRank = nft.rarity?.rank === null || nft.rarity?.rank === undefined || nft.rarity?.rank === ''
+        ? Number.NaN
+        : Number(nft.rarity.rank);
 
     return {
-        identifier: nft.identifier || nft.token_id || '',
-        name: nft.name || `#${nft.identifier || nft.token_id || '?'}`,
+        identifier: String(identifier),
+        name: nft.name || `#${identifier || '?'}`,
         description: nft.description || '',
-        image_url: nft.image_url || nft.display_image_url || nft.image || '',
-        animation_url: nft.animation_url || '',
+
+        // Preview media: safe to use in grids, selectors and battle surfaces.
+        image_url: media.displayImageUrl,
+        preview_image_url: media.displayImageUrl,
+        display_image_url: media.displayImageUrl,
+        animation_url: media.displayAnimationUrl,
+        preview_animation_url: media.displayAnimationUrl,
+        display_animation_url: media.displayAnimationUrl,
+
+        // Original media: detail view only. Never render these in a list/grid.
+        full_image_url: media.originalImageUrl,
+        original_image_url: media.originalImageUrl,
+        full_animation_url: media.originalAnimationUrl,
+        original_animation_url: media.originalAnimationUrl,
+
         metadata_url: nft.metadata_url || '',
         collection: nft.collection || '',
         contract: contractAddress,
         token_standard: nft.token_standard || 'erc721',
         opensea_url: nft.opensea_url || '',
+        creator: nft.creator || '',
+        updated_at: nft.updated_at || '',
+        estimated_value_usd: Number.isFinite(estimatedValue) ? estimatedValue : null,
+        rarity: nft.rarity
+            ? {
+                ...nft.rarity,
+                rank: Number.isFinite(rarityRank) ? rarityRank : null
+            }
+            : null,
+        owners: Array.isArray(nft.owners)
+            ? nft.owners.map((owner) => ({
+                address: normalizeContractAddress(owner.address),
+                quantity: owner.quantity ?? null,
+                quantity_string: owner.quantity_string ?? String(owner.quantity ?? '')
+            }))
+            : [],
+        is_disabled: Boolean(nft.is_disabled),
+        is_nsfw: Boolean(nft.is_nsfw),
+        is_suspicious: Boolean(nft.is_suspicious),
         traits: (nft.traits || []).map((trait) => ({
             trait_type: trait.trait_type || trait.type || '',
-            value: trait.value || '',
+            value: trait.value ?? '',
             display_type: trait.display_type || '',
-            trait_count: trait.trait_count || null
+            max_value: trait.max_value ?? null,
+            trait_count: trait.trait_count ?? null
         })),
-        // Keep raw for anything we missed
+        // Keep raw for forwards-compatible OpenSea response fields.
         _raw: nft
     };
 }

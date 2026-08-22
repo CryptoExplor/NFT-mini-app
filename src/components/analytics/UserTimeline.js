@@ -1,4 +1,4 @@
-import { escapeHtml } from '../../utils/html.js';
+import { escapeHtml, sanitizeUrl } from '../../utils/html.js';
 import { renderIcon } from '../../utils/icons.js';
 import { renderAnalyticsIcon } from './AnalyticsUtils.js';
 
@@ -16,13 +16,17 @@ export function renderMintHistory(userStats) {
             </h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 ${mints.map(mint => {
-        const safeCollection = escapeHtml(mint.collection || 'Unknown Collection');
+        const safeCollection = escapeHtml(mint.collectionName || mint.collection || 'Unknown Collection');
+        const safeTokenId = escapeHtml(String(mint.tokenId || ''));
         const safeTxHash = encodeURIComponent(String(mint.txHash || ''));
+        const imageUrl = sanitizeUrl(mint.imageUrl || '');
         return `
                     <div class="p-3 bg-white/5 rounded-xl border border-white/5 flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-green-300 flex-shrink-0">${renderIcon('GEM', 'w-5 h-5')}</div>
+                        <div class="w-10 h-10 rounded-lg overflow-hidden bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-green-300 flex-shrink-0">
+                            ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" decoding="async">` : renderIcon('GEM', 'w-5 h-5')}
+                        </div>
                         <div class="flex-1 min-w-0">
-                            <div class="text-sm font-bold truncate">${safeCollection}</div>
+                            <div class="text-sm font-bold truncate">${safeCollection}${safeTokenId ? ` <span class="font-mono text-indigo-300">#${safeTokenId}</span>` : ''}</div>
                             <div class="text-[10px] opacity-50 font-mono">
                                 ${mint.timestamp ? new Date(mint.timestamp).toLocaleDateString() : ''}
                                 ${mint.txHash ? ` • ${mint.txHash.slice(0, 10)}...` : ''}
