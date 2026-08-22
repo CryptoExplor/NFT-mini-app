@@ -10,19 +10,28 @@
  * the token, and caches the answer briefly so a fight costs at most one RPC
  * call (usually zero).
  *
+ * Resolution order:
+ *   1. contract from the collection registry → on-chain ownerOf/balanceOf
+ *   2. no contract mapping (e.g. `base-gods`, which has a battle profile but no
+ *      collection file) → OpenSea inventory lookup for that wallet+collection
+ *   3. neither available → skipped
+ *
  * Policy:
- *   - known collection + wallet is not the owner  → rejected
- *   - collection has no contract mapping          → allowed, flagged `skipped`
- *     (set STRICT_BATTLE_OWNERSHIP=true to reject these instead)
- *   - RPC/KV failure                              → allowed, flagged `skipped`
+ *   - resolvable + wallet is not the owner  → rejected
+ *   - nothing resolvable (no contract, no OpenSea key, upstream failure)
+ *     → allowed, flagged `skipped`
  *     (fail-open: an infra blip must not block play; cheating still needs a
- *     valid JWT and everything else stays clamped/verified)
+ *     valid JWT and everything else stays clamped/verified.
+ *     Set STRICT_BATTLE_OWNERSHIP=true to reject these instead.)
  */
 
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 
 const OWNER_CACHE_TTL_SECONDS = 600; // 10 minutes
+const INVENTORY_CACHE_TTL_SECONDS = 300; // 5 minutes
+const OPENSEA_BASE = 'https://api.opensea.io/api/v2';
+const OPENSEA_TIMEOUT_MS = 8_000;
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 const OWNERSHIP_ABI = [
@@ -136,7 +145,17 @@ export async function verifyFighterOwnership(kv, fighter) {
     if (tokenId === null) return skip('invalid_token_id');
 
     const contract = await resolveCollectionContract(fighter?.collectionSlug);
-    if (!contract) return skip('unknown_collection');
+    if (!contract) {
+        // No contract mapping: fall back to the wallet's OpenSea inventory so
+        // profile-only collections (e.g. base-gods) are still verified.
+        if (!fighter?.collectionSlug) return skip('unknown_collection');
+        return verifyViaInventory(kv, {
+            wallet,
+            collectionSlug: fighter.collectionSlug,
+            tokenId: tokenId.toString(),
+            strict
+        });
+    }
 
     const cacheKey = `own:${contract.address.toLowerCase()}:${tokenId}`;
 
@@ -192,6 +211,66 @@ export async function verifyFighterOwnership(kv, fighter) {
     } catch (error) {
         console.warn('[Ownership] Verification unavailable:', error?.message);
         return skip('rpc_unavailable');
+    }
+}
+
+/**
+ * Ownership fallback for collections that have no contract in the registry.
+ *
+ * Asks OpenSea whether the wallet holds the specific token in that collection.
+ * This is the same source the client builds its inventory from, so a fighter
+ * that legitimately appears in the loadout picker will verify here.
+ *
+ * @returns {Promise<{ owned: boolean, skipped: boolean, reason?: string }>}
+ */
+async function verifyViaInventory(kv, { wallet, collectionSlug, tokenId, strict }) {
+    const apiKey = process.env.OPENSEA_API_KEY || process.env.VITE_OPENSEA_API_KEY || '';
+    const skip = (reason) => ({ owned: !strict, skipped: true, reason });
+
+    if (!apiKey) return skip('unknown_collection');
+
+    const slug = String(collectionSlug).toLowerCase();
+    const cacheKey = `own:inv:${slug}:${wallet}`;
+
+    // Cached token list for this wallet+collection
+    try {
+        const cached = await kv?.get?.(cacheKey);
+        if (cached) {
+            const ids = typeof cached === 'string' ? JSON.parse(cached) : cached;
+            if (Array.isArray(ids)) {
+                return { owned: ids.includes(String(tokenId)), skipped: false, reason: 'inventory_cache' };
+            }
+        }
+    } catch { /* fall through to a live lookup */ }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OPENSEA_TIMEOUT_MS);
+
+    try {
+        const url = `${OPENSEA_BASE}/chain/base/account/${wallet}/nfts?limit=50&collection=${encodeURIComponent(slug)}`;
+        const response = await fetch(url, {
+            headers: { Accept: 'application/json', 'X-API-KEY': apiKey },
+            signal: controller.signal
+        });
+
+        if (!response.ok) return skip('inventory_unavailable');
+
+        const data = await response.json();
+        const ids = (data?.nfts || [])
+            .map((nft) => (nft?.identifier === undefined || nft?.identifier === null ? null : String(nft.identifier)))
+            .filter(Boolean);
+
+        try {
+            await kv?.set?.(cacheKey, JSON.stringify(ids), { ex: INVENTORY_CACHE_TTL_SECONDS });
+        } catch { /* best effort */ }
+
+        const owned = ids.includes(String(tokenId));
+        return { owned, skipped: false, reason: owned ? undefined : 'not_owner' };
+    } catch (error) {
+        console.warn('[Ownership] Inventory lookup failed:', error?.message);
+        return skip('inventory_unavailable');
+    } finally {
+        clearTimeout(timeout);
     }
 }
 

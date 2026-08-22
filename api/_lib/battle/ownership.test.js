@@ -125,6 +125,47 @@ test('a KV outage does not block play', async () => {
     assert.equal(result.skipped, true);
 });
 
+test('collections without a contract fall back to the cached OpenSea inventory', async (t) => {
+    const previousKey = process.env.OPENSEA_API_KEY;
+    process.env.OPENSEA_API_KEY = 'test-key';
+    t.after(() => {
+        if (previousKey === undefined) delete process.env.OPENSEA_API_KEY;
+        else process.env.OPENSEA_API_KEY = previousKey;
+    });
+
+    // base-gods has a battle profile but no contract in the registry.
+    const kv = createKv({ [`own:inv:base-gods:${OWNER}`]: JSON.stringify(['4', '11']) });
+
+    const owned = await verifyFighterOwnership(kv, {
+        wallet: OWNER, collectionSlug: 'base-gods', tokenId: '11'
+    });
+    assert.equal(owned.owned, true);
+    assert.equal(owned.skipped, false, 'inventory data means this is a real check, not a skip');
+
+    const notOwned = await verifyFighterOwnership(kv, {
+        wallet: OWNER, collectionSlug: 'base-gods', tokenId: '999'
+    });
+    assert.equal(notOwned.owned, false, 'a token the wallet does not hold is rejected');
+});
+
+test('without an OpenSea key the inventory fallback degrades to a skip', async (t) => {
+    const previousKey = process.env.OPENSEA_API_KEY;
+    const previousViteKey = process.env.VITE_OPENSEA_API_KEY;
+    delete process.env.OPENSEA_API_KEY;
+    delete process.env.VITE_OPENSEA_API_KEY;
+    t.after(() => {
+        if (previousKey !== undefined) process.env.OPENSEA_API_KEY = previousKey;
+        if (previousViteKey !== undefined) process.env.VITE_OPENSEA_API_KEY = previousViteKey;
+    });
+
+    const result = await verifyFighterOwnership(createKv(), {
+        wallet: OWNER, collectionSlug: 'base-gods', tokenId: '1'
+    });
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, 'unknown_collection');
+    assert.equal(result.owned, true);
+});
+
 test('fighter identity is read from either loadout shape', () => {
     assert.deepEqual(
         getFighterIdentity({ fighter: { collectionSlug: 'base-moods', tokenId: '5' } }),

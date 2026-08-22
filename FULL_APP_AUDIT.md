@@ -175,9 +175,11 @@ Remaining known trade-offs (by design, documented rather than fixed):
 
 * `VITE_BASE_RPC_URL` is still a client value — it must be a domain-restricted,
   publicly safe endpoint. Anything secret belongs behind an `/api` route.
-* Ownership verification is fail-open for collections that have no contract in
-  the registry (currently `base-gods`); flip `STRICT_BATTLE_OWNERSHIP` once every
-  battle collection is mapped.
+* Ownership verification for collections with no contract in the registry
+  (currently `base-gods`, which has a battle profile but no collection file)
+  falls back to an OpenSea inventory lookup — a real check whenever
+  `OPENSEA_API_KEY` is set. It only degrades to `skipped` with no key or an
+  upstream failure; `STRICT_BATTLE_OWNERSHIP=true` rejects those too.
 * The report-only CSP still needs a production reporting endpoint before the
   enumerated `connect-src` can be promoted to enforced.
 
