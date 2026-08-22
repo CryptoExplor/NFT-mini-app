@@ -16,6 +16,7 @@
     "perf:mobile": "node scripts/perf-mobile.mjs",
     "test": "node --test --experimental-test-module-mocks \"api/**/*.test.js\"",
     "analytics:migrate": "node scripts/migrate-analytics.mjs",
+    "kv:cleanup": "node scripts/kv-cleanup.mjs",
     "analytics:migrate:apply": "node scripts/migrate-analytics.mjs --apply --weekly --cleanup",
     "preview": "vite preview",
     "analyze": "vite-bundle-visualizer"
