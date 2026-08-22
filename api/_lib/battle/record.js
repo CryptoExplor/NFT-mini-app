@@ -16,7 +16,7 @@
 
 import { withCors } from '../cors.js';
 import { verifyAuth } from '../authMiddleware.js';
-import { saveBattleRecord, incrementBattleWins } from '../kv.js';
+import { saveBattleRecord } from '../kv.js';
 
 async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -82,12 +82,11 @@ async function handler(req, res) {
 
         const battleId = await saveBattleRecord(battleRecord);
 
-        // Update leaderboard if player won
-        if (result.winnerSide === 'P1') {
-            await incrementBattleWins(auth.address).catch(err =>
-                console.error('[Record] Leaderboard update failed:', err.message)
-            );
-        }
+        // NOTE: the arena ladder (leaderboard:battle_wins:*) is intentionally NOT
+        // written here any more. The client also emits `battle_result_v2` for the
+        // same AI battle, which is the single canonical writer for wins/points.
+        // Writing in both places double counted every AI victory on the ladder
+        // while user:<w>:profile.battle_wins was only counted once.
 
         return res.status(200).json({ battleId, recorded: true });
     } catch (err) {

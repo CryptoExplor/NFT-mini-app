@@ -6,10 +6,14 @@ const BATCH_SIZE = 1000;
 
 /**
  * Sanitize CSV cell values to prevent formula injection.
- * Wraps in double quotes and escapes existing quotes.
+ * Quotes the value, escapes embedded quotes, AND neutralises the leading
+ * characters spreadsheets treat as a formula (= + - @, tab, CR).
  */
 function csvSafe(value) {
-    const str = String(value ?? '');
+    let str = String(value ?? '');
+    if (/^[=+\-@\t\r]/.test(str)) {
+        str = `'${str}`;
+    }
     return '"' + str.replace(/"/g, '""') + '"';
 }
 
@@ -61,7 +65,7 @@ async function streamUsersCSV(res) {
         // Scan leaderboard:points zset
         const result = await kv.zscan('leaderboard:points', cursor, { count: BATCH_SIZE });
         cursor = result[0];
-        const rawMembers = result[1]; // [member, score, member, score...]
+        const rawMembers = result[1] || []; // [member, score, member, score...]
 
         const wallets = [];
         for (let i = 0; i < rawMembers.length; i += 2) {
@@ -110,7 +114,7 @@ async function streamCollectionsCSV(res) {
         // Scan for collection stats keys
         const result = await kv.scan(cursor, { match: 'collection:*:stats', count: BATCH_SIZE });
         cursor = result[0];
-        const keys = result[1];
+        const keys = result[1] || [];
 
         if (keys.length === 0) continue;
 
@@ -146,30 +150,33 @@ async function streamCollectionsCSV(res) {
 async function streamMintsCSV(res) {
     res.write('Timestamp,TxHash,Wallet,Collection,Price,Type\n');
 
-    const total = await kv.llen('log:mints');
-    let offset = 0;
+    // Read the whole (ltrim-capped at 10k) log in ONE call. Paging by index while
+    // new mints LPUSH onto the head shifted every offset, duplicating/skipping rows.
+    const logs = await kv.lrange('log:mints', 0, -1);
+    const seen = new Set();
 
-    while (offset < total) {
-        const logs = await kv.lrange('log:mints', offset, offset + BATCH_SIZE - 1);
-        if (!logs.length) break;
+    for (const item of logs || []) {
+        try {
+            const data = typeof item === 'string' ? JSON.parse(item) : item;
+            if (!data) continue;
 
-        for (const item of logs) {
-            try {
-                const data = JSON.parse(item);
-                const type = data.price > 0 ? 'paid' : 'free';
-                const row = [
-                    new Date(data.timestamp).toISOString(),
-                    csvSafe(data.txHash || ''),
-                    csvSafe(data.wallet),
-                    csvSafe(data.collection),
-                    data.price || 0,
-                    type
-                ].join(',');
+            // Defensive de-dup for rows captured twice by an older export/write path
+            const dedupKey = `${data.txHash || ''}:${data.timestamp || ''}:${data.wallet || ''}`;
+            if (seen.has(dedupKey)) continue;
+            seen.add(dedupKey);
 
-                res.write(row + '\n');
-            } catch { }
-        }
+            const type = data.price > 0 ? 'paid' : 'free';
+            const timestamp = Number(data.timestamp);
+            const row = [
+                Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : '',
+                csvSafe(data.txHash || ''),
+                csvSafe(data.wallet),
+                csvSafe(data.collection),
+                data.price || 0,
+                type
+            ].join(',');
 
-        offset += BATCH_SIZE;
+            res.write(row + '\n');
+        } catch { }
     }
 }

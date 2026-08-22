@@ -14,6 +14,9 @@
     "dev:full": "vercel dev",
     "build": "vite build",
     "perf:mobile": "node scripts/perf-mobile.mjs",
+    "test": "node --test --experimental-test-module-mocks \"api/**/*.test.js\"",
+    "analytics:migrate": "node scripts/migrate-analytics.mjs",
+    "analytics:migrate:apply": "node scripts/migrate-analytics.mjs --apply --weekly --cleanup",
     "preview": "vite preview",
     "analyze": "vite-bundle-visualizer"
   },

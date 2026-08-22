@@ -1,5 +1,6 @@
 import { kv } from './_lib/kv.js';
 import { setCors } from './_lib/cors.js';
+import { getWeekNumber } from './_lib/events.js';
 
 // NOTE: loadCollections uses import.meta.env (Vite-only) which doesn't exist in
 // Vercel serverless Node.js runtime. We wrap it in a try/catch to degrade gracefully.
@@ -41,14 +42,17 @@ export default async function handler(req, res) {
         const collectionSlug = typeof collection === 'string' && collection.trim() ? collection.trim() : null;
         const viewerWallet = normalizeWallet(viewer);
         const isCompetitionSurface = !collectionSlug && surface === 'competition';
-        const leaderboardKey = getLeaderboardKey(typeKey, period, collectionSlug);
+        const leaderboardKey = await resolveLeaderboardKey(
+            getLeaderboardKeyCandidates(typeKey, period, collectionSlug)
+        );
 
         if (collectionSlug) {
             const collectionPayload = await getCollectionPayload({
                 collectionSlug,
                 typeKey,
                 period,
-                safeLimit
+                safeLimit,
+                leaderboardKey
             });
             return res.status(200).json(collectionPayload);
         }
@@ -77,11 +81,11 @@ export default async function handler(req, res) {
     }
 }
 
-async function getCollectionPayload({ collectionSlug, typeKey, period, safeLimit }) {
+async function getCollectionPayload({ collectionSlug, typeKey, period, safeLimit, leaderboardKey }) {
     const pipeline = kv.pipeline();
     pipeline.hgetall(`collection:${collectionSlug}:stats`);
     pipeline.hgetall(`funnel:mint:${collectionSlug}`);
-    pipeline.zrange(getLeaderboardKey(typeKey, period, collectionSlug), 0, safeLimit - 1, { rev: true, withScores: true });
+    pipeline.zrange(leaderboardKey, 0, safeLimit - 1, { rev: true, withScores: true });
     pipeline.lrange(`activity:collection:${collectionSlug}`, 0, 29);
     pipeline.scard(`collection:${collectionSlug}:wallets`);
 
@@ -89,7 +93,7 @@ async function getCollectionPayload({ collectionSlug, typeKey, period, safeLimit
     const collections = await getTopCollections();
     const formattedLeaderboard = await hydrateLeaderboardRows(formatLeaderboard(rawLeaderboard, typeKey));
     const parsedActivity = parseList(recentActivity);
-    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
+    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections, typeKey);
     const funnelSteps = buildFunnel(funnelData || {});
 
     return {
@@ -161,7 +165,7 @@ async function getDefaultGlobalPayload({ typeKey, period, safeLimit, leaderboard
     const collections = await getTopCollections();
     const formattedLeaderboard = await hydrateLeaderboardRows(formatLeaderboard(rawLeaderboard, typeKey));
     const parsedActivity = parseList(recentActivity);
-    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections);
+    const socialProof = generateSocialProof(parsedActivity, formattedLeaderboard, collections, typeKey);
     const funnelSteps = buildFunnel(funnelData || {});
 
     return {
@@ -178,28 +182,91 @@ async function getDefaultGlobalPayload({ typeKey, period, safeLimit, leaderboard
     };
 }
 
-function getLeaderboardKey(type, period, collectionSlug) {
-    if (type === 'battle_points') type = 'battle_wins';
+/**
+ * Candidate KV keys for a leaderboard request, most-correct first.
+ *
+ * Weekly boards are written as `leaderboard:<type>:week:<YYYY-Www>` but were
+ * previously READ as `leaderboard:<type>:<period>` — a key that never exists —
+ * so `?period=week` always came back empty. We now build the real key and keep
+ * the legacy shapes in the candidate list so any historical data still shows.
+ */
+function getLeaderboardKeyCandidates(type, period, collectionSlug) {
+    const resolvedType = type === 'battle_points' ? 'battle_wins' : type;
+    const isWeekly = period && period !== 'all_time';
+    const week = normalizeWeek(period);
+    const candidates = [];
 
-    if (collectionSlug && ['mints', 'volume', 'gas'].includes(type) && period === 'all_time') {
-        return `leaderboard:${type}:${period}:${collectionSlug}`;
+    if (collectionSlug && ['mints', 'volume', 'gas'].includes(resolvedType)) {
+        if (!isWeekly) {
+            candidates.push(`leaderboard:${resolvedType}:all_time:${collectionSlug}`);
+        }
+        // No per-collection weekly board is written; fall back to all-time so the
+        // collection view keeps rendering instead of going blank.
+        candidates.push(`leaderboard:${resolvedType}:all_time:${collectionSlug}`);
+        return dedupe(candidates);
     }
 
-    if (type === 'points') {
-        return period === 'all_time' ? 'leaderboard:points' : `leaderboard:points:week:${period}`;
-    }
-    if (type === 'reputation') {
-        return 'leaderboard:reputation';
+    if (resolvedType === 'reputation') {
+        return ['leaderboard:reputation'];
     }
 
-    return `leaderboard:${type}:${period}`;
+    if (resolvedType === 'points') {
+        if (isWeekly) {
+            candidates.push(`leaderboard:points:week:${week}`);
+            candidates.push(`leaderboard:points:week:${period}`); // legacy/explicit
+        }
+        candidates.push('leaderboard:points');
+        return dedupe(candidates);
+    }
+
+    if (isWeekly) {
+        candidates.push(`leaderboard:${resolvedType}:week:${week}`);
+        candidates.push(`leaderboard:${resolvedType}:week:${period}`); // legacy/explicit
+        candidates.push(`leaderboard:${resolvedType}:${period}`);      // legacy (pre-fix reads)
+    }
+    candidates.push(`leaderboard:${resolvedType}:all_time`);
+
+    return dedupe(candidates);
+}
+
+function dedupe(list) {
+    return [...new Set(list.filter(Boolean))];
+}
+
+/**
+ * Accepts 'week', 'this_week', or an explicit ISO week ('2026-W34').
+ */
+function normalizeWeek(period) {
+    if (typeof period === 'string' && /^\d{4}-W\d{2}$/.test(period)) return period;
+    return getWeekNumber(new Date());
+}
+
+/**
+ * Pick the first candidate key that actually holds data, so both the new and
+ * the historical key layout render.
+ */
+async function resolveLeaderboardKey(candidates) {
+    const keys = dedupe(candidates);
+    if (keys.length === 1) return keys[0];
+
+    const pipe = kv.pipeline();
+    keys.forEach((key) => pipe.zcard(key));
+    const sizes = await pipe.exec();
+
+    for (let i = 0; i < keys.length; i++) {
+        if ((parseInt(sizes[i], 10) || 0) > 0) return keys[i];
+    }
+    return keys[keys.length - 1];
 }
 
 function buildFunnel(funnel) {
+    // Order reflects the real user path: people browse collections before they
+    // connect. (The old order put wallet_connect first, which produced
+    // >100% "conversion" from a later step to an earlier one.)
     const funnelSteps = [
         { step: 'page_view', label: 'Page View', count: parseInt(funnel.page_view, 10) || 0 },
-        { step: 'wallet_connect', label: 'Wallet Connect', count: parseInt(funnel.wallet_connect, 10) || 0 },
         { step: 'collection_view', label: 'View Collection', count: parseInt(funnel.collection_view, 10) || 0 },
+        { step: 'wallet_connect', label: 'Wallet Connect', count: parseInt(funnel.wallet_connect, 10) || 0 },
         { step: 'mint_click', label: 'Click Mint', count: parseInt(funnel.mint_click, 10) || 0 },
         { step: 'tx_sent', label: 'Send Transaction', count: parseInt(funnel.tx_sent, 10) || 0 },
         { step: 'mint_success', label: 'Mint Success', count: parseInt(funnel.mint_success, 10) || 0 }
@@ -217,6 +284,9 @@ function buildFunnel(funnel) {
         step.conversion = i === 0
             ? '100.0'
             : (step.conversionFromPrev || '0.0');
+        // These counters are event counts, not unique wallets. Flagged so the UI
+        // can label them honestly instead of claiming "wallets".
+        step.unit = 'events';
     }
 
     return funnelSteps;
@@ -283,7 +353,9 @@ async function getViewerRow({ viewerWallet, leaderboard, leaderboardKey, snapsho
     pipe.hget(`user:${viewerWallet}:profile`, 'display_name');
     const [rank, score, displayName] = await pipe.exec();
 
-    if (rank === null || score === null) {
+    // `== null` also covers `undefined`, which some drivers return for a
+    // member that is not in the set (rank + 1 would have produced NaN).
+    if (rank == null || score == null) {
         return null;
     }
 
@@ -359,7 +431,17 @@ function toCollectionStats(raw, uniqueWallets) {
     };
 }
 
-function generateSocialProof(activity, leaderboard, collections) {
+const SCORE_UNITS = {
+    mints: 'mints',
+    volume: 'ETH volume',
+    gas: 'ETH gas',
+    points: 'points',
+    reputation: 'reputation',
+    battle_wins: 'arena wins',
+    battle_points: 'battle points'
+};
+
+function generateSocialProof(activity, leaderboard, collections, typeKey = 'mints') {
     const messages = [];
 
     if (leaderboard.length > 0) {
@@ -368,7 +450,7 @@ function generateSocialProof(activity, leaderboard, collections) {
             messages.push({
                 type: 'whale',
                 icon: 'Whale',
-                text: `${shortenAddr(top.wallet)} is leading with ${top.score} mints`,
+                text: `${shortenAddr(top.wallet)} is leading with ${top.score} ${SCORE_UNITS[typeKey] || typeKey}`,
                 timestamp: Date.now()
             });
         }
@@ -415,7 +497,12 @@ function generateSocialProof(activity, leaderboard, collections) {
 }
 
 function getRankChange(snapshot, wallet, currentRank) {
-    const previousRank = snapshot?.ranks?.[wallet];
+    // No snapshot at all = we simply don't know yet (the daily snapshot is only
+    // written when the endpoint is hit). Returning 'new' here painted an amber
+    // NEW badge on every single row until two consecutive days of traffic.
+    if (!snapshot?.ranks) return null;
+
+    const previousRank = snapshot.ranks[wallet];
     if (!previousRank) return 'new';
     if (currentRank < previousRank) return 'up';
     if (currentRank > previousRank) return 'down';

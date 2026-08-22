@@ -171,37 +171,49 @@ async function handler(req, res) {
             return null;
         });
 
-        processEvent(kv, {
-            type: 'battle_result_v2',
-            wallet: auth.address,
-            timestamp: Date.now(),
-            metadata: {
-                won: battleResult.winnerSide === 'P2',
-                isAi: false,
-                rounds: battleResult.totalRounds || summary.totalRounds || 0,
-                opponent: attackerName,
-                battleId: generatedBattleId || null,
-                affectsGlobal: true
-            }
-        }).catch((err) => {
-            console.error('[Fight] battle_result_v2 analytics failed:', err.message);
-        });
+        // Analytics for both sides.
+        //  - affectsGlobal   : only the defender event, so a match counts once in
+        //                      battle_total / the live feed.
+        //  - countsGlobalWin : BOTH events, so an attacker victory is still counted
+        //                      in stats:global.battle_wins (the global win rate used
+        //                      to only ever see defender wins).
+        // Awaited (allSettled) — a serverless instance can be frozen the moment the
+        // response is sent, which silently dropped these writes before.
+        await Promise.allSettled([
+            processEvent(kv, {
+                type: 'battle_result_v2',
+                wallet: auth.address,
+                timestamp: Date.now(),
+                metadata: {
+                    won: battleResult.winnerSide === 'P2',
+                    isAi: false,
+                    rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                    opponent: attackerName,
+                    battleId: generatedBattleId || null,
+                    affectsGlobal: true,
+                    countsGlobalWin: true
+                }
+            }).catch((err) => {
+                console.error('[Fight] battle_result_v2 analytics failed:', err.message);
+            }),
 
-        processEvent(kv, {
-            type: 'battle_result_v2',
-            wallet: challenge.player,
-            timestamp: Date.now(),
-            metadata: {
-                won: battleResult.winnerSide === 'P1',
-                isAi: false,
-                rounds: battleResult.totalRounds || summary.totalRounds || 0,
-                opponent: defenderName,
-                battleId: generatedBattleId || null,
-                affectsGlobal: false
-            }
-        }).catch((err) => {
-            console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);
-        });
+            processEvent(kv, {
+                type: 'battle_result_v2',
+                wallet: challenge.player,
+                timestamp: Date.now(),
+                metadata: {
+                    won: battleResult.winnerSide === 'P1',
+                    isAi: false,
+                    rounds: battleResult.totalRounds || summary.totalRounds || 0,
+                    opponent: defenderName,
+                    battleId: generatedBattleId || null,
+                    affectsGlobal: false,
+                    countsGlobalWin: true
+                }
+            }).catch((err) => {
+                console.error('[Fight] mirrored attacker battle_result_v2 analytics failed:', err.message);
+            })
+        ]);
 
         return res.status(200).json({
             battleId: generatedBattleId,

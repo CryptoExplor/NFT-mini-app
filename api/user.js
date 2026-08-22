@@ -15,8 +15,11 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=90');
 
     const auth = await getAuthContext(req, { allowQueryFallback: true });
-    const requestedWallet = typeof req.query?.wallet === 'string' ? req.query.wallet : '';
-    const normalizedWallet = String(auth?.wallet || requestedWallet || '').toLowerCase();
+    const requestedWallet = typeof req.query?.wallet === 'string' ? req.query.wallet.trim() : '';
+    // An explicit ?wallet= wins. Previously the JWT wallet overrode it, so a
+    // signed-in user looking at another address silently got their OWN stats.
+    const normalizedWallet = String(requestedWallet || auth?.wallet || '').toLowerCase();
+    const isSelf = Boolean(auth?.authenticated && auth.wallet === normalizedWallet);
 
     if (!normalizedWallet || !/^0x[a-f0-9]{40}$/i.test(normalizedWallet)) {
         return res.status(400).json({ error: 'Invalid wallet address' });
@@ -74,10 +77,14 @@ export default async function handler(req, res) {
         let firstSeen = profile?.first_seen ? parseInt(profile.first_seen, 10) : null;
         if (!firstSeen) {
             firstSeen = now;
-            await kv.hset(`user:${walletKey}:profile`, {
-                first_seen: now,
-                last_active: now
-            });
+            // Only backfill for the authenticated owner. This used to run for ANY
+            // queried address, letting anyone create profile hashes in KV via GET.
+            if (isSelf) {
+                await kv.hset(`user:${walletKey}:profile`, {
+                    first_seen: now,
+                    last_active: now
+                });
+            }
         }
 
         const totalMints = parseInt(profile?.total_mints, 10) || 0;
@@ -107,7 +114,7 @@ export default async function handler(req, res) {
         const volumeContribution = ((totalVolume / globalVolume) * 100).toFixed(2);
 
         const totalMinters = parseInt(totalMintersCount, 10) || 0;
-        const rank = mintRank !== null ? mintRank + 1 : null;
+        const rank = mintRank != null ? mintRank + 1 : null;
         const percentile = rank && totalMinters > 0
             ? ((1 - (rank / totalMinters)) * 100).toFixed(1)
             : null;
@@ -155,19 +162,19 @@ export default async function handler(req, res) {
                     totalMinters
                 },
                 volume: {
-                    rank: volumeRank !== null ? volumeRank + 1 : 'Unranked',
+                    rank: volumeRank != null ? volumeRank + 1 : 'Unranked',
                     score: parseFloat(volumeScore || 0)
                 },
                 reputation: {
-                    rank: reputationRank !== null ? reputationRank + 1 : 'Unranked',
+                    rank: reputationRank != null ? reputationRank + 1 : 'Unranked',
                     score: parseFloat(reputationScore || profile?.reputation_score || 0).toFixed(2)
                 },
                 points: {
-                    rank: pointsRank !== null ? pointsRank + 1 : 'Unranked',
+                    rank: pointsRank != null ? pointsRank + 1 : 'Unranked',
                     score: totalPoints || parseInt(pointsScore, 10) || 0
                 },
                 battleWins: {
-                    rank: battleWinsRank !== null ? battleWinsRank + 1 : 'Unranked',
+                    rank: battleWinsRank != null ? battleWinsRank + 1 : 'Unranked',
                     score: parseInt(battleWinsScore, 10) || battleWins
                 }
             },

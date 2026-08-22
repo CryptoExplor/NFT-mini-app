@@ -16,7 +16,13 @@ export function renderAdminPanel(wallet, slug, adminWallets = []) {
     if (!wallet?.isConnected) return '';
 
     const walletAddress = wallet.address?.toLowerCase();
-    const adminHintAllowed = adminWallets.length === 0 || adminWallets.includes(walletAddress);
+    // Default-deny: with VITE_ADMIN_WALLETS unset this used to render the admin
+    // surface for every connected wallet. Server-side auth still gates the data,
+    // but the panel itself should not be advertised.
+    const isDev = Boolean(import.meta.env?.DEV);
+    const adminHintAllowed = adminWallets.length > 0
+        ? adminWallets.includes(walletAddress)
+        : isDev;
     if (!adminHintAllowed) return '';
 
     const hasToken = hasAdminSession();
@@ -182,7 +188,7 @@ async function loadAdminOverview() {
     }
 
     if (data?.error) {
-        content.innerHTML = `<div class="text-center py-4 text-red-400">${data.error}</div>`;
+        content.innerHTML = `<div class="text-center py-4 text-red-400">${escapeHtml(data.error)}</div>`;
         return;
     }
 
@@ -212,13 +218,17 @@ async function loadAdminOverview() {
         <div class="bg-white/5 rounded-xl p-3 mb-3">
             <div class="text-xs font-bold opacity-60 mb-2">Raw Funnel Counts</div>
             <div class="flex flex-wrap gap-3 text-xs font-mono">
-                ${Object.entries(funnel).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join(' | ')}
+                ${Object.entries(funnel).map(([k, v]) => `<span>${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></span>`).join(' | ')}
             </div>
         </div>
         <div class="bg-white/5 rounded-xl p-3">
             <div class="text-xs font-bold opacity-60 mb-2">Top 20 Minters</div>
             <div class="space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
-                ${lb.map(u => `<div class="flex justify-between"><span>${u.displayName || u.shortAddress || (u.wallet ? u.wallet.slice(0, 6) + '...' + u.wallet.slice(-4) : 'User')}</span><span class="font-bold">${u.score}</span></div>`).join('')}
+                ${lb.map(u => {
+        // display_name is user-supplied (wallet_connect metadata) — must be escaped.
+        const label = u.displayName || u.shortAddress || (u.wallet ? `${u.wallet.slice(0, 6)}...${u.wallet.slice(-4)}` : 'User');
+        return `<div class="flex justify-between"><span>${escapeHtml(label)}</span><span class="font-bold">${escapeHtml(u.score)}</span></div>`;
+    }).join('')}
             </div>
         </div>
     `;
@@ -243,7 +253,7 @@ async function handleAdminDateAction(action, title) {
     }
 
     if (data?.error) {
-        content.innerHTML = `<div class="text-red-400 text-sm">${data.error}</div>`;
+        content.innerHTML = `<div class="text-red-400 text-sm">${escapeHtml(data.error)}</div>`;
         return;
     }
 
@@ -251,9 +261,9 @@ async function handleAdminDateAction(action, title) {
         if (data?.stats) {
             content.innerHTML = `
                 <div class="bg-white/5 rounded-xl p-3">
-                    <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date}</div>
+                    <div class="text-xs font-bold opacity-60 mb-2">${escapeHtml(title)} for ${escapeHtml(date)}</div>
                     <div class="flex flex-wrap gap-4 text-sm font-mono">
-                        ${Object.entries(data.stats).map(([k, v]) => `<span>${k}: <strong>${v}</strong></span>`).join('')}
+                        ${Object.entries(data.stats).map(([k, v]) => `<span>${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></span>`).join('')}
                     </div>
                 </div>
             `;
@@ -266,8 +276,8 @@ async function handleAdminDateAction(action, title) {
     if (action === 'cohort') {
         content.innerHTML = `
             <div class="bg-white/5 rounded-xl p-3">
-                <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date}</div>
-                <div class="text-sm mb-2">New wallets: <strong>${data.count || 0}</strong></div>
+                <div class="text-xs font-bold opacity-60 mb-2">${escapeHtml(title)} for ${escapeHtml(date)}</div>
+                <div class="text-sm mb-2">New wallets: <strong>${Number(data.count) || 0}</strong></div>
             </div>
         `;
         return;
@@ -276,19 +286,19 @@ async function handleAdminDateAction(action, title) {
     if (action === 'retention' && data?.retention) {
         content.innerHTML = `
             <div class="bg-white/5 rounded-xl p-3">
-                <div class="text-xs font-bold opacity-60 mb-2">${title} for ${date} (Cohort: ${data.cohortSize})</div>
+                <div class="text-xs font-bold opacity-60 mb-2">${escapeHtml(title)} for ${escapeHtml(date)} (Cohort: ${Number(data.cohortSize) || 0})</div>
                 <div class="grid grid-cols-3 gap-2 text-center">
                     <div class="bg-white/5 rounded p-2">
                         <div class="text-[10px] opacity-40 uppercase">Day 1</div>
-                        <div class="text-lg font-bold">${data.retention.day1.rate}%</div>
+                        <div class="text-lg font-bold">${escapeHtml(data.retention.day1.rate)}%</div>
                     </div>
                     <div class="bg-white/5 rounded p-2">
                         <div class="text-[10px] opacity-40 uppercase">Day 7</div>
-                        <div class="text-lg font-bold">${data.retention.day7.rate}%</div>
+                        <div class="text-lg font-bold">${escapeHtml(data.retention.day7.rate)}%</div>
                     </div>
                     <div class="bg-white/5 rounded p-2">
                         <div class="text-[10px] opacity-40 uppercase">Day 30</div>
-                        <div class="text-lg font-bold">${data.retention.day30.rate}%</div>
+                        <div class="text-lg font-bold">${escapeHtml(data.retention.day30.rate)}%</div>
                     </div>
                 </div>
             </div>

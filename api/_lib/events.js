@@ -39,8 +39,8 @@ export const VALID_EVENTS = [
 // Funnel steps (ordered)
 export const FUNNEL_STEPS = [
     'page_view',
-    'wallet_connect',
     'collection_view',
+    'wallet_connect',
     'mint_click',
     'tx_sent',
     'mint_success'
@@ -49,7 +49,10 @@ export const FUNNEL_STEPS = [
 // ── Shared helpers ─────────────────────────────────────────────
 
 export function getWeekNumber(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // NOTE: must use UTC getters — the rest of the pipeline (getUTCDate) is UTC.
+    // Using local getters here bucketed points into the wrong ISO week on any
+    // non-UTC runtime (and TTL'd a different key than the one incremented).
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -67,6 +70,17 @@ export function getYesterdayDate(todayStr) {
     return date.toISOString().split('T')[0];
 }
 
+/**
+ * Record that this event actually wrote to a weekly (TTL-managed) key.
+ * processEvent only issues EXPIRE for keys that were touched, instead of
+ * firing 3 no-op EXPIREs on every single event.
+ */
+export function touchWeekly(helpers, key) {
+    if (!helpers) return;
+    if (!helpers.weeklyKeys) helpers.weeklyKeys = new Set();
+    helpers.weeklyKeys.add(key);
+}
+
 // ── Per-event handlers ─────────────────────────────────────────
 
 /** page_view — 1-2 commands */
@@ -78,7 +92,8 @@ export function handlePageView(pipe, event) {
 }
 
 /** collection_view — 2-6 commands + 1 pre-read */
-export async function handleCollectionView(pipe, event, { kv, today, weekNum }) {
+export async function handleCollectionView(pipe, event, helpers) {
+    const { kv, today, weekNum } = helpers;
     const { collection, wallet } = event;
     if (collection) {
         pipe.hincrby(`collection:${collection}:stats`, 'views', 1);
@@ -94,6 +109,7 @@ export async function handleCollectionView(pipe, event, { kv, today, weekNum }) 
             pipe.hincrby(`user:${wallet}:profile`, 'total_points', 1);
             pipe.zincrby('leaderboard:points', 1, wallet);
             pipe.zincrby(`leaderboard:points:week:${weekNum}`, 1, wallet);
+            touchWeekly(helpers, `leaderboard:points:week:${weekNum}`);
         }
     }
 }
@@ -105,7 +121,8 @@ export function handleGalleryView(pipe) {
 }
 
 /** wallet_connect — 1-5 commands + 1 pre-read (sadd doubles as check) */
-export async function handleWalletConnect(pipe, event, { kv, weekNum }) {
+export async function handleWalletConnect(pipe, event, helpers) {
+    const { kv, weekNum } = helpers;
     const { wallet, metadata } = event;
     if (!wallet) return;
 
@@ -122,10 +139,13 @@ export async function handleWalletConnect(pipe, event, { kv, weekNum }) {
         pipe.hincrby('stats:global', 'total_connects', 1);
         // Skip separate first_connect check; use profile.total_points existence
         // as proxy (saves 1 GET per new wallet connect)
-        pipe.set(`user:${wallet}:first_connect`, 1);
+        // Kept for backwards compatibility with historical data, but bounded:
+        // this key is never read and previously grew forever.
+        pipe.set(`user:${wallet}:first_connect`, 1, { ex: 60 * 60 * 24 * 365 });
         pipe.hincrby(`user:${wallet}:profile`, 'total_points', 2);
         pipe.zincrby('leaderboard:points', 2, wallet);
         pipe.zincrby(`leaderboard:points:week:${weekNum}`, 2, wallet);
+        touchWeekly(helpers, `leaderboard:points:week:${weekNum}`);
     }
 }
 
@@ -154,27 +174,45 @@ export function handleMintFailure(pipe, event) {
 }
 
 /** battle_won — updates battle leaderboard */
-export function handleBattleWon(pipe, event, { weekNum }) {
+export function handleBattleWon(pipe, event, helpers) {
+    const { weekNum } = helpers;
     const { wallet } = event;
     if (wallet && wallet !== 'anonymous') {
         pipe.hincrby(`user:${wallet}:profile`, 'battle_wins', 1);
         pipe.zincrby('leaderboard:battle_wins:all_time', 1, wallet);
         pipe.zincrby(`leaderboard:battle_wins:week:${weekNum}`, 1, wallet);
+        touchWeekly(helpers, `leaderboard:battle_wins:week:${weekNum}`);
     }
 }
 
-/** battle_result_v2 — modern V2 battle tracker */
-export function handleBattleResultV2(pipe, event, { weekNum, timestamp }) {
+/**
+ * battle_result_v2 — modern V2 battle tracker
+ *
+ * Flags on metadata:
+ *  - affectsGlobal  : count this event in global battle volume + the live feed.
+ *                     PvP emits two events (one per player); only one carries
+ *                     affectsGlobal so a match counts once.
+ *  - countsGlobalWin: count a win in stats:global.battle_wins. Defaults to
+ *                     affectsGlobal for older/legacy callers, but PvP sets it on
+ *                     BOTH sides so an attacker victory is not lost (previously
+ *                     the global win rate only ever saw defender wins).
+ *  - ladderCounted  : the caller already wrote to leaderboard:battle_wins:*
+ *                     (legacy AI path did this via incrementBattleWins). When
+ *                     true we skip the zincrby so wins are not double counted.
+ */
+export function handleBattleResultV2(pipe, event, helpers) {
+    const { weekNum, timestamp } = helpers;
     const { wallet, metadata } = event;
     const isAi = metadata?.isAi ?? true;
     const won = metadata?.won ?? false;
     const battleId = metadata?.battleId || null;
     const opponent = metadata?.opponent || null;
     const affectsGlobal = metadata?.affectsGlobal !== false;
+    const countsGlobalWin = metadata?.countsGlobalWin ?? affectsGlobal;
+    const ladderCounted = metadata?.ladderCounted === true;
 
     if (affectsGlobal) {
         pipe.hincrby('stats:global', 'battle_total', 1);
-        if (won) pipe.hincrby('stats:global', 'battle_wins', 1);
         pipe.incr('global:battle_count');
 
         const activityItem = JSON.stringify({
@@ -189,15 +227,26 @@ export function handleBattleResultV2(pipe, event, { weekNum, timestamp }) {
         pipe.ltrim('activity:battles:global', 0, 99);
     }
 
+    // Global win counter is independent of affectsGlobal: exactly one side of a
+    // match wins, so this stays consistent with battle_total.
+    if (won && countsGlobalWin) {
+        pipe.hincrby('stats:global', 'battle_wins', 1);
+    }
+
     if (wallet && wallet !== 'anonymous') {
         pipe.hincrby(`user:${wallet}:profile`, 'battle_total', 1);
         if (won) {
             pipe.hincrby(`user:${wallet}:profile`, 'battle_wins', 1);
-            pipe.zincrby('leaderboard:battle_wins:all_time', 1, wallet);
-            pipe.zincrby(`leaderboard:battle_wins:week:${weekNum}`, 1, wallet);
-            // Battle points bonus
+            if (!ladderCounted) {
+                pipe.zincrby('leaderboard:battle_wins:all_time', 1, wallet);
+                pipe.zincrby(`leaderboard:battle_wins:week:${weekNum}`, 1, wallet);
+                touchWeekly(helpers, `leaderboard:battle_wins:week:${weekNum}`);
+            }
+            // Battle points bonus (all-time AND weekly — weekly was missing)
             pipe.hincrby(`user:${wallet}:profile`, 'total_points', 5);
             pipe.zincrby('leaderboard:points', 5, wallet);
+            pipe.zincrby(`leaderboard:points:week:${weekNum}`, 5, wallet);
+            touchWeekly(helpers, `leaderboard:points:week:${weekNum}`);
         }
     }
 }
@@ -207,8 +256,9 @@ export function handleBattleResultV2(pipe, event, { weekNum, timestamp }) {
  * OPTIMIZED: merged profile hset calls, removed per-collection gas leaderboard
  * Returns { isNewMint, finalPoints, profile }
  */
-export async function handleMintSuccess(pipe, event, { kv, today, weekNum, timestamp, verifyMintTransaction }) {
-    const { wallet, collection, txHash, price, gas } = event;
+export async function handleMintSuccess(pipe, event, helpers) {
+    const { kv, verifyMintTransaction } = helpers;
+    const { wallet, collection, txHash } = event;
     if (!wallet || !collection) return { isNewMint: false, finalPoints: 0 };
 
     // 1. Verify transaction
@@ -226,19 +276,20 @@ export async function handleMintSuccess(pipe, event, { kv, today, weekNum, times
         checkPipe.get(`mint:processed:${txHash}`);
         checkPipe.hgetall(`user:${wallet}:profile`);
         const [processed, profile] = await checkPipe.exec();
-        if (processed) return { isNewMint: false, finalPoints: 0 };
+        if (processed) return { isNewMint: false, finalPoints: 0, duplicate: true };
 
         // We got profile for free — pass it through
-        return writeMintData(pipe, event, { today, weekNum, timestamp, profile });
+        return writeMintData(pipe, event, { ...helpers, profile });
     }
 
     // No txHash — fetch profile separately (rare path)
     const profile = await kv.hgetall(`user:${wallet}:profile`);
-    return writeMintData(pipe, event, { today, weekNum, timestamp, profile });
+    return writeMintData(pipe, event, { ...helpers, profile });
 }
 
 /** Internal: writes all mint data to pipeline */
-function writeMintData(pipe, event, { today, weekNum, timestamp, profile }) {
+function writeMintData(pipe, event, helpers) {
+    const { today, weekNum, timestamp, profile } = helpers;
     const { wallet, collection, txHash, price, gas } = event;
     const mintPrice = parseFloat(price) || 0;
     const gasUsed = parseFloat(gas) || 0;
@@ -266,6 +317,7 @@ function writeMintData(pipe, event, { today, weekNum, timestamp, profile }) {
 
     // ── Weekly leaderboard (1 command) ──
     pipe.zincrby(`leaderboard:mints:week:${weekNum}`, 1, wallet);
+    touchWeekly(helpers, `leaderboard:mints:week:${weekNum}`);
 
     // ── User profile — MERGED into single hset where possible ──
     // hincrby/hincrbyfloat must stay separate, but last_active goes into a batch
@@ -304,6 +356,7 @@ function writeMintData(pipe, event, { today, weekNum, timestamp, profile }) {
     pipe.hincrby(`user:${wallet}:profile`, 'total_points', finalPoints);
     pipe.zincrby('leaderboard:points', finalPoints, wallet);
     pipe.zincrby(`leaderboard:points:week:${weekNum}`, finalPoints, wallet);
+    touchWeekly(helpers, `leaderboard:points:week:${weekNum}`);
 
     // ── Points audit (2 commands) ──
     const logEntry = JSON.stringify({
@@ -426,6 +479,15 @@ const RATE_LIMITS = {
     ai_post: 5
 };
 
+export class RateLimitError extends Error {
+    constructor(retryAfterSeconds = 60) {
+        super('Rate limit exceeded');
+        this.name = 'RateLimitError';
+        this.code = 'RATE_LIMITED';
+        this.retryAfter = retryAfterSeconds;
+    }
+}
+
 export async function checkRateLimit(kv, key, action, limitOverride = null, windowSeconds = 60) {
     const limitKey = `ratelimit:${key}:${action}`;
     const limit = Number.isFinite(limitOverride) ? limitOverride : (RATE_LIMITS[action] || 100);
@@ -434,7 +496,8 @@ export async function checkRateLimit(kv, key, action, limitOverride = null, wind
     await kv.set(limitKey, 0, { ex: ttlSeconds, nx: true });
     const count = await kv.incr(limitKey);
     if (count > limit) {
-        throw new Error('Rate limit exceeded');
+        // Typed error so callers can answer 429 (not 500) with a Retry-After hint
+        throw new RateLimitError(ttlSeconds);
     }
 }
 
@@ -488,7 +551,14 @@ export async function processEvent(kv, event, opts = {}) {
     const today = getUTCDate();
     const weekNum = getWeekNumber(new Date());
 
-    const helpers = { kv, today, weekNum, timestamp, verifyMintTransaction: opts.verifyMintTransaction };
+    const helpers = {
+        kv,
+        today,
+        weekNum,
+        timestamp,
+        verifyMintTransaction: opts.verifyMintTransaction,
+        weeklyKeys: new Set()
+    };
 
     const pipe = kv.pipeline();
 
@@ -535,6 +605,12 @@ export async function processEvent(kv, event, opts = {}) {
             if (mintResult?.invalid) {
                 return { success: false, eventId, error: 'Invalid transaction' };
             }
+            // Already-processed txHash: abandon the pipeline instead of executing it.
+            // Previously the global/daily counters queued above were still written,
+            // so a retried mint inflated total_events and daily stats.
+            if (mintResult?.duplicate) {
+                return { success: true, eventId, duplicate: true };
+            }
             break;
         case 'battle_won':
             handleBattleWon(pipe, event, helpers);
@@ -572,10 +648,11 @@ export async function processEvent(kv, event, opts = {}) {
         await handleWalletTracking(pipe, event, helpers);
     }
 
-    // ── Weekly leaderboard TTL (inside pipeline, not standalone!) ──
-    pipe.expire(`leaderboard:mints:week:${weekNum}`, 60 * 60 * 24 * 56);
-    pipe.expire(`leaderboard:points:week:${weekNum}`, 60 * 60 * 24 * 56);
-    pipe.expire(`leaderboard:battle_wins:week:${weekNum}`, 60 * 60 * 24 * 56);
+    // ── Weekly leaderboard TTL ──
+    // Only for keys this event actually wrote to (was: 3 no-op EXPIREs per event).
+    for (const weeklyKey of helpers.weeklyKeys) {
+        pipe.expire(weeklyKey, 60 * 60 * 24 * 56);
+    }
 
     // ── Execute pipeline ──
     const results = await pipe.exec();

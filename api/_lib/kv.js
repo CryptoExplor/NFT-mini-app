@@ -117,17 +117,27 @@ export async function getBattleLeaderboard(timeframe = 'all_time', limit = 50) {
     );
 
     const entries = [];
-    if (results && Array.isArray(results)) {
+    if (!Array.isArray(results)) return entries;
+
+    // Upstash returns a FLAT array for `withScores` ([member, score, ...]).
+    // Older/other clients return [{ member, score }]. Support both so the
+    // helper keeps working against existing data either way.
+    const isObjectShape = results.some(item => item && typeof item === 'object' && 'member' in item);
+
+    if (isObjectShape) {
         for (const item of results) {
-            const address = item?.member || item;
-            const wins = item?.score !== undefined ? item.score : 0;
-            
+            const address = item?.member;
             if (address && typeof address === 'string') {
-                entries.push({
-                    address,
-                    wins: Number(wins),
-                });
+                entries.push({ address, wins: Number(item?.score) || 0 });
             }
+        }
+        return entries;
+    }
+
+    for (let i = 0; i < results.length; i += 2) {
+        const address = results[i];
+        if (address && typeof address === 'string') {
+            entries.push({ address, wins: Number(results[i + 1]) || 0 });
         }
     }
 

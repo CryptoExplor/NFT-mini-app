@@ -34,6 +34,7 @@ let mintSuccessHandler = null;
 let activityInterval = null;
 let feedStatusTimeout = null;
 let collectionCardClickHandler = null;
+let tabClickHandler = null;
 
 function getViewerIdentity(walletAddress) {
     const miniProfile = getMiniAppProfile();
@@ -256,7 +257,9 @@ export async function renderAnalyticsPage(params) {
         }
 
         if (activeRootView === 'arena') {
-            if (!['battle_wins', 'points', 'battle_points'].includes(normalizedType)) return;
+            // Must match getArenaMetricTabs(); 'points' was accepted here but never
+            // rendered, so it could only be reached as a dead code path.
+            if (!['battle_wins', 'battle_points'].includes(normalizedType)) return;
             activeMetric.arena = normalizedType;
             await updateRootMetric('arena', normalizedType);
             return;
@@ -307,22 +310,43 @@ export async function renderAnalyticsPage(params) {
         bindFeedHover(feedState, getActiveRefreshLabel());
     }
 
+    /**
+     * Single delegated listener for BOTH tab strips.
+     *
+     * The metric tabs on the collection route live in the header, which is not
+     * re-rendered by updateCollectionMetric(). Re-running addEventListener on
+     * those surviving nodes after every switch stacked duplicate handlers, so
+     * click #n fired n requests and n re-renders. Delegation binds exactly once
+     * and is removed in teardownAnalyticsPage().
+     */
+    function bindTabDelegation() {
+        if (tabClickHandler) {
+            document.removeEventListener('click', tabClickHandler);
+            tabClickHandler = null;
+        }
+
+        tabClickHandler = (event) => {
+            const viewButton = event.target?.closest?.('[data-analytics-view]');
+            if (viewButton) {
+                switchRootView(viewButton.getAttribute('data-analytics-view'));
+                return;
+            }
+
+            const metricButton = event.target?.closest?.('[data-analytics-metric]');
+            if (metricButton) {
+                switchMetric(metricButton.getAttribute('data-analytics-metric'));
+            }
+        };
+
+        document.addEventListener('click', tabClickHandler);
+    }
+
     function bindRootViewTabs() {
-        document.querySelectorAll('[data-analytics-view]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const view = button.getAttribute('data-analytics-view');
-                switchRootView(view);
-            });
-        });
+        bindTabDelegation();
     }
 
     function bindMetricTabs() {
-        document.querySelectorAll('[data-analytics-metric]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const type = button.getAttribute('data-analytics-metric');
-                switchMetric(type);
-            });
-        });
+        // Listeners are delegated; this only refreshes the active-metric label.
         updateMetricLabel();
     }
 
@@ -401,6 +425,10 @@ export function teardownAnalyticsPage() {
     if (collectionCardClickHandler) {
         document.removeEventListener('click', collectionCardClickHandler);
         collectionCardClickHandler = null;
+    }
+    if (tabClickHandler) {
+        document.removeEventListener('click', tabClickHandler);
+        tabClickHandler = null;
     }
     if (window.refreshAnalytics) {
         delete window.refreshAnalytics;
@@ -578,7 +606,7 @@ function renderNftView({ leaderboardData, userStats, wallet, viewerIdentity, act
                 <div class="text-sm">
                     <span class="opacity-50">Overall:</span>
                     <span class="font-bold ${parseFloat(overallConversion) > 50 ? 'text-green-400' : parseFloat(overallConversion) > 20 ? 'text-yellow-400' : 'text-red-400'}">${overallConversion}%</span>
-                    <span class="opacity-40 text-xs ml-1">wallets to success</span>
+                    <span class="opacity-40 text-xs ml-1">page views to mint success (events)</span>
                 </div>
             </div>
             ${renderEnhancedFunnel(funnel)}
@@ -654,7 +682,7 @@ function renderCollectionAnalytics({ leaderboardData, userStats, wallet, viewerI
                 <div class="text-sm">
                     <span class="opacity-50">Overall:</span>
                     <span class="font-bold ${parseFloat(overallConversion) > 50 ? 'text-green-400' : parseFloat(overallConversion) > 20 ? 'text-yellow-400' : 'text-red-400'}">${overallConversion}%</span>
-                    <span class="opacity-40 text-xs ml-1">wallets to success</span>
+                    <span class="opacity-40 text-xs ml-1">page views to mint success (events)</span>
                 </div>
             </div>
             ${renderEnhancedFunnel(funnel)}

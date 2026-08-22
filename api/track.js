@@ -7,15 +7,44 @@ import {
     VALID_EVENTS,
     processEvent,
     checkRateLimit,
-    cleanupExpiredKeys
+    cleanupExpiredKeys,
+    RateLimitError
 } from './_lib/events.js';
 
+// Events that grant points / mutate a wallet's record always need a JWT.
 const AUTH_REQUIRED_EVENTS = new Set([
     'battle_result_v2',
     'battle_won',
     'mint_success',
     'social_share'
 ]);
+
+// Events from the above list that MAY be accepted unauthenticated when they
+// carry no wallet (guest play). They only move anonymous global counters —
+// never points, profiles or leaderboards — and are rate limited by IP.
+const GUEST_ALLOWED_EVENTS = new Set(['battle_result_v2']);
+
+// Client-supplied economics are untrusted: clamp them so a caller cannot
+// inflate volume / gas / points with an arbitrary number.
+const MAX_PRICE_ETH = 100;
+const MAX_GAS_ETH = 10;
+
+function sanitizeAmount(value, max) {
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    return Math.min(num, max);
+}
+
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+        return forwarded.split(',')[0].trim();
+    }
+    if (Array.isArray(forwarded) && forwarded.length > 0) {
+        return String(forwarded[0]).trim();
+    }
+    return req.headers['x-real-ip'] || 'unknown_ip';
+}
 
 // RPC Client for on-chain verification
 const publicClient = createPublicClient({
@@ -44,6 +73,7 @@ export default async function handler(req, res) {
             campaign,
             device,
             page,
+            platform,
             metadata
         } = body;
 
@@ -52,15 +82,22 @@ export default async function handler(req, res) {
         }
 
         // ── Auth guard for points-granting events ──
-        if (AUTH_REQUIRED_EVENTS.has(type)) {
-            const auth = await verifyAuth(req);
-            if (!auth?.valid) {
-                return res.status(401).json({ error: 'Authentication required' });
-            }
+        const bodyWallet = (wallet && wallet !== 'anonymous') ? String(wallet).toLowerCase() : '';
+        let isGuestEvent = false;
 
-            const bodyWallet = wallet ? String(wallet).toLowerCase() : '';
-            if (!bodyWallet || auth.address.toLowerCase() !== bodyWallet) {
-                return res.status(403).json({ error: 'Authenticated wallet does not match event wallet' });
+        if (AUTH_REQUIRED_EVENTS.has(type)) {
+            if (!bodyWallet && GUEST_ALLOWED_EVENTS.has(type)) {
+                // Guest play: accepted, but stripped of anything wallet-scoped.
+                isGuestEvent = true;
+            } else {
+                const auth = await verifyAuth(req);
+                if (!auth?.valid) {
+                    return res.status(401).json({ error: 'Authentication required' });
+                }
+
+                if (!bodyWallet || auth.address.toLowerCase() !== bodyWallet) {
+                    return res.status(403).json({ error: 'Authenticated wallet does not match event wallet' });
+                }
             }
         }
 
@@ -69,14 +106,12 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'txHash is required for mint_success events' });
         }
 
-        const normalizedWallet = (wallet && wallet !== 'anonymous')
-            ? String(wallet).toLowerCase()
-            : wallet;
+        const normalizedWallet = isGuestEvent ? 'anonymous' : (bodyWallet || 'anonymous');
 
         const timestamp = Date.now();
 
         // ── Rate limiting ──
-        const clientIp = req.headers['x-forwarded-for'] || 'unknown_ip';
+        const clientIp = getClientIp(req);
         const rateLimitKey = (normalizedWallet && normalizedWallet !== 'anonymous') ? normalizedWallet : clientIp;
         await checkRateLimit(kv, rateLimitKey, type);
 
@@ -86,18 +121,25 @@ export default async function handler(req, res) {
         }
 
         // ── Build event payload ──
+        // Keep `platform` (used by social_share) — it used to be dropped here,
+        // so the share-platform breakdown was never recorded.
+        const safeMetadata = { ...(metadata && typeof metadata === 'object' ? metadata : {}) };
+        if (platform && typeof platform === 'string') {
+            safeMetadata.platform = safeMetadata.platform || platform.slice(0, 40);
+        }
+
         const event = {
             type,
             wallet: normalizedWallet || 'anonymous',
             collection: collection || null,
             txHash: txHash || null,
-            price: price || 0,
-            gas: gas || 0,
+            price: sanitizeAmount(price, MAX_PRICE_ETH),
+            gas: sanitizeAmount(gas, MAX_GAS_ETH),
             referrer: referrer || 'direct',
             campaign: campaign || null,
             device: device || 'unknown',
             page: page || null,
-            metadata: metadata || {},
+            metadata: safeMetadata,
             timestamp
         };
 
@@ -110,9 +152,18 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: result.error || 'Event processing failed' });
         }
 
-        return res.status(200).json({ success: true, eventId: result.eventId });
+        return res.status(200).json({
+            success: true,
+            eventId: result.eventId,
+            duplicate: Boolean(result.duplicate)
+        });
 
     } catch (error) {
+        // Throttling is a client-actionable condition, not a server fault.
+        if (error instanceof RateLimitError || error?.code === 'RATE_LIMITED') {
+            res.setHeader('Retry-After', String(error.retryAfter || 60));
+            return res.status(429).json({ error: 'Rate limit exceeded', retryAfter: error.retryAfter || 60 });
+        }
         console.error('Track error:', error);
         return res.status(500).json({ error: 'Failed to track event' });
     }

@@ -24,7 +24,9 @@ export function renderEnhancedFunnel(funnel) {
         <div class="space-y-1">
             <div class="flex flex-col gap-3">
                 ${funnel.map((step, i) => {
-                    const width = Math.max((step.count / maxCount) * 100, 12);
+                    // Counts are event counts, so a later step can exceed an earlier
+                    // one; clamp so the bar never overflows its track.
+                    const width = Math.min(Math.max((step.count / maxCount) * 100, 12), 100);
                     const icon = icons[step.step] || 'CHART';
                     const safeStepLabel = escapeHtml(step.label || step.step.replace(/_/g, ' '));
 
@@ -42,7 +44,7 @@ export function renderEnhancedFunnel(funnel) {
                                     </div>
                                 </div>
                                 <div class="w-16 text-right flex-shrink-0">
-                                    <div class="text-[10px] opacity-40 uppercase">Conv.</div>
+                                    <div class="text-[10px] opacity-40 uppercase" title="Share of the previous step (event counts, not unique wallets)">Conv.</div>
                                     <div class="text-xs font-bold text-indigo-400">${step.conversion || '100'}%</div>
                                 </div>
                             </div>

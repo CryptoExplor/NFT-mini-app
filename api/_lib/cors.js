@@ -16,13 +16,34 @@ const PRODUCTION_ORIGIN = 'https://base-mintapp.vercel.app';
  * Add preview / staging URLs here as needed; never use a pattern match or
  * startsWith('http') check.
  */
-const ALLOWED_ORIGINS = new Set([
+const DEFAULT_ORIGINS = [
     PRODUCTION_ORIGIN,
     // Local development
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:4173',
-]);
+];
+
+/**
+ * Extra origins come from env so preview deployments, custom domains and the
+ * mini-app host can be allowed WITHOUT hard-coding or pattern-matching:
+ *   ALLOWED_ORIGINS="https://foo.vercel.app,https://mint.example.com"
+ * Vercel also injects VERCEL_URL / VERCEL_BRANCH_URL for the current deploy,
+ * which we trust — otherwise every preview build silently loses analytics.
+ */
+function envOrigins() {
+    const list = String(process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(o => o.trim())
+        .filter(Boolean);
+
+    for (const host of [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
+        if (host) list.push(host.startsWith('http') ? host : `https://${host}`);
+    }
+    return list;
+}
+
+const ALLOWED_ORIGINS = new Set([...DEFAULT_ORIGINS, ...envOrigins()]);
 
 /**
  * Return the origin to echo in Access-Control-Allow-Origin.

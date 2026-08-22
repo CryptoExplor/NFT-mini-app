@@ -23,15 +23,32 @@ function shouldThrottle(type, data) {
     return false;
 }
 
+// Server-side rate limiting (HTTP 429) — stop hammering until Retry-After passes.
+let _trackBackoffUntil = 0;
+
 /**
  * Track a structured event to backend analytics
+ *
+ * IMPORTANT: /api/track requires a JWT for points-granting events
+ * (mint_success, battle_result_v2, battle_won, social_share). The request must
+ * therefore carry BOTH the bearer token and the cookie:
+ *  - `credentials: 'include'` so the HttpOnly `jwt` cookie is sent cross-origin
+ *  - `Authorization: Bearer` as the fallback for browsers/webviews that block
+ *    third-party cookies (Safari, in-app Farcaster webview), where the cookie
+ *    alone silently produced 401s and dropped every mint/battle event.
+ *
  * @param {string} type - Event type (page_view, mint_success, etc.)
  * @param {Object} data - Event metadata
+ * @returns {Promise<{ok: boolean, status?: number, error?: string, skipped?: string}>}
  */
 export async function trackEvent(type, data = {}) {
     try {
         // Client-side dedup: skip if same event fired recently
-        if (shouldThrottle(type, data)) return;
+        if (shouldThrottle(type, data)) return { ok: false, skipped: 'throttled' };
+
+        if (Date.now() < _trackBackoffUntil) {
+            return { ok: false, skipped: 'backoff' };
+        }
 
         // Enrich with client-side metadata
         const enriched = {
@@ -42,15 +59,36 @@ export async function trackEvent(type, data = {}) {
             campaign: getCampaign()
         };
 
-        // Fire and forget (don't block UI)
-        fetch(`${API_BASE}/api/track`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(enriched)
-        }).catch(err => console.warn('Track failed:', err));
+        const headers = { 'Content-Type': 'application/json' };
+        const session = getAuthToken();
+        if (session?.token) {
+            headers.Authorization = `Bearer ${session.token}`;
+        }
 
+        const response = await fetch(`${API_BASE}/api/track`, {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify(enriched)
+        });
+
+        if (response.status === 429) {
+            const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+            _trackBackoffUntil = Date.now() + (Number.isFinite(retryAfter) ? retryAfter : 60) * 1000;
+            console.warn(`Track rate limited (${type}); backing off ${retryAfter}s`);
+            return { ok: false, status: 429 };
+        }
+
+        if (!response.ok) {
+            // Surface it instead of swallowing: a 401 here means the event never landed.
+            console.warn(`Track rejected (${type}): HTTP ${response.status}`);
+            return { ok: false, status: response.status };
+        }
+
+        return { ok: true, status: response.status };
     } catch (error) {
         console.warn('trackEvent error:', error);
+        return { ok: false, error: error?.message || 'network error' };
     }
 }
 
@@ -58,7 +96,7 @@ export async function trackEvent(type, data = {}) {
  * Track a successful mint (convenience wrapper)
  */
 export function trackMint(wallet, collection, txHash, price = 0, gas = 0) {
-    trackEvent('mint_success', { wallet, collection, txHash, price, gas });
+    return trackEvent('mint_success', { wallet, collection, txHash, price, gas });
 }
 
 /**
@@ -139,7 +177,7 @@ export function trackBattleStarted(wallet, { isAi = true, challengeId = null, op
  * Track V2 battle result
  */
 export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0, opponent = null, battleId = null } = {}) {
-    trackEvent('battle_result_v2', {
+    return trackEvent('battle_result_v2', {
         wallet,
         metadata: { won, isAi, rounds, opponent, battleId }
     });
@@ -149,10 +187,12 @@ export function trackBattleResult(wallet, { won = false, isAi = true, rounds = 0
  * Track social share event
  */
 export function trackShare(wallet, platform = 'farcaster', metadata = {}) {
-    trackEvent('social_share', {
+    // `platform` must live inside metadata — the API only persists known fields,
+    // so a top-level platform was silently discarded.
+    return trackEvent('social_share', {
         wallet,
         platform,
-        metadata
+        metadata: { ...metadata, platform }
     });
 }
 
@@ -236,7 +276,12 @@ export async function getUserStats(wallet) {
         // Allow relative paths in dev
         // if (!API_BASE && import.meta.env.DEV) { ... }
 
-        const response = await fetch(`${API_BASE}/api/user?wallet=${encodeURIComponent(wallet)}`);
+        const session = getAuthToken();
+        const headers = session?.token ? { Authorization: `Bearer ${session.token}` } : {};
+        const response = await fetch(`${API_BASE}/api/user?wallet=${encodeURIComponent(wallet)}`, {
+            credentials: 'include',
+            headers
+        });
 
         // Check content type before parsing
         const contentType = response.headers.get("content-type");
@@ -374,8 +419,10 @@ export function getAuthToken() {
  */
 function isTokenExpired(expiresAtMs) {
     if (!expiresAtMs) return true;
-    // 30s buffer to avoid edge-case races
-    return expiresAtMs < (Date.now() - 30_000);
+    // Expire 30s EARLY to avoid edge-case races. The previous form
+    // (`Date.now() - 30_000`) did the opposite: it kept treating the token as
+    // valid for 30s after it had already expired server-side.
+    return expiresAtMs < (Date.now() + 30_000);
 }
 
 /**

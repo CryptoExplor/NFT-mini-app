@@ -387,13 +387,22 @@ export async function renderBattlePage() {
 
                     // V2 Analytics: AI battles still report from the client.
                     // PvP battles are emitted server-side after the replay record is saved.
+                    // This is the ONLY writer for AI wins on the arena ladder — the
+                    // /api/battle?action=record endpoint no longer increments it too.
                     if (isAi) {
+                        // Wait for the replay record so the event carries a battleId;
+                        // firing immediately raced the save and produced feed entries
+                        // with no "Watch replay" link.
+                        const resolvedBattleId = persistedBattlePromise
+                            ? await persistedBattlePromise.catch(() => null)
+                            : persistedBattleId;
+
                         trackBattleResult(state.wallet?.address, {
                             won: playerWon,
                             isAi: true,
                             rounds: totalRounds,
                             opponent: enemyCombatStats.name || null,
-                            battleId: persistedBattleId || null,
+                            battleId: resolvedBattleId || persistedBattleId || null,
                         });
                     }
                     // Refresh leaderboard if visible
