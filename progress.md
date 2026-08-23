@@ -47,3 +47,16 @@ Original prompt: do all and make sure my app work on web, farcaster miniapp and 
   - CI added (tests + build + inline-handler and leaked-secret checks); 78 tests
   - the earlier note about avoiding a CSP because it risks breaking embeds is now
     resolved: frame-ancestors is deliberately left unset so mini-app embedding works
+
+- 2026-08-23: Documentation cleanup pass.
+  - assessed all audit files: ANALYTICS_AUDIT.md (all done), FULL_APP_AUDIT.md (all done),
+    AUDIT_LOG.md (all done) — all three are purely historical reference now
+  - rewrote AI_CONTEXT.md to match the live codebase: Phase 7 production-hardened,
+    ~25 new files added to tree, 15+ new systems in status flags, anti-cheat/ownership/CSP
+    documented, growth systems documented as browser-local, environment variables updated,
+    known architecture issues cleaned (removed fixed items), execution checklist rewritten
+    for production deployment and 1K user growth focus
+  - merged WHALE_TARGETING_ENGINE.md + 1K_USER_EXECUTION.md into a single
+    GROWTH_PLAYBOOK.md — eliminates the cross-reference and consolidates all
+    growth execution into one actionable document
+  - progress.md updated with this entry
