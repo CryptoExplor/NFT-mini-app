@@ -105,7 +105,8 @@ export async function trackEvent(type, data = {}, options = {}) {
         // Client-side dedup: skip if same event fired recently
         if (shouldThrottle(type, data)) return { ok: false, skipped: 'throttled' };
 
-        if (Date.now() < _trackBackoffUntil) {
+        // Generic backoff must never block confirmed on-chain mint writes
+        if (type !== 'mint_success' && Date.now() < _trackBackoffUntil) {
             return { ok: false, skipped: 'backoff' };
         }
 
@@ -140,8 +141,8 @@ export async function trackEvent(type, data = {}, options = {}) {
             : {};
 
         if (response.status === 429) {
-            const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-            _trackBackoffUntil = Date.now() + (Number.isFinite(retryAfter) ? retryAfter : 60) * 1000;
+            const retryAfter = parseInt(response.headers.get('Retry-After') || '10', 10);
+            _trackBackoffUntil = Date.now() + (Number.isFinite(retryAfter) ? retryAfter : 10) * 1000;
             console.warn(`Track rate limited (${type}); backing off ${retryAfter}s`);
             return { ok: false, status: 429, error: payload?.error || 'Rate limited' };
         }
@@ -169,7 +170,7 @@ export async function trackEvent(type, data = {}, options = {}) {
 }
 
 async function sendMintAnalytics(payload, options = {}) {
-    const retryDelays = options.retry === false ? [0] : [0, 1_500, 3_000];
+    const retryDelays = options.retry === false ? [0] : [0, 1_000, 2_000];
     let result = { ok: false, error: 'Analytics write did not run' };
 
     for (let attempt = 0; attempt < retryDelays.length; attempt++) {
@@ -182,7 +183,7 @@ async function sendMintAnalytics(payload, options = {}) {
         });
         if (result.ok) return result;
 
-        const transient = !result.status || result.status === 400 || result.status === 408 || result.status === 425 || result.status >= 500;
+        const transient = !result.status || result.status === 400 || result.status === 408 || result.status === 425 || result.status === 429 || result.status >= 500;
         if (!transient) break;
     }
 

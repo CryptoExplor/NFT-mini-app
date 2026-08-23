@@ -241,8 +241,56 @@ export async function saveBattleRecord(record) {
  */
 export async function getUserBattleHistory(address, limit = 50) {
     const raw = await redis.lrange(`history:user:${String(address).toLowerCase()}`, 0, limit - 1);
-    if (!raw) return [];
-    return raw.map(r => (typeof r === 'string' ? JSON.parse(r) : r));
+    if (!raw || !Array.isArray(raw)) return [];
+
+    const items = [];
+    const missingHashes = [];
+
+    for (const r of raw) {
+        if (!r) continue;
+        if (typeof r === 'object') {
+            items.push(r);
+            continue;
+        }
+        if (typeof r === 'string') {
+            try {
+                const parsed = JSON.parse(r);
+                if (parsed && typeof parsed === 'object') {
+                    items.push(parsed);
+                    continue;
+                }
+            } catch {
+                // Not valid JSON — check if it is a 64-char battleId hash
+            }
+
+            const trimmed = r.trim();
+            if (/^[a-f0-9]{64}$/i.test(trimmed)) {
+                missingHashes.push(trimmed);
+            }
+        }
+    }
+
+    if (missingHashes.length > 0) {
+        try {
+            const pipe = redis.pipeline();
+            missingHashes.forEach(h => pipe.get(`battle:${h}`));
+            const records = await pipe.exec();
+            for (let i = 0; i < records.length; i++) {
+                const rec = records[i];
+                if (!rec) continue;
+                try {
+                    const parsed = typeof rec === 'string' ? JSON.parse(rec) : rec;
+                    if (parsed && typeof parsed === 'object') {
+                        items.push({ battleId: missingHashes[i], ...parsed });
+                    }
+                } catch { }
+            }
+        } catch (err) {
+            console.warn('[KV] Failed to fetch missing battle hashes:', err?.message);
+        }
+    }
+
+    return items;
 }
 
 /**
@@ -251,5 +299,10 @@ export async function getUserBattleHistory(address, limit = 50) {
 export async function getBattleRecord(battleId) {
     const raw = await redis.get(`battle:${battleId}`);
     if (!raw) return null;
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+        return null;
+    }
 }
+

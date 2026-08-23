@@ -547,21 +547,27 @@ export async function updateReputation(kv, wallet) {
 // ── Rate limiting ──────────────────────────────────────────────
 
 const RATE_LIMITS = {
-    mint_click: 20,
-    collection_view: 60,
-    wallet_connect: 10,
-    page_view: 100,
-    // Client-side historical reconciliation flushes up to 8 receipt-proven
-    // mints in one bounded batch. Wallet+IP scoping in track.js limits abuse.
-    mint_success: 12,
-    social_share: 20,
-    battle_result_v2: 20,
-    replay_conversion: 60,
-    ai_post: 5
+    mint_click: 60,
+    collection_view: 120,
+    wallet_connect: 30,
+    page_view: 200,
+    gallery_view: 120,
+    mint_attempt: 60,
+    tx_sent: 60,
+    mint_failure: 60,
+    // Client-side historical reconciliation flushes receipt-proven
+    // mints in bounded batches. Wallet+IP scoping in track.js limits abuse.
+    mint_success: 120,
+    social_share: 60,
+    battle_result_v2: 60,
+    battle_started_v2: 60,
+    battle_loadout_built: 60,
+    replay_conversion: 120,
+    ai_post: 10
 };
 
 export class RateLimitError extends Error {
-    constructor(retryAfterSeconds = 60) {
+    constructor(retryAfterSeconds = 10) {
         super('Rate limit exceeded');
         this.name = 'RateLimitError';
         this.code = 'RATE_LIMITED';

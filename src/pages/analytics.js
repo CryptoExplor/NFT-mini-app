@@ -74,11 +74,31 @@ export async function renderAnalyticsPage(params) {
 
     app.innerHTML = renderLoadingState();
 
-    async function loadUserStatsOnce() {
+    async function loadUserStatsOnce(force = false) {
         if (!viewerWallet) return null;
-        if (cachedUserStats) return cachedUserStats;
+        if (cachedUserStats && !force) return cachedUserStats;
         cachedUserStats = await getUserStats(viewerWallet).catch(() => null);
         return cachedUserStats;
+    }
+
+    async function refreshUserStats(force = true) {
+        if (!viewerWallet) return null;
+        const freshUserStats = await loadUserStatsOnce(force);
+        const insightsEl = document.getElementById('wallet-insights-container');
+        if (insightsEl) {
+            insightsEl.innerHTML = renderWalletInsights(freshUserStats, state.wallet, viewerIdentity, {
+                mode: isCollectionRoute ? 'nft' : activeRootView
+            });
+        }
+        const historyEl = document.getElementById('mint-history-container');
+        if (historyEl) {
+            historyEl.innerHTML = renderMintHistory(freshUserStats);
+        }
+        const journeyEl = document.getElementById('journey-timeline-container');
+        if (journeyEl) {
+            journeyEl.innerHTML = renderJourneyTimeline(freshUserStats);
+        }
+        return freshUserStats;
     }
 
     async function loadArenaData(type = activeMetric.arena) {
@@ -174,16 +194,31 @@ export async function renderAnalyticsPage(params) {
     bindThemeToggleEvents();
 
     walletUpdateHandler = () => {
+        cachedUserStats = null;
+        cachedNftData = null;
+        cachedArenaData = null;
+        cachedCollectionData = null;
         setTimeout(() => renderAnalyticsPage(params), 300);
     };
     document.addEventListener(EVENTS.WALLET_UPDATE, walletUpdateHandler);
 
-    mintSuccessHandler = () => {
-        setTimeout(() => renderAnalyticsPage(params), 300);
+    mintSuccessHandler = async () => {
+        cachedUserStats = null;
+        cachedNftData = null;
+        cachedArenaData = null;
+        cachedCollectionData = null;
+        await refreshUserStats(true).catch(() => {});
+        setTimeout(() => renderAnalyticsPage(params), 200);
     };
     document.addEventListener(EVENTS.MINT_SUCCESS, mintSuccessHandler);
 
-    window.refreshAnalytics = () => renderAnalyticsPage(params);
+    window.refreshAnalytics = () => {
+        cachedUserStats = null;
+        cachedNftData = null;
+        cachedArenaData = null;
+        cachedCollectionData = null;
+        renderAnalyticsPage(params);
+    };
 
     // Pick up any confirmed mint left in the persistent browser outbox. The
     // six-hour OpenSea discovery is normally started at wallet connection;
@@ -325,7 +360,7 @@ export async function renderAnalyticsPage(params) {
         try {
             const result = await reconcileMintAnalytics(viewerWallet, {
                 force: true,
-                limit: 8,
+                limit: 16,
                 maxPages: 3
             });
             const message = result.synced > 0
@@ -336,8 +371,20 @@ export async function renderAnalyticsPage(params) {
                         ? 'local history checked'
                         : 'history up to date';
             updateFeedStatus(message);
-            // A successful reconciliation emits one mint:success event, which
-            // refreshes feed + user cards through the existing page listener.
+
+            await refreshUserStats(true);
+            const view = isCollectionRoute ? 'nft' : activeRootView;
+            const metric = isCollectionRoute ? activeMetric.collection : activeMetric[view];
+            const data = await getLeaderboard(
+                isCollectionRoute
+                    ? { type: metric, collection: slug || undefined }
+                    : buildRootLeaderboardRequest(view, metric, viewerWallet)
+            ).catch(() => null);
+
+            if (data) {
+                renderLeaderboardContainer(data, walletAddressOrNull(), viewerIdentity, view === 'arena');
+                renderFeedContainer(data?.recentActivity || [], view === 'arena' ? 'battle' : 'mint', walletAddressOrNull(), viewerIdentity);
+            }
         } catch {
             updateFeedStatus('history sync unavailable');
         } finally {
@@ -396,6 +443,10 @@ export async function renderAnalyticsPage(params) {
             if (stateRef.isPaused) return;
 
             try {
+                if (viewerWallet) {
+                    refreshUserStats(true).catch(() => {});
+                }
+
                 if (collectionMode) {
                     const data = await getLeaderboard({
                         type: activeMetric.collection,
@@ -568,7 +619,7 @@ function renderArenaView({ leaderboardData, userStats, wallet, viewerIdentity, b
     const walletConnected = Boolean(wallet?.isConnected);
 
     return `
-        ${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'arena' })}
+        <div id="wallet-insights-container">${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'arena' })}</div>
 
         <section class="glass-card p-5 rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-500/5 via-transparent to-cyan-500/5">
             <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
@@ -641,7 +692,7 @@ function renderNftView({ leaderboardData, userStats, wallet, viewerIdentity, act
 
     return `
         ${renderSocialProofMarquee(socialProof)}
-        ${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'nft' })}
+        <div id="wallet-insights-container">${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'nft' })}</div>
 
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             ${summaryCard(renderAnalyticsIcon('EYE', 'text-indigo-300'), 'Total Views', stats.totalViews || 0, 'indigo')}
@@ -706,8 +757,8 @@ function renderNftView({ leaderboardData, userStats, wallet, viewerIdentity, act
             </div>
         </div>
 
-        ${renderMintHistory(userStats)}
-        ${renderJourneyTimeline(userStats)}
+        <div id="mint-history-container">${renderMintHistory(userStats)}</div>
+        <div id="journey-timeline-container">${renderJourneyTimeline(userStats)}</div>
     `;
 }
 
@@ -720,7 +771,7 @@ function renderCollectionAnalytics({ leaderboardData, userStats, wallet, viewerI
     const recentActivity = leaderboardData?.recentActivity || [];
 
     return `
-        ${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'nft' })}
+        <div id="wallet-insights-container">${renderWalletInsights(userStats, wallet, viewerIdentity, { mode: 'nft' })}</div>
 
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             ${summaryCard(renderAnalyticsIcon('EYE', 'text-indigo-300'), 'Total Views', stats.totalViews || 0, 'indigo')}

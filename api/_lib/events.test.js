@@ -346,7 +346,7 @@ test('rate limiting throws a typed error the API can map to 429', async () => {
 
     for (let i = 0; i < 15; i++) {
         try {
-            await checkRateLimit(kv, WALLET, 'mint_success');
+            await checkRateLimit(kv, WALLET, 'mint_success', 5);
         } catch (err) {
             thrown = err;
             break;

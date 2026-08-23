@@ -218,7 +218,22 @@ const MINT_TOPICS = {
 const ZERO_ADDRESS_TOPIC = `0x${'0'.repeat(64)}`;
 
 function getCollectionConfig(collectionSlug) {
-    const collection = COLLECTIONS_MAP[String(collectionSlug || '').toLowerCase()];
+    const raw = String(collectionSlug || '').toLowerCase().trim();
+    const normalized = raw.replace(/_/g, '-');
+    let collection = COLLECTIONS_MAP[normalized] || COLLECTIONS_MAP[raw];
+    if (!collection) {
+        collection = Object.values(COLLECTIONS_MAP).find((c) => {
+            const cSlug = String(c?.slug || '').toLowerCase();
+            const cName = String(c?.name || '').toLowerCase();
+            const cAddr = String(c?.contractAddress || '').toLowerCase();
+            return (
+                cSlug === normalized ||
+                cSlug.replace(/-/g, '') === normalized.replace(/-/g, '') ||
+                cName === raw ||
+                cAddr === raw
+            );
+        });
+    }
     const address = String(collection?.contractAddress || '').toLowerCase();
     if (!collection || !/^0x[a-f0-9]{40}$/.test(address)) return null;
     return { collection, address };
