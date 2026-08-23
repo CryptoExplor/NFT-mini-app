@@ -7,8 +7,10 @@ import { state, EVENTS } from '../state.js';
 import { connectWallet, disconnectWallet, wagmiAdapter } from '../wallet.js';
 import { router } from '../lib/router.js';
 import { fetchNFTsByWallet, extractCollections } from '../lib/opensea.js';
+import { getNFTMedia, toBrowserMediaUrl } from '../lib/nftMedia.js';
 import { showNFTDetailModal } from '../components/NFTDetailModal.js';
 import { renderIcon } from '../utils/icons.js';
+import { sanitizeUrl } from '../utils/html.js';
 
 import { applyMiniAppAvatar, getWalletIdentityLabel } from '../utils/profile.js';
 import { getBalance } from '@wagmi/core';
@@ -165,6 +167,12 @@ ${renderIcon('CHEVRON_LEFT', 'w-5 h-5')}
 
                 <!-- Active Filters -->
                 <div id="active-filters" class="hidden mb-4 flex-wrap gap-2"></div>
+
+                <!-- Bandwidth policy -->
+                <div class="gallery-data-saver mb-4" role="status">
+                    <span class="gallery-data-saver-icon">${renderIcon('IMAGE', 'w-4 h-4')}</span>
+                    <span><strong>Data saver</strong> · OpenSea previews load while browsing. Full resolution loads only when you open an NFT.</span>
+                </div>
 
                 <!-- NFT Grid -->
                 <div id="gallery-grid" class="gallery-grid gallery-grid-large">
@@ -394,27 +402,47 @@ function buildNFTCard(nft, index) {
     const displayName = esc(nft.name || `#${nft.identifier}`);
     const collectionName = esc((nft.collection || '').replace(/-/g, ' '));
     const safeId = esc(nft.identifier);
+    const previewUrl = sanitizeUrl(toBrowserMediaUrl(getNFTMedia(nft).previewImageUrl));
+    const estimatedValue = nft.estimated_value_usd === null || nft.estimated_value_usd === undefined || nft.estimated_value_usd === ''
+        ? Number.NaN
+        : Number(nft.estimated_value_usd);
+    const valueLabel = Number.isFinite(estimatedValue)
+        ? new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: 'USD',
+            maximumFractionDigits: estimatedValue < 1 ? 2 : 0
+        }).format(estimatedValue)
+        : '';
 
     return `
-        <div class="nft-card glass-card rounded-xl overflow-hidden cursor-pointer group" data-index="${index}">
+        <button type="button" class="nft-card glass-card rounded-xl overflow-hidden cursor-pointer group text-left w-full" data-index="${index}"
+            aria-label="Open ${displayName}; full resolution loads on open">
             <div class="nft-card-image aspect-square overflow-hidden relative bg-black/30">
-                ${nft.image_url
-            ? `<img src="${encodeURI(nft.image_url)}" alt="${displayName}" loading="lazy"
+                ${previewUrl
+            ? `<img src="${esc(previewUrl)}" alt="${displayName}" loading="lazy" decoding="async" fetchpriority="low"
+                            width="480" height="480"
                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 img-fade-in"
                             />`
             : `<div class="w-full h-full flex items-center justify-center text-slate-500 opacity-30">${renderIcon('IMAGE', 'w-12 h-12')}</div>`
         }
+                <span class="nft-preview-badge">Preview</span>
+                ${(nft.is_suspicious || nft.is_nsfw || nft.is_disabled)
+                    ? '<span class="nft-card-warning">Review item</span>'
+                    : ''}
                 <!-- Hover Overlay -->
-                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
-                    <span class="text-xs bg-indigo-500/80 backdrop-blur-sm px-2 py-1 rounded-full font-medium">View Details</span>
+                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity duration-300 flex items-end p-3">
+                    <span class="text-xs bg-indigo-500/80 backdrop-blur-sm px-2 py-1 rounded-full font-medium">Open full details</span>
                 </div>
             </div>
             <div class="p-3">
                 <div class="text-sm font-bold truncate">${displayName}</div>
                 <div class="text-xs opacity-50 truncate capitalize mt-0.5">${collectionName}</div>
-                <div class="text-[10px] font-mono opacity-30 mt-1">#${safeId}</div>
+                <div class="flex items-center justify-between gap-2 mt-1">
+                    <span class="text-[10px] font-mono opacity-30 truncate">#${safeId}</span>
+                    ${valueLabel ? `<span class="text-[10px] font-semibold text-emerald-300">${esc(valueLabel)} est.</span>` : ''}
+                </div>
             </div>
-        </div>
+        </button>
     `;
 }
 

@@ -20,6 +20,9 @@ The flagship feature — a real-time turn-based battle system where NFTs from di
 ## 📦 Platform Features
 
 - **NFT Minting** — mint from curated Base collections with auto-discovery
+- **Bandwidth-smart OpenSea gallery** — lazy display previews while browsing, original-resolution images only after opening an item, and opt-in animation playback
+- **Rich NFT details** — OpenSea rarity rank, estimated value, ownership, traits, trust flags, and marketplace links
+- **Reliable mint analytics** — browser-persistent outbox, local/OpenSea historical reconciliation, receipt-derived token IDs and rich live-feed cards; no dedicated or always-on server required
 - **Points & Gamification** — streaks, status badges, global leaderboards
 - **Growth & Distribution** — automated social sharing, replay-to-play conversion, featured battle highlights
 - **Analytics** — retention cohorts, conversion funnels, wallet insights
@@ -91,6 +94,10 @@ KV_REST_API_TOKEN=
 # STRICT_BATTLE_OWNERSHIP=true                  # reject unverifiable fighters
 # ALLOW_INSECURE_ADMIN=true                     # local-only admin auth bypass
 ```
+
+There is no dedicated or always-on server process. Shared analytics use the existing Vercel
+serverless `/api` functions and Upstash REST storage. The browser outbox works without
+OpenSea; `OPENSEA_API_KEY` additionally enables one-year account mint discovery.
 
 ### Testing
 
@@ -184,7 +191,9 @@ would be deployed as its own function. A test enforces the budget so the
 | Arena results | Wins/points only count for a battle the server produced and stored: PvP is simulated server-side, AI battles are re-simulated from the seed and rejected on mismatch, and each battle counts once per wallet |
 | Fighter stats | Every client-supplied stat is clamped to the balance envelope before simulation |
 | NFT ownership | Verified on-chain (`ownerOf`/`balanceOf`) when posting a challenge, defending a fight and recording an AI battle, with an OpenSea inventory fallback |
+| Mint analytics | A mint is counted only when the configured collection emitted an ERC-721/1155 mint from the zero address to the wallet; transaction hashes are idempotent, and failed browser writes remain in a local outbox for retry |
 | API keys | Held server-side; the browser talks to `/api/nfts` instead of OpenSea directly |
+| NFT media bandwidth | Cards use OpenSea `display_image_url`; `original_image_url` is fetched only after the user opens an NFT, while animation media requires an explicit play action |
 | Auth | SIWE/SIWF with single-use nonces and short-lived JWTs; admin routes need an allowlisted wallet |
 | XSS | Third-party NFT metadata is escaped, URLs sanitised, and a CSP without `script-src 'unsafe-inline'` is enforced |
 

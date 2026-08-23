@@ -1,5 +1,5 @@
 import { router } from '../lib/router.js';
-import { getBattleHistory, getLeaderboard, getUserStats } from '../lib/api.js';
+import { getBattleHistory, getLeaderboard, getUserStats, reconcileMintAnalytics } from '../lib/api.js';
 import { state, EVENTS } from '../state.js';
 import { shortenAddress } from '../utils/dom.js';
 import { escapeHtml } from '../utils/html.js';
@@ -185,6 +185,13 @@ export async function renderAnalyticsPage(params) {
 
     window.refreshAnalytics = () => renderAnalyticsPage(params);
 
+    // Pick up any confirmed mint left in the persistent browser outbox. The
+    // six-hour OpenSea discovery is normally started at wallet connection;
+    // this lightweight pass only flushes what is already known.
+    if (viewerWallet) {
+        reconcileMintAnalytics(viewerWallet, { discover: false }).catch(() => { });
+    }
+
     function renderRootView() {
         if (activeRootView === 'nft') {
             const data = cachedNftData?.leaderboardData || {};
@@ -310,6 +317,34 @@ export async function renderAnalyticsPage(params) {
         bindFeedHover(feedState, getActiveRefreshLabel());
     }
 
+    async function syncMintHistory(button) {
+        if (!viewerWallet || button?.disabled) return;
+        if (button) button.disabled = true;
+        updateFeedStatus('syncing history…');
+
+        try {
+            const result = await reconcileMintAnalytics(viewerWallet, {
+                force: true,
+                limit: 8,
+                maxPages: 3
+            });
+            const message = result.synced > 0
+                ? `synced ${result.synced}${result.pending > 0 ? ` · ${result.pending} pending` : ''}`
+                : result.pending > 0
+                    ? `${result.pending} pending retry`
+                    : result.discoveryError
+                        ? 'local history checked'
+                        : 'history up to date';
+            updateFeedStatus(message);
+            // A successful reconciliation emits one mint:success event, which
+            // refreshes feed + user cards through the existing page listener.
+        } catch {
+            updateFeedStatus('history sync unavailable');
+        } finally {
+            if (button?.isConnected) button.disabled = false;
+        }
+    }
+
     /**
      * Single delegated listener for BOTH tab strips.
      *
@@ -326,6 +361,12 @@ export async function renderAnalyticsPage(params) {
         }
 
         tabClickHandler = (event) => {
+            const syncButton = event.target?.closest?.('[data-mint-history-sync]');
+            if (syncButton) {
+                syncMintHistory(syncButton);
+                return;
+            }
+
             const viewButton = event.target?.closest?.('[data-analytics-view]');
             if (viewButton) {
                 switchRootView(viewButton.getAttribute('data-analytics-view'));
@@ -508,6 +549,17 @@ function renderMetricTabs(tabs, activeType) {
     `).join('');
 }
 
+function renderMintSyncControl(wallet) {
+    if (!wallet?.isConnected) return '';
+    return `
+        <button type="button" data-mint-history-sync
+            class="text-[10px] font-semibold px-2 py-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition inline-flex items-center gap-1"
+            title="Reconcile this wallet's saved and OpenSea mint history">
+            ${renderIcon('HISTORY', 'w-3 h-3')} Sync history
+        </button>
+    `;
+}
+
 function renderArenaView({ leaderboardData, userStats, wallet, viewerIdentity, battleAnalytics, activeMetric, refreshLabel }) {
     const stats = leaderboardData?.stats || {};
     const leaderboard = leaderboardData?.leaderboard || [];
@@ -643,7 +695,10 @@ function renderNftView({ leaderboardData, userStats, wallet, viewerIdentity, act
                         <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                         Live Mint Feed
                     </h3>
-                    <span id="feed-status" class="text-[10px] opacity-40 font-mono">${refreshLabel}</span>
+                    <div class="flex items-center gap-2">
+                        <span id="feed-status" class="text-[10px] opacity-40 font-mono">${refreshLabel}</span>
+                        ${renderMintSyncControl(wallet)}
+                    </div>
                 </div>
                 <div class="space-y-2 max-h-[450px] overflow-y-auto custom-scrollbar pr-1" id="activity-feed">
                     ${renderRecentActivity(recentActivity, wallet?.address, viewerIdentity, { mode: 'mint' })}
@@ -716,7 +771,10 @@ function renderCollectionAnalytics({ leaderboardData, userStats, wallet, viewerI
                         <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                         Live Feed
                     </h3>
-                    <span id="feed-status" class="text-[10px] opacity-40 font-mono">${refreshLabel}</span>
+                    <div class="flex items-center gap-2">
+                        <span id="feed-status" class="text-[10px] opacity-40 font-mono">${refreshLabel}</span>
+                        ${renderMintSyncControl(wallet)}
+                    </div>
                 </div>
                 <div class="space-y-2 max-h-[450px] overflow-y-auto custom-scrollbar pr-1" id="activity-feed">
                     ${renderRecentActivity(recentActivity, wallet?.address, viewerIdentity, { mode: 'mint' })}

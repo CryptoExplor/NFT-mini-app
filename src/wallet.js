@@ -207,9 +207,11 @@ function handleAccountChange(account) {
     // Skip auto-reconnects on page refresh by checking sessionStorage
     if (account.isConnected && !wasConnected && account.address) {
         const trackedKey = `wallet_tracked_${account.address.toLowerCase()}`;
-        if (!sessionStorage.getItem(trackedKey)) {
-            sessionStorage.setItem(trackedKey, '1');
-            import('./lib/api.js').then(async ({ trackWalletConnect }) => {
+        const shouldTrackConnect = !sessionStorage.getItem(trackedKey);
+        if (shouldTrackConnect) sessionStorage.setItem(trackedKey, '1');
+
+        import('./lib/api.js').then(async ({ trackWalletConnect, reconcileMintAnalytics }) => {
+            if (shouldTrackConnect) {
                 let profile = null;
                 try {
                     const { getMiniAppProfile } = await import('./utils/profile.js');
@@ -219,8 +221,12 @@ function handleAccountChange(account) {
                     displayName: profile.displayName || profile.username || null,
                     username: profile.username || null
                 } : null);
-            }).catch(() => { });
-        }
+            }
+
+            // Flush confirmed mints saved before a refresh/offline close and,
+            // at most once per six hours, discover older OpenSea mint events.
+            reconcileMintAnalytics(account.address).catch(() => { });
+        }).catch(() => { });
     }
 
     // Dispatch generic update event

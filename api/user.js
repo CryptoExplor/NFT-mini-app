@@ -10,9 +10,10 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    // Cache at Vercel edge for 30s, serve stale for 60s while revalidating
-    // This alone saves ~50-70% of KV reads from repeat page loads
-    res.setHeader('Cache-Control', 's-maxage=45, stale-while-revalidate=90');
+    // Wallet totals and journey must reflect a just-confirmed mint. This endpoint
+    // is loaded once per Analytics render, so correctness is worth one KV read;
+    // edge caching here previously hid profile updates for up to 135 seconds.
+    res.setHeader('Cache-Control', 'private, no-store');
 
     const auth = await getAuthContext(req, { allowQueryFallback: true });
     const requestedWallet = typeof req.query?.wallet === 'string' ? req.query.wallet.trim() : '';

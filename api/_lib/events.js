@@ -270,20 +270,52 @@ export async function handleMintSuccess(pipe, event, helpers) {
 
     // 1. Verify transaction
     if (txHash && verifyMintTransaction) {
-        const isValid = await verifyMintTransaction(txHash, wallet);
+        const verification = await verifyMintTransaction(txHash, wallet, collection);
+        const isValid = verification === true || verification?.valid === true;
         if (!isValid) {
             return { isNewMint: false, finalPoints: 0, invalid: true };
         }
+
+        if (verification && typeof verification === 'object') {
+            event.mintDetails = verification;
+            // Server-derived gas replaces the untrusted client estimate.
+            if (Number(verification.gas) > 0) event.gas = Number(verification.gas);
+
+            const mintedAt = Number(verification.mintedAt);
+            if (Number.isFinite(mintedAt) && mintedAt > 0 && mintedAt <= Date.now() + 5 * 60_000) {
+                event.timestamp = mintedAt;
+                helpers.timestamp = mintedAt;
+                helpers.today = new Date(mintedAt).toISOString().split('T')[0];
+                helpers.weekNum = getWeekNumber(new Date(mintedAt));
+            }
+        }
     }
 
-    // 2. Idempotency check (1 read) — also fetch profile in same pipeline
-    //    to avoid separate hget for streak later
+    // 2. Idempotency check. The persistent hash protects historical replay;
+    //    the old 7-day key is retained as a fast/backwards-compatible marker.
+    //    Journey fallback prevents pre-migration mints from being counted again.
     if (txHash) {
         const checkPipe = kv.pipeline();
         checkPipe.get(`mint:processed:${txHash}`);
+        checkPipe.hget('mint:processed:all', txHash);
         checkPipe.hgetall(`user:${wallet}:profile`);
-        const [processed, profile] = await checkPipe.exec();
-        if (processed) return { isNewMint: false, finalPoints: 0, duplicate: true };
+        checkPipe.lrange(`user:${wallet}:journey`, 0, 199);
+        const [processed, persistentProcessed, profile, journey] = await checkPipe.exec();
+        const seenInJourney = (journey || []).some((item) => {
+            try {
+                const parsed = typeof item === 'string' ? JSON.parse(item) : item;
+                return String(parsed?.txHash || '').toLowerCase() === String(txHash).toLowerCase();
+            } catch {
+                return false;
+            }
+        });
+
+        if (processed || persistentProcessed || seenInJourney) {
+            if (!persistentProcessed) {
+                await kv.hset('mint:processed:all', { [txHash]: 1 });
+            }
+            return { isNewMint: false, finalPoints: 0, duplicate: true };
+        }
 
         // We got profile for free — pass it through
         return writeMintData(pipe, event, { ...helpers, profile });
@@ -298,6 +330,7 @@ export async function handleMintSuccess(pipe, event, helpers) {
 function writeMintData(pipe, event, helpers) {
     const { today, weekNum, timestamp, profile } = helpers;
     const { wallet, collection, txHash, price, gas } = event;
+    const mintDetails = event.mintDetails || {};
     const mintPrice = parseFloat(price) || 0;
     const gasUsed = parseFloat(gas) || 0;
 
@@ -338,7 +371,22 @@ function writeMintData(pipe, event, helpers) {
 
     // ── Activity feed (4 commands — push+trim for global & collection) ──
     const activityItem = JSON.stringify({
-        wallet, collection, txHash, price: mintPrice, timestamp
+        wallet,
+        collection,
+        collectionName: mintDetails.collectionName || collection,
+        txHash,
+        price: mintPrice,
+        gas: gasUsed,
+        timestamp,
+        chain: mintDetails.chain || 'base',
+        chainId: mintDetails.chainId || 8453,
+        contract: mintDetails.contract || '',
+        tokenId: mintDetails.tokenId || '',
+        tokenIds: mintDetails.tokenIds || [],
+        quantity: mintDetails.quantity || 1,
+        imageUrl: mintDetails.imageUrl || '',
+        openseaUrl: mintDetails.openseaUrl || '',
+        reconciled: timestamp < Date.now() - 5 * 60_000
     });
     pipe.lpush('activity:global', activityItem);
     pipe.ltrim('activity:global', 0, 99);
@@ -346,7 +394,18 @@ function writeMintData(pipe, event, helpers) {
     pipe.ltrim(`activity:collection:${collection}`, 0, 49);
 
     // ── Mint log for CSV export (2 commands) ──
-    pipe.lpush('log:mints', JSON.stringify({ wallet, collection, price: mintPrice, txHash, timestamp }));
+    pipe.lpush('log:mints', JSON.stringify({
+        wallet,
+        collection,
+        collectionName: mintDetails.collectionName || collection,
+        price: mintPrice,
+        gas: gasUsed,
+        txHash,
+        tokenId: mintDetails.tokenId || '',
+        quantity: mintDetails.quantity || 1,
+        contract: mintDetails.contract || '',
+        timestamp
+    }));
     pipe.ltrim('log:mints', 0, 9999);
 
     // ── Points — use profile we already fetched (0 extra reads!) ──
@@ -384,6 +443,7 @@ function writeMintData(pipe, event, helpers) {
 
 export async function handleWalletTracking(pipe, event, { kv, today, timestamp, _cachedProfile }) {
     const { wallet, type, collection, page, txHash, price } = event;
+    const mintDetails = event.mintDetails || {};
     if (!wallet || wallet === 'anonymous') return;
 
     // Active day tracking (2 commands)
@@ -394,34 +454,41 @@ export async function handleWalletTracking(pipe, event, { kv, today, timestamp, 
     const profile = _cachedProfile || await kv.hgetall(`user:${wallet}:profile`);
 
     // ── Build a single merged hset payload ──
-    const profileUpdate = { last_active: timestamp };
+    const previousLastActive = Number(profile?.last_active) || 0;
+    const previousFirstSeen = Number(profile?.first_seen) || 0;
+    const profileUpdate = { last_active: Math.max(previousLastActive, timestamp) };
 
-    if (!profile?.first_seen) {
+    if (!previousFirstSeen || timestamp < previousFirstSeen) {
         profileUpdate.first_seen = timestamp;
         pipe.sadd(`cohort:${today}`, wallet);
     }
+
+    // Historical reconciliation must not reset today's engagement streak.
+    const isHistoricalMint = type === 'mint_success' && today !== getUTCDate();
 
     // ── Streak logic ──
     const currentStreak = parseInt(profile?.streak) || 0;
     const lastActiveDate = profile?.last_active_date;
     const yesterdayDate = getYesterdayDate(today);
 
-    if (!lastActiveDate) {
-        profileUpdate.streak = 1;
-        profileUpdate.last_active_date = today;
-    } else if (lastActiveDate !== today) {
-        if (lastActiveDate === yesterdayDate) {
-            // Consecutive day — use hincrby for streak (can't merge into hset)
-            pipe.hincrby(`user:${wallet}:profile`, 'streak', 1);
-            const newStreak = currentStreak + 1;
-            const longest = parseInt(profile?.longest_streak) || 0;
-            if (newStreak > longest) {
-                profileUpdate.longest_streak = newStreak;
+    if (!isHistoricalMint) {
+        if (!lastActiveDate) {
+            profileUpdate.streak = 1;
+            profileUpdate.last_active_date = today;
+        } else if (lastActiveDate !== today) {
+            if (lastActiveDate === yesterdayDate) {
+                // Consecutive day — use hincrby for streak (can't merge into hset)
+                pipe.hincrby(`user:${wallet}:profile`, 'streak', 1);
+                const newStreak = currentStreak + 1;
+                const longest = parseInt(profile?.longest_streak) || 0;
+                if (newStreak > longest) {
+                    profileUpdate.longest_streak = newStreak;
+                }
+            } else {
+                profileUpdate.streak = 1; // Reset
             }
-        } else {
-            profileUpdate.streak = 1; // Reset
+            profileUpdate.last_active_date = today;
         }
-        profileUpdate.last_active_date = today;
     }
 
     // ── Single merged hset call (was 3-4 separate calls) ──
@@ -437,7 +504,12 @@ export async function handleWalletTracking(pipe, event, { kv, today, timestamp, 
     const journeyItem = {
         type, collection, page, timestamp,
         ...(txHash ? { txHash } : {}),
-        ...(price > 0 ? { price: parseFloat(price) } : {})
+        ...(price > 0 ? { price: parseFloat(price) } : {}),
+        ...(mintDetails.tokenId ? { tokenId: mintDetails.tokenId } : {}),
+        ...(mintDetails.quantity ? { quantity: mintDetails.quantity } : {}),
+        ...(mintDetails.collectionName ? { collectionName: mintDetails.collectionName } : {}),
+        ...(mintDetails.imageUrl ? { imageUrl: mintDetails.imageUrl } : {}),
+        ...(mintDetails.openseaUrl ? { openseaUrl: mintDetails.openseaUrl } : {})
     };
     pipe.lpush(`user:${wallet}:journey`, JSON.stringify(journeyItem));
     pipe.ltrim(`user:${wallet}:journey`, 0, 199);
@@ -479,7 +551,9 @@ const RATE_LIMITS = {
     collection_view: 60,
     wallet_connect: 10,
     page_view: 100,
-    mint_success: 5,
+    // Client-side historical reconciliation flushes up to 8 receipt-proven
+    // mints in one bounded batch. Wallet+IP scoping in track.js limits abuse.
+    mint_success: 12,
     social_share: 20,
     battle_result_v2: 20,
     replay_conversion: 60,
@@ -569,22 +643,6 @@ export async function processEvent(kv, event, opts = {}) {
 
     const pipe = kv.pipeline();
 
-    // ── Common writes (every event) ──
-    // REMOVED: raw event storage (was: pipe.set(`event:${type}:${eventId}`, ...))
-    // Saves 1 command per event = biggest single saving
-    pipe.hincrby('stats:global', 'total_events', 1);
-
-    // Funnel (only for funnel-step events, skip otherwise)
-    if (FUNNEL_STEPS.includes(type)) {
-        pipe.hincrby('funnel:mint', type, 1);
-        if (event.collection) {
-            pipe.hincrby(`funnel:mint:${event.collection}`, type, 1);
-        }
-    }
-
-    // Daily stats
-    pipe.hincrby(`daily:stats:${today}`, type, 1);
-
     // ── Dispatch to event handler ──
     let mintResult = null;
 
@@ -648,6 +706,19 @@ export async function processEvent(kv, event, opts = {}) {
             break;
     }
 
+    // ── Common writes ──
+    // These run after dispatch so receipt verification can replace a reconciled
+    // mint's timestamp/day before it is bucketed. Invalid/duplicate mints return
+    // above and never touch counters.
+    pipe.hincrby('stats:global', 'total_events', 1);
+    if (FUNNEL_STEPS.includes(type)) {
+        pipe.hincrby('funnel:mint', type, 1);
+        if (event.collection) {
+            pipe.hincrby(`funnel:mint:${event.collection}`, type, 1);
+        }
+    }
+    pipe.hincrby(`daily:stats:${helpers.today}`, type, 1);
+
     // ── Wallet-level tracking (streak, journey, cohort) ──
     if (wallet && wallet !== 'anonymous') {
         // Pass cached profile from mint_success to avoid re-fetching
@@ -667,7 +738,12 @@ export async function processEvent(kv, event, opts = {}) {
 
     // ── Post-execution: mark mint as processed ──
     if (type === 'mint_success' && event.txHash && mintResult?.isNewMint) {
-        await kv.set(`mint:processed:${event.txHash}`, 1, { ex: 60 * 60 * 24 * 7 });
+        const markPipe = kv.pipeline();
+        markPipe.set(`mint:processed:${event.txHash}`, 1, { ex: 60 * 60 * 24 * 7 });
+        // Persistent marker is required because historical reconciliation can
+        // replay transactions older than the legacy seven-day TTL.
+        markPipe.hset('mint:processed:all', { [event.txHash]: 1 });
+        await markPipe.exec();
     }
 
     // ── Reputation update (only on new mint) ──

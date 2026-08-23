@@ -12,6 +12,7 @@
  *   chain/{chain}/account/{address}/nfts
  *   chain/{chain}/contract/{address}/nfts/{tokenId}
  *   chain/{chain}/contract/{address}/nfts
+ *   events/accounts/{address} (mint history only)
  */
 
 import { setCors } from './_lib/cors.js';
@@ -20,7 +21,11 @@ import { checkRateLimit, RateLimitError } from './_lib/events.js';
 
 const OPENSEA_BASE = 'https://api.opensea.io/api/v2';
 const ALLOWED_CHAINS = new Set(['ethereum', 'base', 'base_sepolia']);
-const ALLOWED_QUERY_PARAMS = new Set(['limit', 'next', 'collection']);
+const ALLOWED_QUERY_PARAMS = new Set([
+    'limit', 'next', 'collection',
+    // Account event history (restricted to Base mint events below).
+    'event_type', 'chain', 'after', 'before'
+]);
 const MAX_LIMIT = 200;
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
@@ -41,6 +46,13 @@ export function resolveOpenSeaPath(rawPath) {
     }
 
     const parts = rawPath.replace(/^\/+|\/+$/g, '').split('/');
+
+    // events/accounts/{address} — used by client-triggered historical mint
+    // reconciliation. Query forwarding below restricts this to Base + mint.
+    if (parts.length === 3 && parts[0] === 'events' && parts[1] === 'accounts') {
+        if (!ADDRESS_RE.test(parts[2])) return { ok: false, error: 'Invalid address' };
+        return { ok: true, path: `events/accounts/${parts[2].toLowerCase()}` };
+    }
 
     if (parts[0] !== 'chain' || !ALLOWED_CHAINS.has(parts[1])) {
         return { ok: false, error: 'Unsupported chain' };
@@ -84,6 +96,19 @@ export function buildUpstreamQuery(query) {
             params.set('limit', String(limit));
             continue;
         }
+        if (key === 'event_type') {
+            if (String(single) === 'mint') params.set('event_type', 'mint');
+            continue;
+        }
+        if (key === 'chain') {
+            if (String(single) === 'base') params.set('chain', 'base');
+            continue;
+        }
+        if (key === 'after' || key === 'before') {
+            const timestamp = String(single);
+            if (/^\d{1,12}$/.test(timestamp)) params.set(key, timestamp);
+            continue;
+        }
 
         params.set(key, String(single).slice(0, 400));
     }
@@ -121,6 +146,11 @@ export default async function handler(req, res) {
     }
 
     const query = buildUpstreamQuery(req.query);
+    if (resolved.path.startsWith('events/accounts/')) {
+        // Never let this API-key proxy become a general account-activity relay.
+        query.set('event_type', 'mint');
+        query.set('chain', 'base');
+    }
     const url = `${OPENSEA_BASE}/${resolved.path}${query.toString() ? `?${query}` : ''}`;
 
     const controller = new AbortController();

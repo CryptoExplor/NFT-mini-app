@@ -1005,7 +1005,10 @@ async function handleMint(collection, stage) {
 
     toast.show('Successfully minted NFT! 🎉', 'success');
 
-    trackMint(state.wallet.address, collection.slug, hash, mintPrice);
+    // Start analytics immediately after confirmation. It runs in parallel with
+    // rendering/storing the success UI, then is awaited below so users do not
+    // navigate to a stale feed while the write is still in flight.
+    const analyticsWrite = trackMint(state.wallet.address, collection.slug, hash, mintPrice);
 
     if (mintText) mintText.textContent = 'Success! 🎉';
     if (mintStatus) mintStatus.textContent = `Transaction: ${hash.slice(0, 10)}...`;
@@ -1051,10 +1054,20 @@ async function handleMint(collection, stage) {
     const { storeTransaction } = await import('../lib/mintHelpers.js');
     storeTransaction({
       hash,
+      wallet: state.wallet.address,
       collectionName: collection.name,
       slug: collection.slug,
-      chainId: collection.chainId
+      chainId: collection.chainId,
+      price: mintPrice
     });
+
+    const analyticsResult = await analyticsWrite;
+    if (!analyticsResult?.ok) {
+      // The NFT is already confirmed on-chain, so an analytics outage must not
+      // turn a real mint into a UI failure. Make the delayed sync visible.
+      console.warn('Mint confirmed but analytics sync is delayed:', analyticsResult);
+      toast.show('Mint confirmed. Analytics sync may take a moment.', 'info');
+    }
 
     // Clear cache for this collection to force refresh
     cache.delete(`col_data_${collection.slug}_${state.wallet.address}`);

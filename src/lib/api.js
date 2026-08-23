@@ -1,4 +1,63 @@
+import {
+    enqueueMintAnalytics,
+    flushMintAnalyticsOutbox,
+    getLastMintHistoryScan,
+    getMintAnalyticsOutbox,
+    markMintAnalyticsAttempt,
+    markMintAnalyticsSynced,
+    markMintHistoryScanned,
+    seedOutboxFromHistoricalMints,
+    seedOutboxFromLocalTransactions
+} from './mintAnalyticsOutbox.js';
+import { discoverHistoricalMints } from './mintHistoryDiscovery.js';
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
+const ANALYTICS_DIRTY_KEY = 'analytics:last-mint-write';
+const ANALYTICS_REFRESH_BUCKET_MS = 10_000;
+
+function markAnalyticsDirty(wallet) {
+    const timestamp = Date.now();
+    try {
+        sessionStorage.setItem(ANALYTICS_DIRTY_KEY, String(timestamp));
+        if (wallet) {
+            sessionStorage.setItem(`${ANALYTICS_DIRTY_KEY}:${String(wallet).toLowerCase()}`, String(timestamp));
+        }
+    } catch { /* storage is best effort */ }
+    return timestamp;
+}
+
+function notifyMintAnalytics(wallet, detail = {}) {
+    const updatedAt = markAnalyticsDirty(wallet);
+    if (typeof document !== 'undefined' && typeof CustomEvent !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('mint:success', {
+            detail: { ...detail, wallet, updatedAt }
+        }));
+    }
+    return updatedAt;
+}
+
+function getAnalyticsDirtyTimestamp(wallet = null) {
+    try {
+        const walletValue = wallet
+            ? sessionStorage.getItem(`${ANALYTICS_DIRTY_KEY}:${String(wallet).toLowerCase()}`)
+            : null;
+        const value = walletValue || sessionStorage.getItem(ANALYTICS_DIRTY_KEY);
+        const timestamp = Number(value);
+        // Do not keep fragmenting cache keys forever after a historical mint.
+        return Number.isFinite(timestamp) && Date.now() - timestamp < 5 * 60_000
+            ? timestamp
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+function addAnalyticsFreshness(params, wallet = null) {
+    params.set('_refresh', String(Math.floor(Date.now() / ANALYTICS_REFRESH_BUCKET_MS)));
+    const dirtyAt = getAnalyticsDirtyTimestamp(wallet);
+    if (dirtyAt) params.set('_mint', String(dirtyAt));
+    return params;
+}
 
 // ── Client-side event dedup/throttle ───────────────────────────
 // Prevents the same event from firing more than once per DEDUP_TTL.
@@ -29,9 +88,9 @@ let _trackBackoffUntil = 0;
 /**
  * Track a structured event to backend analytics
  *
- * IMPORTANT: /api/track requires a JWT for points-granting events
- * (mint_success, battle_result_v2, battle_won, social_share). The request must
- * therefore carry BOTH the bearer token and the cookie:
+ * IMPORTANT: /api/track requires a JWT for identity-only mutations such as
+ * battles and social shares. Confirmed mints use their on-chain receipt as
+ * wallet proof. When a session exists, requests still carry BOTH token forms:
  *  - `credentials: 'include'` so the HttpOnly `jwt` cookie is sent cross-origin
  *  - `Authorization: Bearer` as the fallback for browsers/webviews that block
  *    third-party cookies (Safari, in-app Farcaster webview), where the cookie
@@ -41,7 +100,7 @@ let _trackBackoffUntil = 0;
  * @param {Object} data - Event metadata
  * @returns {Promise<{ok: boolean, status?: number, error?: string, skipped?: string}>}
  */
-export async function trackEvent(type, data = {}) {
+export async function trackEvent(type, data = {}, options = {}) {
     try {
         // Client-side dedup: skip if same event fired recently
         if (shouldThrottle(type, data)) return { ok: false, skipped: 'throttled' };
@@ -69,34 +128,157 @@ export async function trackEvent(type, data = {}) {
             method: 'POST',
             headers,
             credentials: 'include',
+            // Keep a confirmed mint write alive if the user immediately opens
+            // Analytics or leaves the mint route.
+            keepalive: type === 'mint_success',
             body: JSON.stringify(enriched)
         });
+
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json')
+            ? await response.json().catch(() => ({}))
+            : {};
 
         if (response.status === 429) {
             const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
             _trackBackoffUntil = Date.now() + (Number.isFinite(retryAfter) ? retryAfter : 60) * 1000;
             console.warn(`Track rate limited (${type}); backing off ${retryAfter}s`);
-            return { ok: false, status: 429 };
+            return { ok: false, status: 429, error: payload?.error || 'Rate limited' };
         }
 
         if (!response.ok) {
-            // Surface it instead of swallowing: a 401 here means the event never landed.
-            console.warn(`Track rejected (${type}): HTTP ${response.status}`);
-            return { ok: false, status: response.status };
+            // Surface it instead of swallowing: a rejected event never reaches
+            // the live feed or user profile.
+            console.warn(`Track rejected (${type}): HTTP ${response.status}`, payload?.error || '');
+            return { ok: false, status: response.status, error: payload?.error || `HTTP ${response.status}` };
         }
 
-        return { ok: true, status: response.status };
+        if (type === 'mint_success') {
+            if (options.suppressMintEvent) {
+                markAnalyticsDirty(data.wallet);
+            } else {
+                notifyMintAnalytics(data.wallet, { ...data, duplicate: Boolean(payload?.duplicate) });
+            }
+        }
+
+        return { ...payload, ok: true, status: response.status };
     } catch (error) {
         console.warn('trackEvent error:', error);
         return { ok: false, error: error?.message || 'network error' };
     }
 }
 
+async function sendMintAnalytics(payload, options = {}) {
+    const retryDelays = options.retry === false ? [0] : [0, 1_500, 3_000];
+    let result = { ok: false, error: 'Analytics write did not run' };
+
+    for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+        if (retryDelays[attempt] > 0) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]));
+        }
+
+        result = await trackEvent('mint_success', payload, {
+            suppressMintEvent: Boolean(options.suppressMintEvent)
+        });
+        if (result.ok) return result;
+
+        const transient = !result.status || result.status === 400 || result.status === 408 || result.status === 425 || result.status >= 500;
+        if (!transient) break;
+    }
+
+    return result;
+}
+
 /**
- * Track a successful mint (convenience wrapper)
+ * Track a successful mint. It is persisted to a browser outbox before the
+ * network request, so closing the mini app or going offline cannot lose it.
  */
-export function trackMint(wallet, collection, txHash, price = 0, gas = 0) {
-    return trackEvent('mint_success', { wallet, collection, txHash, price, gas });
+export async function trackMint(wallet, collection, txHash, price = 0, gas = 0) {
+    const payload = { wallet, collection, txHash, price, gas, chainId: 8453 };
+    enqueueMintAnalytics(payload);
+
+    const result = await sendMintAnalytics(payload);
+    if (result.ok) markMintAnalyticsSynced(txHash);
+    else markMintAnalyticsAttempt(txHash, result);
+    return result;
+}
+
+const reconciliationByWallet = new Map();
+
+/**
+ * Browser-triggered historical reconciliation — no cron or dedicated server.
+ *
+ * 1. Seeds transactions already saved in localStorage.
+ * 2. Optionally discovers Base mint events through OpenSea.
+ * 3. Replays a bounded persistent outbox through the receipt-verifying endpoint.
+ */
+export async function reconcileMintAnalytics(wallet, options = {}) {
+    const normalizedWallet = String(wallet || '').toLowerCase();
+    if (!/^0x[a-f0-9]{40}$/.test(normalizedWallet)) {
+        return { attempted: 0, synced: 0, failed: 0, pending: 0, discovered: 0, error: 'Invalid wallet' };
+    }
+
+    if (reconciliationByWallet.has(normalizedWallet)) {
+        return reconciliationByWallet.get(normalizedWallet);
+    }
+
+    const task = (async () => {
+        const locallySeeded = seedOutboxFromLocalTransactions(normalizedWallet);
+        let discovered = 0;
+        let discoveryError = null;
+        const scanAge = Date.now() - getLastMintHistoryScan(normalizedWallet);
+        const shouldDiscover = options.discover !== false && (options.force || scanAge > 6 * 60 * 60 * 1000);
+
+        if (shouldDiscover) {
+            try {
+                const historicalMints = await discoverHistoricalMints(normalizedWallet, {
+                    maxPages: options.maxPages || 3,
+                    limit: options.discoveryLimit || 50
+                });
+                discovered = seedOutboxFromHistoricalMints(normalizedWallet, historicalMints);
+                markMintHistoryScanned(normalizedWallet);
+            } catch (error) {
+                // OpenSea is an enhancement; local outbox reconciliation still works.
+                discoveryError = error?.message || 'History discovery unavailable';
+                console.warn('[Mint reconciliation] OpenSea discovery skipped:', discoveryError);
+            }
+        }
+
+        const flushResult = await flushMintAnalyticsOutbox(
+            normalizedWallet,
+            (item) => sendMintAnalytics({
+                wallet: item.wallet,
+                collection: item.collection,
+                txHash: item.txHash,
+                price: item.price,
+                gas: item.gas,
+                metadata: {
+                    reconciled: item.source !== 'confirmed-mint',
+                    discoveredAt: item.discoveredAt,
+                    source: item.source
+                }
+            }, { suppressMintEvent: true, retry: false }),
+            { limit: options.limit || 8, force: Boolean(options.force) }
+        );
+
+        if (flushResult.synced > 0) {
+            notifyMintAnalytics(normalizedWallet, {
+                reconciled: true,
+                count: flushResult.synced
+            });
+        }
+
+        return {
+            ...flushResult,
+            discovered,
+            locallySeeded,
+            discoveryError,
+            pending: getMintAnalyticsOutbox(normalizedWallet).length
+        };
+    })().finally(() => reconciliationByWallet.delete(normalizedWallet));
+
+    reconciliationByWallet.set(normalizedWallet, task);
+    return task;
 }
 
 /**
@@ -226,11 +408,11 @@ export async function getLeaderboard(options = {}) {
         if (options.surface) {
             params.set('surface', options.surface);
         }
+        addAnalyticsFreshness(params, options.viewer || null);
 
-        // Allow relative paths in dev (e.g. vercel dev)
-        // if (!API_BASE && import.meta.env.DEV) { ... }
-
-        const response = await fetch(`${API_BASE}/api/leaderboard?${params}`);
+        const response = await fetch(`${API_BASE}/api/leaderboard?${params}`, {
+            cache: 'no-store'
+        });
 
         // Check content type before parsing
         const contentType = response.headers.get("content-type");
@@ -273,14 +455,13 @@ export async function getLeaderboard(options = {}) {
 export async function getUserStats(wallet) {
     if (!wallet) return null;
     try {
-        // Allow relative paths in dev
-        // if (!API_BASE && import.meta.env.DEV) { ... }
-
         const session = getAuthToken();
         const headers = session?.token ? { Authorization: `Bearer ${session.token}` } : {};
-        const response = await fetch(`${API_BASE}/api/user?wallet=${encodeURIComponent(wallet)}`, {
+        const params = addAnalyticsFreshness(new URLSearchParams({ wallet }), wallet);
+        const response = await fetch(`${API_BASE}/api/user?${params}`, {
             credentials: 'include',
-            headers
+            headers,
+            cache: 'no-store'
         });
 
         // Check content type before parsing
