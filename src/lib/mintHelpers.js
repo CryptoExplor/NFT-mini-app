@@ -548,11 +548,17 @@ export async function mint(collection, stage, hooks = {}) {
         }
     }
 
-    // Wait for confirmation
-    const receipt = await waitForTransactionReceipt(wagmiConfig, {
-        hash,
-        confirmations: 1
-    });
+    // Wait for confirmation with fallback handling for slow RPCs
+    let receipt = null;
+    try {
+        receipt = await waitForTransactionReceipt(wagmiConfig, {
+            hash,
+            confirmations: 1,
+            timeout: 60_000
+        });
+    } catch (receiptErr) {
+        console.warn('waitForTransactionReceipt timed out or lagged (non-fatal):', receiptErr?.shortMessage || receiptErr?.message);
+    }
 
     // A mined-but-reverted transaction is NOT a successful mint.
     if (receipt?.status && receipt.status !== 'success') {

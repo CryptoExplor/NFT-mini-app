@@ -304,7 +304,7 @@ export async function handleMintSuccess(pipe, event, helpers) {
         const seenInJourney = (journey || []).some((item) => {
             try {
                 const parsed = typeof item === 'string' ? JSON.parse(item) : item;
-                return String(parsed?.txHash || '').toLowerCase() === String(txHash).toLowerCase();
+                return parsed?.type === 'mint_success' && String(parsed?.txHash || '').toLowerCase() === String(txHash).toLowerCase();
             } catch {
                 return false;
             }
